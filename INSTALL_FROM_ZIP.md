@@ -1,15 +1,36 @@
-# Install a Development Package from ZIP
+# Install a Complete IrrigationOS Repository Release
 
-The ZIP contains the complete repository contents but intentionally excludes `.git`, `.venv`, generated caches, and Finder metadata.
+Every release ZIP is a complete replacement for the repository contents. Preserve only `.git` and `.venv` in the working repository.
 
-1. Close the IrrigationOS workspace in VS Code.
-2. In Finder, open `/Users/davidbuch/Documents/GitHub/IrrigationOS`.
-3. Preserve the existing hidden `.git` folder.
-4. Delete the repository contents except `.git` and `.venv`.
-5. Extract the release ZIP.
-6. Press **Command + Shift + .** in Finder so hidden files are visible.
-7. Copy everything inside the extracted `IrrigationOS` folder into the existing repository, including `.github`, `.gitignore`, and `.vscode`.
-8. Reopen the repository in VS Code.
-9. Run the validation commands supplied with the release.
+## Standard staging folder
 
-Never copy a `.git` folder from a release package. Release ZIPs do not contain one.
+`~/Documents/GitHub/11 Temp Files to move`
+
+## Install
+
+Move the ZIP into the staging folder, extract it there, and synchronize the included outer `IrrigationOS/` folder:
+
+```bash
+cd ~/Documents/GitHub/11\ Temp\ Files\ to\ move
+unzip -q IrrigationOS_v0.4.0_First_Live_Installation.zip
+
+rsync -av --delete \
+  --exclude='.git' \
+  --exclude='.venv' \
+  ~/Documents/GitHub/11\ Temp\ Files\ to\ move/IrrigationOS/ \
+  ~/Documents/GitHub/IrrigationOS/
+```
+
+## Validate
+
+```bash
+cd ~/Documents/GitHub/IrrigationOS
+source .venv/bin/activate
+
+python scripts/validate_repository.py
+python -m pytest -q
+python -m ruff check .
+python -m mypy custom_components tests
+git diff --check
+git status --short
+```

@@ -4,10 +4,21 @@
     "step": {
       "user": {
         "title": "Connect IrrigationOS to Rachio",
-        "description": "In the Rachio app, open Profile, select API Key, and tap Copy. Paste the key below. IrrigationOS stores the key in the Home Assistant config entry and starts in Observation mode.",
+        "description": "In the Rachio app, open Profile, select API Key, and tap Copy. Paste the key below. IrrigationOS validates the account before setup and starts in Observation mode.",
         "data": {
           "api_key": "Rachio API key",
           "name": "Integration name"
+        }
+      },
+      "confirm": {
+        "title": "Review discovered irrigation hardware",
+        "description": "IrrigationOS found {controller_count} controller(s) and {area_count} irrigation area(s). Controllers: {controller_names}. Areas: {area_names}. Submit to finish setup in Observation mode."
+      },
+      "reauth_confirm": {
+        "title": "Reconnect IrrigationOS to Rachio",
+        "description": "Enter a current Rachio API key for this same account.",
+        "data": {
+          "api_key": "Rachio API key"
         }
       }
     },
@@ -18,7 +29,9 @@
       "rate_limited": "Rachio is temporarily rate limiting requests. Try again shortly."
     },
     "abort": {
-      "already_configured": "This Rachio account is already configured."
+      "already_configured": "This Rachio account is already configured.",
+      "wrong_account": "The API key belongs to a different Rachio account.",
+      "reauth_successful": "Rachio authentication was updated successfully."
     }
   },
   "options": {

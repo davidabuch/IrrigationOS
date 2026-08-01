@@ -58,6 +58,11 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
+    def __init__(self) -> None:
+        self._pending_data: dict[str, Any] | None = None
+        self._pending_title = NAME
+        self._discovery_summary: dict[str, str] = {}
+
     @staticmethod
     @callback  # type: ignore[untyped-decorator]
     def async_get_options_flow(
@@ -69,42 +74,89 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Collect and validate the Rachio API key."""
-        errors: dict[str, str] = {}
+        if user_input is None:
+            return self.async_show_form(step_id="user", data_schema=STEP_USER_SCHEMA)
 
+        result = await self._async_validate_credentials(str(user_input[CONF_API_KEY]).strip())
+        if isinstance(result, str):
+            return self.async_show_form(
+                step_id="user", data_schema=STEP_USER_SCHEMA, errors={"base": result}
+            )
+        person_id, snapshot = result
+        await self.async_set_unique_id(person_id)
+        self._abort_if_unique_id_configured()
+        self._pending_title = str(user_input.get(CONF_NAME, NAME))
+        self._pending_data = {
+            CONF_API_KEY: str(user_input[CONF_API_KEY]).strip(),
+            CONF_PERSON_ID: person_id,
+            CONF_CONTROLLER_PROVIDER: snapshot.provider,
+            CONF_OPERATING_MODE: DEFAULT_OPERATING_MODE,
+            "discovered_controller_count": len(snapshot.controllers),
+            "discovered_area_count": len(snapshot.areas),
+        }
+        self._discovery_summary = {
+            "controller_count": str(len(snapshot.controllers)),
+            "area_count": str(len(snapshot.areas)),
+            "controller_names": ", ".join(item.name for item in snapshot.controllers) or "None",
+            "area_names": ", ".join(item.name for item in snapshot.areas) or "None",
+        }
+        return await self.async_step_confirm()
+
+    async def async_step_confirm(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Show discovered hardware before creating the config entry."""
+        if self._pending_data is None:
+            return await self.async_step_user()
+        if user_input is not None:
+            return self.async_create_entry(title=self._pending_title, data=self._pending_data)
+        return self.async_show_form(
+            step_id="confirm",
+            data_schema=vol.Schema({}),
+            description_placeholders=self._discovery_summary,
+        )
+
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
+        """Start a Rachio API-key reauthentication flow."""
+        del entry_data
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Validate and store a replacement Rachio API key."""
+        errors: dict[str, str] = {}
         if user_input is not None:
             api_key = str(user_input[CONF_API_KEY]).strip()
-            client = RachioApiClient(async_get_clientsession(self.hass), api_key)
-            try:
-                person_id, payload = await client.async_get_account()
-                snapshot = RachioControllerAdapter.from_person_payload(payload)
-            except RachioAuthenticationError:
-                errors["base"] = "invalid_auth"
-            except RachioRateLimitError:
-                errors["base"] = "rate_limited"
-            except RachioInvalidResponseError:
-                errors["base"] = "invalid_response"
-            except (RachioApiError, ValueError):
-                errors["base"] = "cannot_connect"
+            result = await self._async_validate_credentials(api_key)
+            if isinstance(result, str):
+                errors["base"] = result
             else:
+                person_id, _snapshot = result
                 await self.async_set_unique_id(person_id)
-                self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=str(user_input.get(CONF_NAME, NAME)),
-                    data={
-                        CONF_API_KEY: api_key,
-                        CONF_PERSON_ID: person_id,
-                        CONF_CONTROLLER_PROVIDER: snapshot.provider,
-                        CONF_OPERATING_MODE: DEFAULT_OPERATING_MODE,
-                        "discovered_controller_count": len(snapshot.controllers),
-                        "discovered_area_count": len(snapshot.areas),
-                    },
+                self._abort_if_unique_id_mismatch(reason="wrong_account")
+                return self.async_update_reload_and_abort(
+                    self._get_reauth_entry(), data_updates={CONF_API_KEY: api_key}
                 )
-
         return self.async_show_form(
-            step_id="user",
-            data_schema=STEP_USER_SCHEMA,
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({vol.Required(CONF_API_KEY): str}),
             errors=errors,
         )
+
+    async def _async_validate_credentials(self, api_key: str) -> tuple[str, Any] | str:
+        """Validate credentials and return a normalized discovery snapshot."""
+        client = RachioApiClient(async_get_clientsession(self.hass), api_key)
+        try:
+            person_id, payload = await client.async_get_account()
+            snapshot = RachioControllerAdapter.from_person_payload(payload)
+        except RachioAuthenticationError:
+            return "invalid_auth"
+        except RachioRateLimitError:
+            return "rate_limited"
+        except RachioInvalidResponseError:
+            return "invalid_response"
+        except (RachioApiError, ValueError):
+            return "cannot_connect"
+        return person_id, snapshot
 
 
 class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):

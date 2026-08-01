@@ -102,3 +102,13 @@ async def test_non_object_payload_is_rejected() -> None:
     client = RachioApiClient(session, "token")
     with pytest.raises(RachioInvalidResponseError):
         await client.async_get_person_info()
+
+
+@pytest.mark.asyncio
+async def test_current_schedule_uses_read_only_device_endpoint() -> None:
+    session = FakeSession([FakeResponse(200, {"zoneId": "zone-1"})])
+    client = RachioApiClient(session, "token")
+    payload = await client.async_get_current_schedule("device-1")
+    assert payload["zoneId"] == "zone-1"
+    assert session.requests[0]["method"] == "GET"
+    assert session.requests[0]["url"].endswith("/device/device-1/current_schedule")

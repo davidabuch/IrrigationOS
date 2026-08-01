@@ -5,6 +5,7 @@ from __future__ import annotations
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .controllers import ControllerAvailability, IrrigationArea, IrrigationController
@@ -37,6 +38,7 @@ class IrrigationOSCloudHealthySensor(IrrigationOSEntity, BinarySensorEntity):
     _attr_name = "Cloud connection"
     _attr_unique_id = "irrigationos_cloud_connection"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
     def is_on(self) -> bool:

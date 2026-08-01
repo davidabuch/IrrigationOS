@@ -32,6 +32,7 @@ REQUIRED_FILES = (
     "docs/adr/ADR-005-decision-transparency.md",
     "docs/adr/ADR-006-controller-domain-model.md",
     "docs/adr/ADR-007-landscape-digital-twin-foundation.md",
+    "docs/adr/ADR-008-first-live-installation-boundary.md",
     "custom_components/irrigationos/landscape/models.py",
     "custom_components/irrigationos/landscape/builder.py",
     "hacs.json",
@@ -59,8 +60,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "0.3.0":
-        raise SystemExit("manifest.json version must be 0.3.0")
+    if manifest.get("version") != "0.4.0":
+        raise SystemExit("manifest.json version must be 0.4.0")
 
     hacs = load_json("hacs.json")
     if not isinstance(hacs, dict) or hacs.get("name") != "IrrigationOS":

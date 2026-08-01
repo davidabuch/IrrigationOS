@@ -25,7 +25,7 @@ def test_manifest_and_hacs_versions_are_consistent() -> None:
     manifest = json.loads(
         (ROOT / "custom_components/irrigationos/manifest.json").read_text(encoding="utf-8")
     )
-    assert manifest["version"] == "0.3.0"
+    assert manifest["version"] == "0.4.0"
     assert manifest["domain"] == "irrigationos"
 
 
@@ -45,6 +45,7 @@ def test_governance_documents_exist() -> None:
         "docs/adr/ADR-005-decision-transparency.md",
         "docs/adr/ADR-006-controller-domain-model.md",
         "docs/adr/ADR-007-landscape-digital-twin-foundation.md",
+        "docs/adr/ADR-008-first-live-installation-boundary.md",
     )
     for relative_path in required:
         assert (ROOT / relative_path).is_file(), relative_path
@@ -66,6 +67,7 @@ def test_controller_foundation_files_exist() -> None:
         "custom_components/irrigationos/adapters/rachio/adapter.py",
         "docs/adr/ADR-006-controller-domain-model.md",
         "docs/adr/ADR-007-landscape-digital-twin-foundation.md",
+        "docs/adr/ADR-008-first-live-installation-boundary.md",
     )
     for relative_path in required:
         assert (ROOT / relative_path).is_file(), relative_path

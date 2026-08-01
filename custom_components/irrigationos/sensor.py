@@ -7,6 +7,7 @@ from typing import Any
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import MODE_OBSERVATION
@@ -34,6 +35,8 @@ async def async_setup_entry(
         IrrigationOSControllerCountSensor(coordinator),
         IrrigationOSAreaCountSensor(coordinator),
         IrrigationOSLandscapeStatusSensor(coordinator),
+        IrrigationOSLastRefreshSensor(coordinator),
+        IrrigationOSDiscoverySummarySensor(coordinator),
     ]
     entities.extend(
         IrrigationOSControllerStatusSensor(coordinator, controller)
@@ -65,6 +68,8 @@ class IrrigationOSStatusSensor(IrrigationOSEntity, SensorEntity):
 class IrrigationOSProviderSensor(IrrigationOSEntity, SensorEntity):
     """Expose the active controller provider."""
 
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
     _attr_name = "Controller provider"
     _attr_unique_id = "irrigationos_controller_provider"
     _attr_icon = "mdi:access-point-network"
@@ -78,6 +83,8 @@ class IrrigationOSProviderSensor(IrrigationOSEntity, SensorEntity):
 class IrrigationOSControllerCountSensor(IrrigationOSEntity, SensorEntity):
     """Count discovered controllers."""
 
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
     _attr_name = "Controller count"
     _attr_unique_id = "irrigationos_controller_count"
     _attr_native_unit_of_measurement = "controllers"
@@ -90,6 +97,8 @@ class IrrigationOSControllerCountSensor(IrrigationOSEntity, SensorEntity):
 
 class IrrigationOSAreaCountSensor(IrrigationOSEntity, SensorEntity):
     """Count discovered irrigation areas."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     _attr_name = "Irrigation area count"
     _attr_unique_id = "irrigationos_area_count"
@@ -260,4 +269,49 @@ class IrrigationOSLandscapeProfileSensor(
                     profile.distribution_efficiency.confidence_percent
                 ),
             },
+        }
+
+class IrrigationOSLastRefreshSensor(IrrigationOSEntity, SensorEntity):
+    """Expose the last successful controller refresh."""
+
+    _attr_name = "Last successful refresh"
+    _attr_unique_id = "irrigationos_last_successful_refresh"
+    _attr_device_class = "timestamp"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self) -> Any:
+        """Return the last successful refresh timestamp."""
+        return self.coordinator.last_successful_refresh
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return refresh telemetry."""
+        return {"refresh_count": self.coordinator.refresh_count}
+
+
+class IrrigationOSDiscoverySummarySensor(IrrigationOSEntity, SensorEntity):
+    """Summarize live controller and irrigation-area discovery."""
+
+    _attr_name = "Discovery summary"
+    _attr_unique_id = "irrigationos_discovery_summary"
+    _attr_icon = "mdi:radar"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self) -> str:
+        """Return a compact discovery state."""
+        return "ready" if self.coordinator.data.controllers else "no_controllers"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return discovered names for field validation."""
+        return {
+            "controller_names": [item.name for item in self.coordinator.data.controllers],
+            "area_names": [item.name for item in self.coordinator.data.areas],
+            "watering_areas": [
+                item.name
+                for item in self.coordinator.data.areas
+                if item.state.value == "watering"
+            ],
         }

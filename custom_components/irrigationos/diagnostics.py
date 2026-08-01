@@ -41,6 +41,12 @@ async def async_get_config_entry_diagnostics(
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
         "coordinator": {
             "last_update_success": entry.runtime_data.last_update_success,
+            "last_successful_refresh": (
+                entry.runtime_data.last_successful_refresh.isoformat()
+                if entry.runtime_data.last_successful_refresh is not None
+                else None
+            ),
+            "refresh_count": entry.runtime_data.refresh_count,
             "last_exception": (
                 str(entry.runtime_data.last_exception)
                 if entry.runtime_data.last_exception is not None

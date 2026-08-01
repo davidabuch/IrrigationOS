@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0
+
+- Added first live Home Assistant installation flow and discovery review.
+- Added reauthentication and live refresh diagnostics.
+- Added best-effort current-watering observation.
+- Preserved the Observation-only safety boundary.
+
 All notable changes to IrrigationOS will be documented here.
 
 ## [0.3.0] - 2026-08-01

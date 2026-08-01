@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v0.3.0 — Landscape Digital Twin Foundation**
+**v0.4.0 — Landscape Digital Twin Foundation**
 
 The current release:
 
@@ -46,7 +46,7 @@ git diff --check
 
 ## Safety
 
-Observation mode is the default and only implemented operating mode in v0.3.0. Credentials, controller identifiers, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+Observation mode is the default and only implemented operating mode in v0.4.0. Credentials, controller identifiers, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
 
 ## Landscape Digital Twin
 

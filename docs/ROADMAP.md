@@ -203,3 +203,8 @@ All new adapters must implement the canonical controller contract without changi
 - fertilization and maintenance recommendations
 - municipal restriction feeds
 - cross-property resource coordination
+
+
+## v0.4.0 — First Live Installation
+
+Field-test Home Assistant setup, Rachio discovery, observation entities, reauthentication, and diagnostics.

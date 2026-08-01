@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .adapters.rachio import (
     RachioApiClient,
@@ -43,6 +45,8 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         )
         self.entry = entry
         self.landscape = LandscapeProfile(schema_version=1, areas=())
+        self.last_successful_refresh: datetime | None = None
+        self.refresh_count = 0
         client = RachioApiClient(
             async_get_clientsession(hass),
             str(entry.data[CONF_API_KEY]),
@@ -54,7 +58,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         try:
             snapshot = await self.adapter.async_get_snapshot(account_id)
         except RachioAuthenticationError as err:
-            raise UpdateFailed("Rachio authentication failed") from err
+            raise ConfigEntryAuthFailed("Rachio authentication failed") from err
         except RachioRateLimitError as err:
             detail = (
                 f"; retry after {err.retry_after_seconds} seconds"
@@ -69,6 +73,8 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         if not isinstance(overrides, dict):
             overrides = {}
         self.landscape = build_landscape_profile(snapshot, _string_key_mapping(overrides))
+        self.last_successful_refresh = dt_util.utcnow()
+        self.refresh_count += 1
         return snapshot
 
 

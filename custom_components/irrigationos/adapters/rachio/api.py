@@ -46,6 +46,10 @@ class RachioApiClient:
         """Return controllers and zones for the current person."""
         return await self._async_request("GET", f"/person/{person_id}")
 
+    async def async_get_current_schedule(self, device_id: str) -> dict[str, Any]:
+        """Return the schedule currently running on a controller, if any."""
+        return await self._async_request("GET", f"/device/{device_id}/current_schedule")
+
     async def async_get_account(self) -> tuple[str, dict[str, Any]]:
         """Resolve the person id and return the complete account payload."""
         identity = await self.async_get_person_info()

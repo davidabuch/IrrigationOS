@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import replace
 from typing import Any, Final
 
 from ...controllers import (
@@ -12,7 +14,7 @@ from ...controllers import (
     IrrigationAreaState,
     IrrigationController,
 )
-from .api import RachioApiClient
+from .api import RachioApiClient, RachioApiError
 
 PROVIDER: Final = "rachio"
 
@@ -28,7 +30,34 @@ class RachioControllerAdapter:
     async def async_get_snapshot(self, account_id: str) -> ControllerRegistrySnapshot:
         """Fetch and normalize the latest Rachio account snapshot."""
         payload = await self._client.async_get_person(account_id)
-        return self.from_person_payload(payload)
+        snapshot = self.from_person_payload(payload)
+        controllers = await asyncio.gather(
+            *(
+                self._async_enrich_current_watering(controller)
+                for controller in snapshot.controllers
+            )
+        )
+        return replace(snapshot, controllers=tuple(controllers))
+
+    async def _async_enrich_current_watering(
+        self, controller: IrrigationController
+    ) -> IrrigationController:
+        """Best-effort enrichment using Rachio's current-schedule endpoint."""
+        try:
+            payload = await self._client.async_get_current_schedule(controller.native_id)
+        except RachioApiError:
+            return controller
+
+        active_native_ids = _find_zone_ids(payload)
+        if not active_native_ids:
+            return controller
+        areas = tuple(
+            replace(area, state=IrrigationAreaState.WATERING)
+            if area.native_id in active_native_ids and area.enabled
+            else area
+            for area in controller.areas
+        )
+        return replace(controller, areas=areas)
 
     @classmethod
     def from_person_payload(cls, payload: dict[str, Any]) -> ControllerRegistrySnapshot:
@@ -70,7 +99,7 @@ def _controller_from_api(payload: dict[str, Any]) -> IrrigationController:
         latitude=_optional_float(payload.get("latitude")),
         longitude=_optional_float(payload.get("longitude")),
         capabilities=ControllerCapabilities(
-            observe_current_watering=False,
+            observe_current_watering=True,
             observe_last_watered=True,
         ),
         areas=areas,
@@ -97,6 +126,29 @@ def _area_from_api(payload: dict[str, Any], controller_id: str) -> IrrigationAre
         nozzle_name=_nested_name(payload.get("customNozzle")),
         nozzle_inches_per_hour=_nested_float(payload.get("customNozzle"), "inchesPerHour"),
     )
+
+
+def _find_zone_ids(payload: object) -> set[str]:
+    """Find zone identifiers in a current-schedule payload without assuming one schema."""
+    found: set[str] = set()
+
+    def visit(value: object) -> None:
+        if isinstance(value, dict):
+            for key, item in value.items():
+                normalized = key.replace("_", "").lower()
+                if normalized == "zoneid" and isinstance(item, str) and item.strip():
+                    found.add(item.strip())
+                elif normalized == "zone" and isinstance(item, dict):
+                    nested_id = item.get("id")
+                    if isinstance(nested_id, str) and nested_id.strip():
+                        found.add(nested_id.strip())
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(payload)
+    return found
 
 
 def _normalize_availability(value: object) -> ControllerAvailability:

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "irrigationos"
-version = "0.3.0"
+version = "0.4.0"
 description = "An intelligent irrigation operating system for Home Assistant"
 requires-python = ">=3.13"
 license = {text = "MIT"}
