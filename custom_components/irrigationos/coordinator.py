@@ -14,16 +14,17 @@ from .adapters.rachio import (
     RachioApiClient,
     RachioApiError,
     RachioAuthenticationError,
+    RachioControllerAdapter,
     RachioRateLimitError,
 )
 from .const import CONF_API_KEY, CONF_PERSON_ID, DOMAIN, UPDATE_INTERVAL_MINUTES
-from .models import RachioAccountSnapshot
+from .controllers import ControllerRegistrySnapshot
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class IrrigationOSCoordinator(DataUpdateCoordinator[RachioAccountSnapshot]):
-    """Coordinate read-only Rachio observations."""
+class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot]):
+    """Coordinate read-only controller observations."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(
@@ -33,16 +34,16 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[RachioAccountSnapshot]):
             update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES),
         )
         self.entry = entry
-        self.client = RachioApiClient(
+        client = RachioApiClient(
             async_get_clientsession(hass),
             str(entry.data[CONF_API_KEY]),
         )
+        self.adapter = RachioControllerAdapter(client)
 
-    async def _async_update_data(self) -> RachioAccountSnapshot:
-        person_id = str(self.entry.data[CONF_PERSON_ID])
+    async def _async_update_data(self) -> ControllerRegistrySnapshot:
+        account_id = str(self.entry.data[CONF_PERSON_ID])
         try:
-            payload = await self.client.async_get_person(person_id)
-            return RachioAccountSnapshot.from_person_payload(payload)
+            return await self.adapter.async_get_snapshot(account_id)
         except RachioAuthenticationError as err:
             raise UpdateFailed("Rachio authentication failed") from err
         except RachioRateLimitError as err:

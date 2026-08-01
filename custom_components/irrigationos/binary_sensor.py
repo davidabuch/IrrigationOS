@@ -7,9 +7,9 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .controllers import ControllerAvailability, IrrigationArea, IrrigationController
 from .coordinator import IrrigationOSCoordinator
-from .entity import IrrigationOSControllerEntity, IrrigationOSEntity, IrrigationOSZoneEntity
-from .models import RachioController, RachioZone
+from .entity import IrrigationOSAreaEntity, IrrigationOSControllerEntity, IrrigationOSEntity
 
 
 async def async_setup_entry(
@@ -26,7 +26,7 @@ async def async_setup_entry(
         for controller in coordinator.data.controllers
     )
     entities.extend(
-        IrrigationOSZoneEnabledSensor(coordinator, zone) for zone in coordinator.data.zones
+        IrrigationOSAreaEnabledSensor(coordinator, area) for area in coordinator.data.areas
     )
     async_add_entities(entities)
 
@@ -45,31 +45,35 @@ class IrrigationOSCloudHealthySensor(IrrigationOSEntity, BinarySensorEntity):
 
 
 class IrrigationOSControllerOnlineSensor(IrrigationOSControllerEntity, BinarySensorEntity):
-    """Report whether a Rachio controller is online."""
+    """Report whether a controller is online."""
 
     _attr_name = "Online"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
 
-    def __init__(self, coordinator: IrrigationOSCoordinator, controller: RachioController) -> None:
+    def __init__(
+        self,
+        coordinator: IrrigationOSCoordinator,
+        controller: IrrigationController,
+    ) -> None:
         super().__init__(coordinator, controller)
-        self._attr_unique_id = f"{controller.native_id}_online"
+        self._attr_unique_id = f"{controller.controller_id}_online"
 
     @property
     def is_on(self) -> bool:
         """Return online state."""
-        return self.controller.status.upper() == "ONLINE"
+        return self.controller.availability is ControllerAvailability.ONLINE
 
 
-class IrrigationOSZoneEnabledSensor(IrrigationOSZoneEntity, BinarySensorEntity):
-    """Report whether a Rachio zone is enabled."""
+class IrrigationOSAreaEnabledSensor(IrrigationOSAreaEntity, BinarySensorEntity):
+    """Report whether an irrigation area is enabled."""
 
     _attr_name = "Enabled"
 
-    def __init__(self, coordinator: IrrigationOSCoordinator, zone: RachioZone) -> None:
-        super().__init__(coordinator, zone)
-        self._attr_unique_id = f"{zone.native_id}_enabled"
+    def __init__(self, coordinator: IrrigationOSCoordinator, area: IrrigationArea) -> None:
+        super().__init__(coordinator, area)
+        self._attr_unique_id = f"{area.area_id}_enabled"
 
     @property
     def is_on(self) -> bool:
-        """Return whether the zone is enabled in Rachio."""
-        return self.zone.enabled
+        """Return whether the area is enabled in its controller."""
+        return self.area.enabled

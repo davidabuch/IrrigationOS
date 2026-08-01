@@ -1,8 +1,8 @@
 # IrrigationOS Architecture Specification v1.0
 
-**Status:** Canonical design baseline  
-**Date:** July 30, 2026  
-**Initial controller:** Rachio  
+**Status:** Canonical design baseline
+**Date:** July 30, 2026
+**Initial controller:** Rachio
 **Target platform:** Home Assistant custom integration installed through HACS
 
 ---

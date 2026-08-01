@@ -2,10 +2,10 @@
 
 ## Current status
 
-- **Current release:** v0.1.1
+- **Current release:** v0.2.0
 - **Current operating boundary:** Observation only
 - **Current epic:** Epic 2 — Rachio Integration
-- **Next milestone:** v0.2.0 — Home Assistant commissioning and live discovery validation
+- **Next milestone:** v0.3.0 — Home Assistant commissioning and live discovery validation
 
 ## Delivery model
 
@@ -35,17 +35,25 @@ Delivered:
 
 **Goal:** Provide a complete standalone Rachio integration without depending on Home Assistant's built-in Rachio integration.
 
-### v0.2.0 — Live commissioning
+### v0.2.0 — Controller foundation
+
+- controller adapter protocol and registry
+- canonical controller and irrigation-area models
+- normalized availability and state vocabulary
+- capability reporting
+- Rachio payload translation at the adapter boundary
+
+### v0.3.0 — Live commissioning and observation reliability
 
 - HACS/custom-repository installation validation
 - Rachio API-key config flow in a real Home Assistant instance
-- controller and zone discovery against a live account
-- verification of the user's four zones
+- controller and irrigation-area discovery against a live account
+- verification of the user's four irrigation areas
 - entity/device registry validation
 - diagnostics validation with secret redaction
 - read-only external watering detection
-
-### v0.3.0 — Observation reliability
+- current watering session state
+- last-watered and runtime observations
 
 - current watering session state
 - last-watered and runtime observations

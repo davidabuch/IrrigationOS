@@ -1,8 +1,7 @@
-"""Compatibility exports for IrrigationOS domain models."""
+"""Controller-agnostic interfaces for IrrigationOS."""
 
-from __future__ import annotations
-
-from .controllers.models import (
+from .base import ControllerAdapter
+from .models import (
     ControllerAvailability,
     ControllerCapabilities,
     ControllerRegistrySnapshot,
@@ -10,8 +9,11 @@ from .controllers.models import (
     IrrigationAreaState,
     IrrigationController,
 )
+from .registry import ControllerAdapterRegistry
 
 __all__ = [
+    "ControllerAdapter",
+    "ControllerAdapterRegistry",
     "ControllerAvailability",
     "ControllerCapabilities",
     "ControllerRegistrySnapshot",

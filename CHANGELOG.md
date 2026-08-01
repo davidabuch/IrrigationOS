@@ -2,6 +2,16 @@
 
 All notable changes to IrrigationOS will be documented here.
 
+## [0.2.0] - 2026-08-01
+
+### Added
+
+- Controller-agnostic domain models for controllers and irrigation areas.
+- Controller adapter protocol, capability model, and adapter registry.
+- Rachio-to-domain translation boundary.
+- Generic Home Assistant controller and irrigation-area entities.
+- ADR-006 for the controller domain model.
+
 ## [0.1.1] - 2026-08-01
 
 ### Added

@@ -25,7 +25,7 @@ def test_manifest_and_hacs_versions_are_consistent() -> None:
     manifest = json.loads(
         (ROOT / "custom_components/irrigationos/manifest.json").read_text(encoding="utf-8")
     )
-    assert manifest["version"] == "0.1.1"
+    assert manifest["version"] == "0.2.0"
     assert manifest["domain"] == "irrigationos"
 
 
@@ -43,6 +43,7 @@ def test_governance_documents_exist() -> None:
         "docs/adr/ADR-003-weather-provider-architecture.md",
         "docs/adr/ADR-004-soil-model-architecture.md",
         "docs/adr/ADR-005-decision-transparency.md",
+        "docs/adr/ADR-006-controller-domain-model.md",
     )
     for relative_path in required:
         assert (ROOT / relative_path).is_file(), relative_path
@@ -53,3 +54,16 @@ def test_governance_preserves_observation_first_boundary() -> None:
     operating_modes = (ROOT / "docs/OPERATING_MODES.md").read_text(encoding="utf-8")
     assert "Observation -> Simulation -> Shadow -> Live" in operating_modes
     assert "must never automatically promote" in operating_modes
+
+
+def test_controller_foundation_files_exist() -> None:
+    """The controller-agnostic boundary must remain part of the repository."""
+    required = (
+        "custom_components/irrigationos/controllers/base.py",
+        "custom_components/irrigationos/controllers/models.py",
+        "custom_components/irrigationos/controllers/registry.py",
+        "custom_components/irrigationos/adapters/rachio/adapter.py",
+        "docs/adr/ADR-006-controller-domain-model.md",
+    )
+    for relative_path in required:
+        assert (ROOT / relative_path).is_file(), relative_path

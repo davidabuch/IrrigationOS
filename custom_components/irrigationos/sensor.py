@@ -10,9 +10,9 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import MODE_OBSERVATION
+from .controllers import IrrigationArea, IrrigationController
 from .coordinator import IrrigationOSCoordinator
-from .entity import IrrigationOSControllerEntity, IrrigationOSEntity, IrrigationOSZoneEntity
-from .models import RachioController, RachioZone
+from .entity import IrrigationOSAreaEntity, IrrigationOSControllerEntity, IrrigationOSEntity
 
 
 async def async_setup_entry(
@@ -25,15 +25,16 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     entities: list[SensorEntity] = [
         IrrigationOSStatusSensor(coordinator),
+        IrrigationOSProviderSensor(coordinator),
         IrrigationOSControllerCountSensor(coordinator),
-        IrrigationOSZoneCountSensor(coordinator),
+        IrrigationOSAreaCountSensor(coordinator),
     ]
     entities.extend(
         IrrigationOSControllerStatusSensor(coordinator, controller)
         for controller in coordinator.data.controllers
     )
     entities.extend(
-        IrrigationOSZoneSummarySensor(coordinator, zone) for zone in coordinator.data.zones
+        IrrigationOSAreaSummarySensor(coordinator, area) for area in coordinator.data.areas
     )
     async_add_entities(entities)
 
@@ -51,6 +52,19 @@ class IrrigationOSStatusSensor(IrrigationOSEntity, SensorEntity):
         return MODE_OBSERVATION
 
 
+class IrrigationOSProviderSensor(IrrigationOSEntity, SensorEntity):
+    """Expose the active controller provider."""
+
+    _attr_name = "Controller provider"
+    _attr_unique_id = "irrigationos_controller_provider"
+    _attr_icon = "mdi:access-point-network"
+
+    @property
+    def native_value(self) -> str:
+        """Return provider name."""
+        return self.coordinator.data.provider
+
+
 class IrrigationOSControllerCountSensor(IrrigationOSEntity, SensorEntity):
     """Count discovered controllers."""
 
@@ -64,71 +78,81 @@ class IrrigationOSControllerCountSensor(IrrigationOSEntity, SensorEntity):
         return len(self.coordinator.data.controllers)
 
 
-class IrrigationOSZoneCountSensor(IrrigationOSEntity, SensorEntity):
-    """Count discovered zones."""
+class IrrigationOSAreaCountSensor(IrrigationOSEntity, SensorEntity):
+    """Count discovered irrigation areas."""
 
-    _attr_name = "Zone count"
-    _attr_unique_id = "irrigationos_zone_count"
-    _attr_native_unit_of_measurement = "zones"
+    _attr_name = "Irrigation area count"
+    _attr_unique_id = "irrigationos_area_count"
+    _attr_native_unit_of_measurement = "areas"
 
     @property
     def native_value(self) -> int:
-        """Return zone count."""
-        return len(self.coordinator.data.zones)
+        """Return irrigation-area count."""
+        return len(self.coordinator.data.areas)
 
 
 class IrrigationOSControllerStatusSensor(IrrigationOSControllerEntity, SensorEntity):
-    """Expose a controller's reported cloud status."""
+    """Expose a controller's normalized status."""
 
     _attr_name = "Status"
     _attr_icon = "mdi:access-point-network"
 
-    def __init__(self, coordinator: IrrigationOSCoordinator, controller: RachioController) -> None:
+    def __init__(
+        self,
+        coordinator: IrrigationOSCoordinator,
+        controller: IrrigationController,
+    ) -> None:
         super().__init__(coordinator, controller)
-        self._attr_unique_id = f"{controller.native_id}_status"
+        self._attr_unique_id = f"{controller.controller_id}_status"
 
     @property
     def native_value(self) -> str:
-        """Return controller status."""
-        return self.controller.status.lower()
+        """Return controller availability."""
+        return self.controller.availability.value
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return non-sensitive controller details."""
         controller = self.controller
         return {
-            "controller_on": controller.on,
+            "provider": controller.provider,
+            "enabled": controller.enabled,
             "model": controller.model,
-            "zone_count": len(controller.zones),
+            "area_count": len(controller.areas),
+            "supports_current_watering": controller.capabilities.observe_current_watering,
+            "supports_last_watered": controller.capabilities.observe_last_watered,
+            "supports_start_area": controller.capabilities.supports_start_area,
+            "supports_stop_area": controller.capabilities.supports_stop_area,
         }
 
 
-class IrrigationOSZoneSummarySensor(IrrigationOSZoneEntity, SensorEntity):
-    """Expose read-only Rachio zone metadata."""
+class IrrigationOSAreaSummarySensor(IrrigationOSAreaEntity, SensorEntity):
+    """Expose normalized irrigation-area metadata."""
 
     _attr_name = "Observation"
     _attr_icon = "mdi:sprinkler"
 
-    def __init__(self, coordinator: IrrigationOSCoordinator, zone: RachioZone) -> None:
-        super().__init__(coordinator, zone)
-        self._attr_unique_id = f"{zone.native_id}_observation"
+    def __init__(self, coordinator: IrrigationOSCoordinator, area: IrrigationArea) -> None:
+        super().__init__(coordinator, area)
+        self._attr_unique_id = f"{area.area_id}_observation"
 
     @property
     def native_value(self) -> str:
-        """Return zone state for this observation-only release."""
-        return "enabled" if self.zone.enabled else "disabled"
+        """Return the normalized area state."""
+        return self.area.state.value
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return safe zone metadata from Rachio."""
-        zone = self.zone
+        """Return read-only area details."""
+        area = self.area
         return {
-            "zone_number": zone.zone_number,
-            "soil": zone.soil_name,
-            "crop": zone.crop_name,
-            "nozzle": zone.nozzle_name,
-            "nozzle_inches_per_hour": zone.nozzle_inches_per_hour,
-            "root_zone_depth_inches": zone.root_zone_depth_inches,
-            "efficiency": zone.efficiency,
-            "last_watered_epoch_ms": zone.last_watered_epoch_ms,
+            "native_number": area.native_number,
+            "enabled": area.enabled,
+            "last_watered_epoch_ms": area.last_watered_epoch_ms,
+            "root_zone_depth_inches": area.root_zone_depth_inches,
+            "efficiency": area.efficiency,
+            "soil_name": area.soil_name,
+            "crop_name": area.crop_name,
+            "nozzle_name": area.nozzle_name,
+            "nozzle_inches_per_hour": area.nozzle_inches_per_hour,
         }

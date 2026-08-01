@@ -14,18 +14,19 @@ from .adapters.rachio import (
     RachioApiClient,
     RachioApiError,
     RachioAuthenticationError,
+    RachioControllerAdapter,
     RachioInvalidResponseError,
     RachioRateLimitError,
 )
 from .const import (
     CONF_API_KEY,
+    CONF_CONTROLLER_PROVIDER,
     CONF_OPERATING_MODE,
     CONF_PERSON_ID,
     DEFAULT_OPERATING_MODE,
     DOMAIN,
     NAME,
 )
-from .models import RachioAccountSnapshot
 
 STEP_USER_SCHEMA = vol.Schema(
     {
@@ -49,7 +50,7 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             client = RachioApiClient(async_get_clientsession(self.hass), api_key)
             try:
                 person_id, payload = await client.async_get_account()
-                snapshot = RachioAccountSnapshot.from_person_payload(payload)
+                snapshot = RachioControllerAdapter.from_person_payload(payload)
             except RachioAuthenticationError:
                 errors["base"] = "invalid_auth"
             except RachioRateLimitError:
@@ -61,16 +62,15 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 await self.async_set_unique_id(person_id)
                 self._abort_if_unique_id_configured()
-                controller_count = len(snapshot.controllers)
-                zone_count = len(snapshot.zones)
                 return self.async_create_entry(
                     title=str(user_input.get(CONF_NAME, NAME)),
                     data={
                         CONF_API_KEY: api_key,
                         CONF_PERSON_ID: person_id,
+                        CONF_CONTROLLER_PROVIDER: snapshot.provider,
                         CONF_OPERATING_MODE: DEFAULT_OPERATING_MODE,
-                        "discovered_controller_count": controller_count,
-                        "discovered_zone_count": zone_count,
+                        "discovered_controller_count": len(snapshot.controllers),
+                        "discovered_area_count": len(snapshot.areas),
                     },
                 )
 

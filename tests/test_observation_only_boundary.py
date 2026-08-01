@@ -1,4 +1,4 @@
-"""Safety tests for the v0.1.0 observation-only boundary."""
+"""Safety tests for the v0.2.0 observation-only boundary."""
 
 from __future__ import annotations
 
