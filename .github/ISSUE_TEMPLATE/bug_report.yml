@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible IrrigationOS problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include your Rachio API key, exact address, or unredacted diagnostics.
+  - type: input
+    id: version
+    attributes:
+      label: IrrigationOS version
+      placeholder: 0.0.1
+    validations:
+      required: true
+  - type: input
+    id: home_assistant
+    attributes:
+      label: Home Assistant version
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the expected and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs or diagnostics
+      render: text
