@@ -1,0 +1,19 @@
+"""Constants for IrrigationOS."""
+
+from __future__ import annotations
+
+from typing import Final
+
+DOMAIN: Final = "irrigationos"
+NAME: Final = "IrrigationOS"
+VERSION: Final = "0.0.1"
+
+CONF_API_KEY: Final = "api_key"
+CONF_OPERATING_MODE: Final = "operating_mode"
+
+MODE_OBSERVATION: Final = "observation"
+MODE_SIMULATION: Final = "simulation"
+MODE_LIVE: Final = "live"
+DEFAULT_OPERATING_MODE: Final = MODE_OBSERVATION
+
+PLATFORMS: Final = ["sensor", "binary_sensor"]

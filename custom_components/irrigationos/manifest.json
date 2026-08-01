@@ -1,0 +1,12 @@
+{
+  "domain": "irrigationos",
+  "name": "IrrigationOS",
+  "codeowners": ["@davidabuch"],
+  "config_flow": true,
+  "documentation": "https://github.com/davidabuch/IrrigationOS",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/davidabuch/IrrigationOS/issues",
+  "requirements": [],
+  "version": "0.0.1"
+}
