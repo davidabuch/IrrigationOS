@@ -14,7 +14,8 @@
     "error": {
       "cannot_connect": "Unable to connect to Rachio.",
       "invalid_auth": "Rachio rejected the API key.",
-      "invalid_response": "Rachio returned an unexpected account response."
+      "invalid_response": "Rachio returned an unexpected account response.",
+      "rate_limited": "Rachio is temporarily rate limiting requests. Try again shortly."
     },
     "abort": {
       "already_configured": "This Rachio account is already configured."

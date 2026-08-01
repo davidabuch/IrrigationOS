@@ -6,9 +6,10 @@ from typing import Final
 
 DOMAIN: Final = "irrigationos"
 NAME: Final = "IrrigationOS"
-VERSION: Final = "0.0.1"
+VERSION: Final = "0.1.0"
 
 CONF_API_KEY: Final = "api_key"
+CONF_PERSON_ID: Final = "person_id"
 CONF_OPERATING_MODE: Final = "operating_mode"
 
 MODE_OBSERVATION: Final = "observation"
@@ -17,3 +18,4 @@ MODE_LIVE: Final = "live"
 DEFAULT_OPERATING_MODE: Final = MODE_OBSERVATION
 
 PLATFORMS: Final = ["sensor", "binary_sensor"]
+UPDATE_INTERVAL_MINUTES: Final = 5

@@ -2,13 +2,22 @@
 
 All notable changes to IrrigationOS will be documented here.
 
+## [0.1.0] - 2026-08-01
+
+### Added
+
+- Standalone Rachio API-key authentication and account discovery.
+- Typed controller and zone observation models.
+- Read-only polling coordinator and Home Assistant observation entities.
+- Redacted diagnostics and explicit API error handling.
+- Expanded tests for API behavior and payload normalization.
+
 ## [Unreleased]
 
 ### Planned
 
-- Standalone Rachio controller and zone discovery
-- Observation-only coordinator data
-- Redacted diagnostics
+- Home Assistant installation and live account commissioning.
+- Weather and soil data foundations.
 
 ## [0.0.1] - 2026-08-01
 
