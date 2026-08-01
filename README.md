@@ -4,18 +4,18 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v0.2.0 — Controller Foundation**
+**v0.3.0 — Landscape Digital Twin Foundation**
 
 The current release:
 
 - accepts and validates a Rachio API key through the Home Assistant UI;
 - discovers the Rachio Person ID, controllers, and zones automatically;
 - polls Rachio every five minutes in read-only Observation mode;
-- creates controller and irrigation-area observation entities;
+- creates controller and zone observation entities;
 - exports redacted diagnostics;
 - does not start, stop, enable, disable, or reschedule irrigation.
 
-See [`V0_2_0_RELEASE_NOTES.md`](V0_2_0_RELEASE_NOTES.md) for this release boundary.
+See [`V0_3_0_RELEASE_NOTES.md`](V0_3_0_RELEASE_NOTES.md) for the current release boundary.
 
 ## API key
 
@@ -46,4 +46,8 @@ git diff --check
 
 ## Safety
 
-Observation mode is the default and only implemented operating mode in v0.2.0. Credentials, controller identifiers, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+Observation mode is the default and only implemented operating mode in v0.3.0. Credentials, controller identifiers, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+
+## Landscape Digital Twin
+
+IrrigationOS separates controller facts from landscape facts. Each irrigation area has a canonical profile for plants, soil, sun exposure, slope, root depth, irrigation method, application rate, and efficiency. Every value records its source and confidence.

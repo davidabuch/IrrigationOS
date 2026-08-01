@@ -49,4 +49,5 @@ Development handoff packages contain repository contents but exclude `.git` and 
 
 - `v0.1.0` — Standalone Rachio API foundation
 - `v0.1.1` — Project governance and architecture records
-- `v0.2.0` — Planned live Home Assistant commissioning
+- `v0.2.0` — Controller foundation
+- `v0.3.0` — Landscape Digital Twin foundation

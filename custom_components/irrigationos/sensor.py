@@ -12,7 +12,12 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import MODE_OBSERVATION
 from .controllers import IrrigationArea, IrrigationController
 from .coordinator import IrrigationOSCoordinator
-from .entity import IrrigationOSAreaEntity, IrrigationOSControllerEntity, IrrigationOSEntity
+from .entity import (
+    IrrigationOSAreaEntity,
+    IrrigationOSControllerEntity,
+    IrrigationOSEntity,
+    IrrigationOSLandscapeAreaEntity,
+)
 
 
 async def async_setup_entry(
@@ -28,6 +33,7 @@ async def async_setup_entry(
         IrrigationOSProviderSensor(coordinator),
         IrrigationOSControllerCountSensor(coordinator),
         IrrigationOSAreaCountSensor(coordinator),
+        IrrigationOSLandscapeStatusSensor(coordinator),
     ]
     entities.extend(
         IrrigationOSControllerStatusSensor(coordinator, controller)
@@ -35,6 +41,10 @@ async def async_setup_entry(
     )
     entities.extend(
         IrrigationOSAreaSummarySensor(coordinator, area) for area in coordinator.data.areas
+    )
+    entities.extend(
+        IrrigationOSLandscapeProfileSensor(coordinator, area)
+        for area in coordinator.data.areas
     )
     async_add_entities(entities)
 
@@ -155,4 +165,99 @@ class IrrigationOSAreaSummarySensor(IrrigationOSAreaEntity, SensorEntity):
             "crop_name": area.crop_name,
             "nozzle_name": area.nozzle_name,
             "nozzle_inches_per_hour": area.nozzle_inches_per_hour,
+        }
+
+
+class IrrigationOSLandscapeStatusSensor(IrrigationOSEntity, SensorEntity):
+    """Expose overall Landscape Digital Twin completion."""
+
+    _attr_name = "Landscape profile status"
+    _attr_unique_id = "irrigationos_landscape_profile_status"
+    _attr_icon = "mdi:land-plots"
+
+    @property
+    def native_value(self) -> str:
+        """Return overall landscape profile state."""
+        landscape = self.coordinator.landscape
+        if not landscape.areas:
+            return "unavailable"
+        if landscape.complete_area_count == len(landscape.areas):
+            return "complete"
+        return "incomplete"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return aggregate landscape details."""
+        landscape = self.coordinator.landscape
+        return {
+            "schema_version": landscape.schema_version,
+            "area_count": len(landscape.areas),
+            "complete_area_count": landscape.complete_area_count,
+        }
+
+
+class IrrigationOSLandscapeProfileSensor(
+    IrrigationOSLandscapeAreaEntity, SensorEntity
+):
+    """Expose the canonical landscape profile for an irrigation area."""
+
+    _attr_name = "Landscape profile"
+    _attr_icon = "mdi:land-plots"
+
+    def __init__(self, coordinator: IrrigationOSCoordinator, area: IrrigationArea) -> None:
+        super().__init__(coordinator, area)
+        self._attr_unique_id = f"{area.area_id}_landscape_profile"
+
+    @property
+    def native_value(self) -> str:
+        """Return profile completion state."""
+        return "complete" if self.profile.is_complete else "incomplete"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return profile values with provenance and confidence."""
+        profile = self.profile
+        return {
+            "completion_percent": profile.completion_percent,
+            "display_name": profile.display_name.value,
+            "plant_type": profile.plant_type.value.value,
+            "plant_description": profile.plant_description.value,
+            "irrigation_method": profile.irrigation_method.value.value,
+            "sun_exposure": profile.sun_exposure.value.value,
+            "slope_percent": profile.slope_percent.value,
+            "soil_texture": profile.soil_texture.value.value,
+            "soil_description": profile.soil_description.value,
+            "root_depth_inches": profile.root_depth_inches.value,
+            "application_rate_inches_per_hour": (
+                profile.application_rate_inches_per_hour.value
+            ),
+            "distribution_efficiency": profile.distribution_efficiency.value,
+            "sources": {
+                "plant_type": profile.plant_type.source.value,
+                "irrigation_method": profile.irrigation_method.source.value,
+                "sun_exposure": profile.sun_exposure.source.value,
+                "slope_percent": profile.slope_percent.source.value,
+                "soil_texture": profile.soil_texture.source.value,
+                "root_depth_inches": profile.root_depth_inches.source.value,
+                "application_rate": (
+                    profile.application_rate_inches_per_hour.source.value
+                ),
+                "distribution_efficiency": (
+                    profile.distribution_efficiency.source.value
+                ),
+            },
+            "confidence": {
+                "plant_type": profile.plant_type.confidence_percent,
+                "irrigation_method": profile.irrigation_method.confidence_percent,
+                "sun_exposure": profile.sun_exposure.confidence_percent,
+                "slope_percent": profile.slope_percent.confidence_percent,
+                "soil_texture": profile.soil_texture.confidence_percent,
+                "root_depth_inches": profile.root_depth_inches.confidence_percent,
+                "application_rate": (
+                    profile.application_rate_inches_per_hour.confidence_percent
+                ),
+                "distribution_efficiency": (
+                    profile.distribution_efficiency.confidence_percent
+                ),
+            },
         }

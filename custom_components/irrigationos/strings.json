@@ -20,5 +20,40 @@
     "abort": {
       "already_configured": "This Rachio account is already configured."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Landscape Digital Twin",
+        "description": "Select an irrigation area to review or edit.",
+        "data": {
+          "area_id": "Irrigation area"
+        }
+      },
+      "area": {
+        "title": "Edit landscape profile",
+        "description": "Edit the Landscape Digital Twin profile for {area_name}. Controller observations remain separate from these landscape facts.",
+        "data": {
+          "display_name": "Landscape name",
+          "plant_type": "Plant type",
+          "plant_description": "Plant description",
+          "irrigation_method": "Irrigation method",
+          "sun_exposure": "Sun exposure",
+          "slope_percent": "Slope percent",
+          "soil_texture": "Soil texture",
+          "soil_description": "Soil description",
+          "root_depth_inches": "Root depth (inches)",
+          "application_rate_inches_per_hour": "Application rate (inches/hour)",
+          "distribution_efficiency": "Distribution efficiency (0-1)",
+          "profile_confidence_percent": "Confidence for edited values (%)"
+        }
+      }
+    },
+    "error": {
+      "invalid_profile": "One or more landscape profile values are outside the allowed range."
+    },
+    "abort": {
+      "no_areas": "No irrigation areas are currently available."
+    }
   }
 }

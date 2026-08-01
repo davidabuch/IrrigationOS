@@ -2,10 +2,10 @@
 
 ## Current status
 
-- **Current release:** v0.2.0
+- **Current release:** v0.3.0
 - **Current operating boundary:** Observation only
 - **Current epic:** Epic 2 — Rachio Integration
-- **Next milestone:** v0.3.0 — Home Assistant commissioning and live discovery validation
+- **Next milestone:** v0.3.1 — Home Assistant commissioning and live discovery validation
 
 ## Delivery model
 
@@ -30,6 +30,8 @@ Delivered:
 - `v0.0.1` — Repository foundation
 - `v0.1.0` — Standalone Rachio API foundation
 - `v0.1.1` — Project governance and architecture records
+- `v0.2.0` — Controller foundation
+- `v0.3.0` — Landscape Digital Twin foundation
 
 ## Epic 2 — Rachio Integration
 
@@ -37,13 +39,16 @@ Delivered:
 
 ### v0.2.0 — Controller foundation
 
+**Status:** Complete
+
+
 - controller adapter protocol and registry
 - canonical controller and irrigation-area models
 - normalized availability and state vocabulary
 - capability reporting
 - Rachio payload translation at the adapter boundary
 
-### v0.3.0 — Live commissioning and observation reliability
+### v0.3.1 — Live commissioning and observation reliability
 
 - HACS/custom-repository installation validation
 - Rachio API-key config flow in a real Home Assistant instance
@@ -52,9 +57,6 @@ Delivered:
 - entity/device registry validation
 - diagnostics validation with secret redaction
 - read-only external watering detection
-- current watering session state
-- last-watered and runtime observations
-
 - current watering session state
 - last-watered and runtime observations
 - controller availability and stale-data handling
@@ -171,6 +173,8 @@ Delivered:
 - Flight Recorder and diagnostic explanations
 
 ## Epic 12 — Landscape Digital Twin
+
+**Foundation delivered early in v0.3.0.**
 
 - persistent property model
 - zone and subarea relationships

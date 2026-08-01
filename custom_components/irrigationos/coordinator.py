@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -17,14 +18,21 @@ from .adapters.rachio import (
     RachioControllerAdapter,
     RachioRateLimitError,
 )
-from .const import CONF_API_KEY, CONF_PERSON_ID, DOMAIN, UPDATE_INTERVAL_MINUTES
+from .const import (
+    CONF_API_KEY,
+    CONF_AREA_PROFILES,
+    CONF_PERSON_ID,
+    DOMAIN,
+    UPDATE_INTERVAL_MINUTES,
+)
 from .controllers import ControllerRegistrySnapshot
+from .landscape import LandscapeProfile, build_landscape_profile
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot]):
-    """Coordinate read-only controller observations."""
+    """Coordinate read-only controller observations and the Landscape Digital Twin."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         super().__init__(
@@ -34,6 +42,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             update_interval=timedelta(minutes=UPDATE_INTERVAL_MINUTES),
         )
         self.entry = entry
+        self.landscape = LandscapeProfile(schema_version=1, areas=())
         client = RachioApiClient(
             async_get_clientsession(hass),
             str(entry.data[CONF_API_KEY]),
@@ -43,7 +52,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
     async def _async_update_data(self) -> ControllerRegistrySnapshot:
         account_id = str(self.entry.data[CONF_PERSON_ID])
         try:
-            return await self.adapter.async_get_snapshot(account_id)
+            snapshot = await self.adapter.async_get_snapshot(account_id)
         except RachioAuthenticationError as err:
             raise UpdateFailed("Rachio authentication failed") from err
         except RachioRateLimitError as err:
@@ -55,3 +64,14 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             raise UpdateFailed(f"Rachio rate limit reached{detail}") from err
         except (RachioApiError, ValueError) as err:
             raise UpdateFailed(str(err)) from err
+
+        overrides = self.entry.options.get(CONF_AREA_PROFILES, {})
+        if not isinstance(overrides, dict):
+            overrides = {}
+        self.landscape = build_landscape_profile(snapshot, _string_key_mapping(overrides))
+        return snapshot
+
+
+def _string_key_mapping(value: dict[Any, Any]) -> dict[str, Any]:
+    """Return a mapping with string keys for persisted config-entry options."""
+    return {str(key): item for key, item in value.items()}

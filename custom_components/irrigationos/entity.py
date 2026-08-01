@@ -8,6 +8,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .controllers import IrrigationArea, IrrigationController
 from .coordinator import IrrigationOSCoordinator
+from .landscape import IrrigationAreaProfile
 
 
 class IrrigationOSEntity(CoordinatorEntity[IrrigationOSCoordinator]):
@@ -65,3 +66,12 @@ class IrrigationOSAreaEntity(IrrigationOSEntity):
             if area.area_id == self.area_id:
                 return area
         raise RuntimeError(f"Irrigation area {self.area_id} is no longer available")
+
+
+class IrrigationOSLandscapeAreaEntity(IrrigationOSAreaEntity):
+    """Entity associated with a Landscape Digital Twin area profile."""
+
+    @property
+    def profile(self) -> IrrigationAreaProfile:
+        """Return the latest landscape profile for this area."""
+        return self.coordinator.landscape.get_area(self.area_id)

@@ -36,6 +36,7 @@ async def async_get_config_entry_diagnostics(
     """Return redacted diagnostics."""
     del hass
     snapshot = asdict(entry.runtime_data.data)
+    landscape = asdict(entry.runtime_data.landscape)
     return {
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
         "coordinator": {
@@ -46,5 +47,6 @@ async def async_get_config_entry_diagnostics(
                 else None
             ),
             "data": async_redact_data(snapshot, TO_REDACT),
+            "landscape": async_redact_data(landscape, TO_REDACT),
         },
     }

@@ -1,4 +1,4 @@
-"""Config flow for IrrigationOS."""
+"""Config and options flows for IrrigationOS."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -20,6 +21,8 @@ from .adapters.rachio import (
 )
 from .const import (
     CONF_API_KEY,
+    CONF_AREA_ID,
+    CONF_AREA_PROFILES,
     CONF_CONTROLLER_PROVIDER,
     CONF_OPERATING_MODE,
     CONF_PERSON_ID,
@@ -27,6 +30,20 @@ from .const import (
     DOMAIN,
     NAME,
 )
+from .landscape import IrrigationMethod, PlantType, SoilTexture, SunExposure
+
+CONF_DISPLAY_NAME = "display_name"
+CONF_PLANT_TYPE = "plant_type"
+CONF_PLANT_DESCRIPTION = "plant_description"
+CONF_IRRIGATION_METHOD = "irrigation_method"
+CONF_SUN_EXPOSURE = "sun_exposure"
+CONF_SLOPE_PERCENT = "slope_percent"
+CONF_SOIL_TEXTURE = "soil_texture"
+CONF_SOIL_DESCRIPTION = "soil_description"
+CONF_ROOT_DEPTH_INCHES = "root_depth_inches"
+CONF_APPLICATION_RATE = "application_rate_inches_per_hour"
+CONF_DISTRIBUTION_EFFICIENCY = "distribution_efficiency"
+CONF_PROFILE_CONFIDENCE = "profile_confidence_percent"
 
 STEP_USER_SCHEMA = vol.Schema(
     {
@@ -40,6 +57,15 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle IrrigationOS configuration."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback  # type: ignore[untyped-decorator]
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Return the Landscape Digital Twin options flow."""
+        del config_entry
+        return IrrigationOSOptionsFlow()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Collect and validate the Rachio API key."""
@@ -79,3 +105,180 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=STEP_USER_SCHEMA,
             errors=errors,
         )
+
+
+class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
+    """Edit one Landscape Digital Twin area profile at a time."""
+
+    def __init__(self) -> None:
+        self._selected_area_id: str | None = None
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Select the irrigation area to edit."""
+        coordinator = self.config_entry.runtime_data
+        area_choices = {area.area_id: area.name for area in coordinator.data.areas}
+        if not area_choices:
+            return self.async_abort(reason="no_areas")
+
+        if user_input is not None:
+            self._selected_area_id = str(user_input[CONF_AREA_ID])
+            return await self.async_step_area()
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({vol.Required(CONF_AREA_ID): vol.In(area_choices)}),
+        )
+
+    async def async_step_area(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Edit the selected area profile."""
+        if self._selected_area_id is None:
+            return await self.async_step_init()
+
+        errors: dict[str, str] = {}
+        existing_profiles = self.config_entry.options.get(CONF_AREA_PROFILES, {})
+        if not isinstance(existing_profiles, dict):
+            existing_profiles = {}
+        existing = existing_profiles.get(self._selected_area_id, {})
+        if not isinstance(existing, dict):
+            existing = {}
+
+        if user_input is not None:
+            try:
+                normalized = _normalize_profile_input(user_input)
+            except ValueError:
+                errors["base"] = "invalid_profile"
+            else:
+                profiles = {str(key): value for key, value in existing_profiles.items()}
+                profiles[self._selected_area_id] = normalized
+                return self.async_create_entry(
+                    title="",
+                    data={**self.config_entry.options, CONF_AREA_PROFILES: profiles},
+                )
+
+        profile = self.config_entry.runtime_data.landscape.get_area(self._selected_area_id)
+        return self.async_show_form(
+            step_id="area",
+            data_schema=_area_schema(existing, profile),
+            errors=errors,
+            description_placeholders={"area_name": profile.display_name.value},
+        )
+
+
+def _area_schema(existing: dict[str, Any], profile: Any) -> vol.Schema:
+    """Return the editable Landscape Digital Twin schema."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_DISPLAY_NAME,
+                default=existing.get(CONF_DISPLAY_NAME, profile.display_name.value),
+            ): str,
+            vol.Required(
+                CONF_PLANT_TYPE,
+                default=existing.get(CONF_PLANT_TYPE, profile.plant_type.value.value),
+            ): vol.In([item.value for item in PlantType]),
+            vol.Optional(
+                CONF_PLANT_DESCRIPTION,
+                default=existing.get(
+                    CONF_PLANT_DESCRIPTION, profile.plant_description.value or ""
+                ),
+            ): str,
+            vol.Required(
+                CONF_IRRIGATION_METHOD,
+                default=existing.get(
+                    CONF_IRRIGATION_METHOD, profile.irrigation_method.value.value
+                ),
+            ): vol.In([item.value for item in IrrigationMethod]),
+            vol.Required(
+                CONF_SUN_EXPOSURE,
+                default=existing.get(CONF_SUN_EXPOSURE, profile.sun_exposure.value.value),
+            ): vol.In([item.value for item in SunExposure]),
+            vol.Optional(
+                CONF_SLOPE_PERCENT,
+                default=existing.get(
+                    CONF_SLOPE_PERCENT,
+                    "" if profile.slope_percent.value is None else profile.slope_percent.value,
+                ),
+            ): vol.Any("", vol.Coerce(float)),
+            vol.Required(
+                CONF_SOIL_TEXTURE,
+                default=existing.get(CONF_SOIL_TEXTURE, profile.soil_texture.value.value),
+            ): vol.In([item.value for item in SoilTexture]),
+            vol.Optional(
+                CONF_SOIL_DESCRIPTION,
+                default=existing.get(CONF_SOIL_DESCRIPTION, profile.soil_description.value or ""),
+            ): str,
+            vol.Optional(
+                CONF_ROOT_DEPTH_INCHES,
+                default=existing.get(
+                    CONF_ROOT_DEPTH_INCHES,
+                    ""
+                    if profile.root_depth_inches.value is None
+                    else profile.root_depth_inches.value,
+                ),
+            ): vol.Any("", vol.Coerce(float)),
+            vol.Optional(
+                CONF_APPLICATION_RATE,
+                default=existing.get(
+                    CONF_APPLICATION_RATE,
+                    ""
+                    if profile.application_rate_inches_per_hour.value is None
+                    else profile.application_rate_inches_per_hour.value,
+                ),
+            ): vol.Any("", vol.Coerce(float)),
+            vol.Optional(
+                CONF_DISTRIBUTION_EFFICIENCY,
+                default=existing.get(
+                    CONF_DISTRIBUTION_EFFICIENCY,
+                    ""
+                    if profile.distribution_efficiency.value is None
+                    else profile.distribution_efficiency.value,
+                ),
+            ): vol.Any("", vol.Coerce(float)),
+            vol.Required(
+                CONF_PROFILE_CONFIDENCE,
+                default=existing.get(CONF_PROFILE_CONFIDENCE, 100),
+            ): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+        }
+    )
+
+
+def _normalize_profile_input(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Validate and normalize persisted user profile overrides."""
+    normalized = dict(user_input)
+    confidence = int(normalized.pop(CONF_PROFILE_CONFIDENCE))
+    for field in (
+        CONF_DISPLAY_NAME,
+        CONF_PLANT_TYPE,
+        CONF_PLANT_DESCRIPTION,
+        CONF_IRRIGATION_METHOD,
+        CONF_SUN_EXPOSURE,
+        CONF_SLOPE_PERCENT,
+        CONF_SOIL_TEXTURE,
+        CONF_SOIL_DESCRIPTION,
+        CONF_ROOT_DEPTH_INCHES,
+        CONF_APPLICATION_RATE,
+        CONF_DISTRIBUTION_EFFICIENCY,
+    ):
+        normalized[f"{field}_confidence"] = confidence
+
+    _validate_range(normalized, CONF_SLOPE_PERCENT, 0, 100)
+    _validate_range(normalized, CONF_ROOT_DEPTH_INCHES, 0.1, 120)
+    _validate_range(normalized, CONF_APPLICATION_RATE, 0.01, 20)
+    _validate_range(normalized, CONF_DISTRIBUTION_EFFICIENCY, 0.01, 1)
+    return normalized
+
+
+def _validate_range(
+    values: dict[str, Any], field: str, minimum: float, maximum: float
+) -> None:
+    """Validate an optional numeric field."""
+    value = values.get(field)
+    if value == "":
+        values[field] = None
+        return
+    if value is None:
+        return
+    number = float(value)
+    if not minimum <= number <= maximum:
+        raise ValueError(f"{field} is outside its allowed range")
+    values[field] = number

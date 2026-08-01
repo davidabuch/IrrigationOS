@@ -2,15 +2,24 @@
 
 All notable changes to IrrigationOS will be documented here.
 
+## [0.3.0] - 2026-08-01
+
+### Added
+
+- Canonical Landscape Digital Twin and per-area landscape profiles.
+- Provenance and confidence for landscape values.
+- Conservative controller-derived defaults and user override support.
+- Home Assistant landscape profile sensors and options-flow foundation.
+- ADR-007 for the landscape/controller separation boundary.
+
 ## [0.2.0] - 2026-08-01
 
 ### Added
 
-- Controller-agnostic domain models for controllers and irrigation areas.
-- Controller adapter protocol, capability model, and adapter registry.
-- Rachio-to-domain translation boundary.
-- Generic Home Assistant controller and irrigation-area entities.
-- ADR-006 for the controller domain model.
+- Controller adapter protocol and runtime registry.
+- Canonical controller and irrigation-area domain models.
+- Rachio translation boundary and generic Home Assistant entities.
+- ADR-006 documenting the controller domain model.
 
 ## [0.1.1] - 2026-08-01
 
