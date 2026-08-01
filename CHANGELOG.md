@@ -2,6 +2,16 @@
 
 All notable changes to IrrigationOS will be documented here.
 
+## [0.1.1] - 2026-08-01
+
+### Added
+
+- Product vision, master roadmap, and high-level architecture.
+- Formal Observation, Simulation, Shadow, and Live operating-mode boundaries.
+- Engineering and release standards.
+- ADR-001 through ADR-005 covering controller adapters, staged execution, weather providers, soil modeling, and decision transparency.
+- Governance-document repository validation and tests.
+
 ## [0.1.0] - 2026-08-01
 
 ### Added

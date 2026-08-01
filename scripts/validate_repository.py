@@ -19,6 +19,17 @@ REQUIRED_FILES = (
     "custom_components/irrigationos/strings.json",
     "custom_components/irrigationos/translations/en.json",
     "docs/IRRIGATIONOS_ARCHITECTURE_V1.md",
+    "docs/VISION.md",
+    "docs/ROADMAP.md",
+    "docs/ARCHITECTURE.md",
+    "docs/OPERATING_MODES.md",
+    "docs/ENGINEERING_GUIDELINES.md",
+    "docs/RELEASE_STRATEGY.md",
+    "docs/adr/ADR-002-controller-adapter-boundary.md",
+    "docs/adr/ADR-001-observation-first-safety-boundary.md",
+    "docs/adr/ADR-003-weather-provider-architecture.md",
+    "docs/adr/ADR-004-soil-model-architecture.md",
+    "docs/adr/ADR-005-decision-transparency.md",
     "hacs.json",
     "pyproject.toml",
     "requirements-dev.txt",
@@ -44,8 +55,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "0.1.0":
-        raise SystemExit("manifest.json version must be 0.1.0")
+    if manifest.get("version") != "0.1.1":
+        raise SystemExit("manifest.json version must be 0.1.1")
 
     hacs = load_json("hacs.json")
     if not isinstance(hacs, dict) or hacs.get("name") != "IrrigationOS":

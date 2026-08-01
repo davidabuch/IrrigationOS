@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v0.1.0 — Standalone Rachio API Foundation**
+**v0.1.1 — Project Governance v1**
 
 The current release:
 
@@ -15,7 +15,7 @@ The current release:
 - exports redacted diagnostics;
 - does not start, stop, enable, disable, or reschedule irrigation.
 
-See [`V0_1_0_RELEASE_NOTES.md`](V0_1_0_RELEASE_NOTES.md) for the release boundary.
+See [`PROJECT_GOVERNANCE_V1_RELEASE_NOTES.md`](PROJECT_GOVERNANCE_V1_RELEASE_NOTES.md) for this release boundary and [`V0_1_0_RELEASE_NOTES.md`](V0_1_0_RELEASE_NOTES.md) for the Rachio API foundation.
 
 ## API key
 
@@ -46,4 +46,4 @@ git diff --check
 
 ## Safety
 
-Observation mode is the default and only implemented operating mode in v0.1.0. Credentials, controller identifiers, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+Observation mode is the default and only implemented operating mode in v0.1.1. Credentials, controller identifiers, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.

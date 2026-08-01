@@ -25,5 +25,31 @@ def test_manifest_and_hacs_versions_are_consistent() -> None:
     manifest = json.loads(
         (ROOT / "custom_components/irrigationos/manifest.json").read_text(encoding="utf-8")
     )
-    assert manifest["version"] == "0.1.0"
+    assert manifest["version"] == "0.1.1"
     assert manifest["domain"] == "irrigationos"
+
+
+def test_governance_documents_exist() -> None:
+    """Canonical governance documents and ADRs must remain present."""
+    required = (
+        "docs/VISION.md",
+        "docs/ROADMAP.md",
+        "docs/ARCHITECTURE.md",
+        "docs/OPERATING_MODES.md",
+        "docs/ENGINEERING_GUIDELINES.md",
+        "docs/RELEASE_STRATEGY.md",
+        "docs/adr/ADR-002-controller-adapter-boundary.md",
+        "docs/adr/ADR-001-observation-first-safety-boundary.md",
+        "docs/adr/ADR-003-weather-provider-architecture.md",
+        "docs/adr/ADR-004-soil-model-architecture.md",
+        "docs/adr/ADR-005-decision-transparency.md",
+    )
+    for relative_path in required:
+        assert (ROOT / relative_path).is_file(), relative_path
+
+
+def test_governance_preserves_observation_first_boundary() -> None:
+    """Governance must retain the staged commissioning safety rule."""
+    operating_modes = (ROOT / "docs/OPERATING_MODES.md").read_text(encoding="utf-8")
+    assert "Observation -> Simulation -> Shadow -> Live" in operating_modes
+    assert "must never automatically promote" in operating_modes
