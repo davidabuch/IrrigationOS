@@ -16,6 +16,7 @@ OBSERVATION_EVENT_TYPES: Final = frozenset(
         "SCHEDULE_STATUS_EVENT",
     }
 )
+_EVENT_NAME_FIELDS: Final = ("name", "eventType", "type")
 
 
 class RachioWebhookRegistrar:
@@ -145,12 +146,14 @@ class RachioWebhookRegistrar:
                 "Rachio returned no webhook event types",
                 diagnostic_category="zero_event_types_returned",
             )
-        selected = [
-            {"id": event_id}
-            for item in available
-            if str(item.get("name", "")) in OBSERVATION_EVENT_TYPES
-            and (event_id := _optional_string(item.get("id"))) is not None
-        ]
+
+        selected: list[dict[str, str]] = []
+        for item in available:
+            event_id = _optional_string(item.get("id"))
+            event_name = _event_type_name(item)
+            if event_id is not None and event_name in OBSERVATION_EVENT_TYPES:
+                selected.append({"id": event_id})
+
         if not selected:
             raise RachioApiError(
                 "Rachio exposed no desired observation webhook event types",
@@ -160,6 +163,25 @@ class RachioWebhookRegistrar:
 
     async def _delete(self, webhook: dict[str, Any]) -> None:
         await self._client.async_delete_webhook(_webhook_id(webhook))
+
+
+def _event_type_name(item: dict[str, Any]) -> str | None:
+    """Return a normalized legacy Rachio event type name.
+
+    Rachio's legacy catalog has appeared with both ``*_EVENT`` and bare
+    category names, and wrappers may expose the value as ``name``,
+    ``eventType``, or ``type``. Normalize all supported shapes to the
+    canonical ``*_EVENT`` form used by Home Assistant.
+    """
+    for field in _EVENT_NAME_FIELDS:
+        value = _optional_string(item.get(field))
+        if value is None:
+            continue
+        normalized = value.upper().replace("-", "_").replace(" ", "_")
+        if not normalized.endswith("_EVENT"):
+            normalized = f"{normalized}_EVENT"
+        return normalized
+    return None
 
 
 def _registration_matches(
