@@ -13,6 +13,14 @@ def test_github_actions_workflow_exists() -> None:
     assert (ROOT / ".github/workflows/ci.yml").is_file()
 
 
+def test_ci_includes_home_assistant_and_hacs_validation() -> None:
+    """Release CI must exercise Home Assistant and HACS compatibility."""
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "requirements-ha-test.txt" in workflow
+    assert "tests_ha" in workflow
+    assert "hacs/action@main" in workflow
+
+
 def test_generated_cache_files_are_ignored() -> None:
     """Python and Finder cache files must be ignored by Git."""
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")

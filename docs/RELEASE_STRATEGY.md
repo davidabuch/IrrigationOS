@@ -34,6 +34,7 @@ A release is complete only when:
 
 - acceptance criteria are satisfied;
 - tests, Ruff, MyPy, repository validation, and `git diff --check` pass;
+- Home Assistant runtime and migration smoke tests pass for integration releases;
 - GitHub Actions is green;
 - release notes and changelog are complete;
 - architecture records are updated when required;

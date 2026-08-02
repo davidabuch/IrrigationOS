@@ -47,6 +47,13 @@ python -m mypy custom_components tests
 git diff --check
 ```
 
+Home Assistant runtime and migration smoke tests use an isolated dependency set:
+
+```bash
+python -m pip install -r requirements-ha-test.txt
+python -m pytest -q --asyncio-mode=auto tests_ha
+```
+
 ## Safety
 
 Observation mode is the default and only implemented operating mode in v0.4.1. Credentials, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.

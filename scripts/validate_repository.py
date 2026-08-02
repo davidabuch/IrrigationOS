@@ -42,6 +42,9 @@ REQUIRED_FILES = (
     "hacs.json",
     "pyproject.toml",
     "requirements-dev.txt",
+    "requirements-ha-test.txt",
+    "tests_ha/conftest.py",
+    "tests_ha/test_smoke.py",
 )
 
 
