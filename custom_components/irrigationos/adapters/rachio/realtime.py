@@ -180,7 +180,7 @@ class RachioWebhookRegistrar:
 
         selected: list[dict[str, str]] = []
         for item in available:
-            event_id = _optional_string(item.get("id"))
+            event_id = _optional_identifier(item.get("id"))
             event_name = _event_type_name(item)
             if event_id is not None and event_name in OBSERVATION_EVENT_TYPES:
                 selected.append({"id": event_id})
@@ -242,7 +242,7 @@ def _registration_matches(
         item_id
         for item in webhook.get("eventTypes", [])
         if isinstance(item, dict)
-        and (item_id := _optional_string(item.get("id"))) is not None
+        and (item_id := _optional_identifier(item.get("id"))) is not None
     }
     expected_ids = {item["id"] for item in event_types}
     return (
@@ -253,10 +253,19 @@ def _registration_matches(
 
 
 def _webhook_id(webhook: dict[str, Any]) -> str:
-    webhook_id = _optional_string(webhook.get("id"))
+    webhook_id = _optional_identifier(webhook.get("id"))
     if webhook_id is None:
         raise RachioApiError("Rachio webhook did not include an id")
     return webhook_id
+
+
+def _optional_identifier(value: object) -> str | None:
+    """Normalize string or integer Rachio identifiers for API payloads."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return str(value)
+    return _optional_string(value)
 
 
 def _optional_string(value: object) -> str | None:
