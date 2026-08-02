@@ -13,30 +13,38 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .adapters.rachio import (
-    RachioApiClient,
-    RachioApiError,
-    RachioAuthenticationError,
-    RachioControllerAdapter,
-    RachioRateLimitError,
-)
+from .adapters.factory import DEFAULT_PROVIDER_FACTORY, ControllerProviderFactory
 from .const import (
     CONF_API_KEY,
     CONF_AREA_PROFILES,
+    CONF_CONTROLLER_PROVIDER,
+    CONF_IDENTITY_REGISTRY,
     CONF_PERSON_ID,
     DOMAIN,
     UPDATE_INTERVAL_MINUTES,
 )
-from .controllers import ControllerRegistrySnapshot
+from .controllers import (
+    ControllerAuthenticationError,
+    ControllerIdentityRegistry,
+    ControllerProviderError,
+    ControllerRateLimitError,
+    ControllerRegistrySnapshot,
+)
 from .landscape import LandscapeProfile, build_landscape_profile
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot]):
-    """Coordinate read-only controller observations and the Landscape Digital Twin."""
+    """Coordinate read-only observations and the Landscape Digital Twin."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        *,
+        provider_factory: ControllerProviderFactory = DEFAULT_PROVIDER_FACTORY,
+    ) -> None:
         super().__init__(
             hass,
             logger=_LOGGER,
@@ -47,28 +55,33 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.landscape = LandscapeProfile(schema_version=1, areas=())
         self.last_successful_refresh: datetime | None = None
         self.refresh_count = 0
-        client = RachioApiClient(
+        self.identities = ControllerIdentityRegistry.from_dict(
+            entry.data.get(CONF_IDENTITY_REGISTRY)
+        )
+        self.adapter = provider_factory.create(
+            str(entry.data[CONF_CONTROLLER_PROVIDER]),
             async_get_clientsession(hass),
             str(entry.data[CONF_API_KEY]),
+            self.identities,
         )
-        self.adapter = RachioControllerAdapter(client)
 
     async def _async_update_data(self) -> ControllerRegistrySnapshot:
         account_id = str(self.entry.data[CONF_PERSON_ID])
         try:
             snapshot = await self.adapter.async_get_snapshot(account_id)
-        except RachioAuthenticationError as err:
-            raise ConfigEntryAuthFailed("Rachio authentication failed") from err
-        except RachioRateLimitError as err:
+        except ControllerAuthenticationError as err:
+            raise ConfigEntryAuthFailed("Controller authentication failed") from err
+        except ControllerRateLimitError as err:
             detail = (
                 f"; retry after {err.retry_after_seconds} seconds"
                 if err.retry_after_seconds is not None
                 else ""
             )
-            raise UpdateFailed(f"Rachio rate limit reached{detail}") from err
-        except (RachioApiError, ValueError) as err:
+            raise UpdateFailed(f"Controller rate limit reached{detail}") from err
+        except (ControllerProviderError, ValueError) as err:
             raise UpdateFailed(str(err)) from err
 
+        self._persist_new_identities()
         overrides = self.entry.options.get(CONF_AREA_PROFILES, {})
         if not isinstance(overrides, dict):
             overrides = {}
@@ -76,6 +89,13 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.last_successful_refresh = dt_util.utcnow()
         self.refresh_count += 1
         return snapshot
+
+    def _persist_new_identities(self) -> None:
+        if not self.identities.changed:
+            return
+        data = {**self.entry.data, CONF_IDENTITY_REGISTRY: self.identities.as_dict()}
+        self.hass.config_entries.async_update_entry(self.entry, data=data)
+        self.identities.mark_saved()
 
 
 def _string_key_mapping(value: dict[Any, Any]) -> dict[str, Any]:

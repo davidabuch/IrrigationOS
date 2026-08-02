@@ -51,3 +51,5 @@ Development handoff packages contain repository contents but exclude `.git` and 
 - `v0.1.1` — Project governance and architecture records
 - `v0.2.0` — Controller foundation
 - `v0.3.0` — Landscape Digital Twin foundation
+- `v0.4.0` — First live Home Assistant installation
+- `v0.4.1` — Canonical controller model and observation reliability

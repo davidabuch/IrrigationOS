@@ -9,6 +9,10 @@ from .controllers.models import (
     IrrigationArea,
     IrrigationAreaState,
     IrrigationController,
+    ObservationError,
+    ObservationMetadata,
+    ObservationQuality,
+    VendorBinding,
 )
 
 __all__ = [
@@ -18,4 +22,8 @@ __all__ = [
     "IrrigationArea",
     "IrrigationAreaState",
     "IrrigationController",
+    "ObservationError",
+    "ObservationMetadata",
+    "ObservationQuality",
+    "VendorBinding",
 ]

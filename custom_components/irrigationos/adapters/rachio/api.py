@@ -7,27 +7,33 @@ from typing import Any, Final
 
 from aiohttp import ClientError, ClientResponseError, ClientSession, ClientTimeout
 
+from ...controllers import (
+    ControllerAuthenticationError,
+    ControllerInvalidResponseError,
+    ControllerProviderError,
+    ControllerRateLimitError,
+)
+
 BASE_URL: Final = "https://api.rach.io/1/public"
 DEFAULT_TIMEOUT_SECONDS: Final = 20
 
 
-class RachioApiError(Exception):
+class RachioApiError(ControllerProviderError):
     """Base exception for Rachio API failures."""
 
 
-class RachioAuthenticationError(RachioApiError):
+class RachioAuthenticationError(ControllerAuthenticationError, RachioApiError):
     """Raised when the Rachio API key is rejected."""
 
 
-class RachioRateLimitError(RachioApiError):
+class RachioRateLimitError(ControllerRateLimitError, RachioApiError):
     """Raised when the Rachio API rate limit is reached."""
 
     def __init__(self, retry_after_seconds: int | None = None) -> None:
-        super().__init__("Rachio API rate limit reached")
-        self.retry_after_seconds = retry_after_seconds
+        super().__init__("Rachio API rate limit reached", retry_after_seconds)
 
 
-class RachioInvalidResponseError(RachioApiError):
+class RachioInvalidResponseError(ControllerInvalidResponseError, RachioApiError):
     """Raised when Rachio returns an unexpected payload."""
 
 

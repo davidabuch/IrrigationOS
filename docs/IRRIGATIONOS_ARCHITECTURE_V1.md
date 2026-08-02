@@ -82,12 +82,14 @@ Higher-level IrrigationOS code must never depend directly on Home Assistant enti
 Example internal reference:
 
 ```yaml
-zone_id: front_yard_street
-controller_adapter: rachio
-controller_native_zone_id: "<opaque Rachio zone ID>"
+area_id: controller_7f3a:slot:1
+slot_number: 1
+vendor_binding:
+  provider: rachio
+  native_id: "<opaque Rachio zone ID>"
 ```
 
-The decision engine references `front_yard_street`, not `switch.irrigationos_front_yard_street` and not a native Rachio identifier.
+The decision engine references the canonical slot identifier, not a Home Assistant entity ID, mutable name, or native Rachio identifier.
 
 ### 4.5 Controller-independent core
 
@@ -548,9 +550,10 @@ Production IrrigationOS must not import, call, or require the official integrati
 ### 10.1 Controller
 
 ```yaml
-controller_id: buch_rachio
-adapter_type: rachio
-native_controller_id: "<opaque ID>"
+controller_id: controller_7f3a
+vendor_binding:
+  provider: rachio
+  native_id: "<opaque ID>"
 display_name: Buch Rachio
 location_id: home
 capabilities:
@@ -564,10 +567,14 @@ capabilities:
 ### 10.2 Zone
 
 ```yaml
-zone_id: front_yard_street
-controller_id: buch_rachio
-native_zone_id: "<opaque ID>"
-display_name: Front Yard Street
+area_id: controller_7f3a:slot:1
+controller_id: controller_7f3a
+slot_number: 1
+default_name: Zone 1
+vendor_binding:
+  provider: rachio
+  native_id: "<opaque ID>"
+landscape_display_name: Front Yard Street
 enabled: true
 plant_profile: mixed_shrubs
 irrigation_method: drip

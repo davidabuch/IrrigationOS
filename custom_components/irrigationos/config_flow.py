@@ -11,24 +11,26 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .adapters.rachio import (
-    RachioApiClient,
-    RachioApiError,
-    RachioAuthenticationError,
-    RachioControllerAdapter,
-    RachioInvalidResponseError,
-    RachioRateLimitError,
-)
+from .adapters.factory import DEFAULT_PROVIDER_FACTORY
 from .const import (
     CONF_API_KEY,
     CONF_AREA_ID,
     CONF_AREA_PROFILES,
     CONF_CONTROLLER_PROVIDER,
+    CONF_IDENTITY_REGISTRY,
     CONF_OPERATING_MODE,
     CONF_PERSON_ID,
+    DEFAULT_CONTROLLER_PROVIDER,
     DEFAULT_OPERATING_MODE,
     DOMAIN,
     NAME,
+)
+from .controllers import (
+    ControllerAuthenticationError,
+    ControllerIdentityRegistry,
+    ControllerInvalidResponseError,
+    ControllerProviderError,
+    ControllerRateLimitError,
 )
 from .landscape import IrrigationMethod, PlantType, SoilTexture, SunExposure
 
@@ -56,7 +58,7 @@ STEP_USER_SCHEMA = vol.Schema(
 class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle IrrigationOS configuration."""
 
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         self._pending_data: dict[str, Any] | None = None
@@ -82,7 +84,7 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="user", data_schema=STEP_USER_SCHEMA, errors={"base": result}
             )
-        person_id, snapshot = result
+        person_id, snapshot, identities = result
         await self.async_set_unique_id(person_id)
         self._abort_if_unique_id_configured()
         self._pending_title = str(user_input.get(CONF_NAME, NAME))
@@ -90,15 +92,19 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_API_KEY: str(user_input[CONF_API_KEY]).strip(),
             CONF_PERSON_ID: person_id,
             CONF_CONTROLLER_PROVIDER: snapshot.provider,
+            CONF_IDENTITY_REGISTRY: identities.as_dict(),
             CONF_OPERATING_MODE: DEFAULT_OPERATING_MODE,
             "discovered_controller_count": len(snapshot.controllers),
-            "discovered_area_count": len(snapshot.areas),
+            "discovered_area_count": len(snapshot.configured_areas),
         }
         self._discovery_summary = {
             "controller_count": str(len(snapshot.controllers)),
-            "area_count": str(len(snapshot.areas)),
+            "area_count": str(len(snapshot.configured_areas)),
             "controller_names": ", ".join(item.name for item in snapshot.controllers) or "None",
-            "area_names": ", ".join(item.name for item in snapshot.areas) or "None",
+            "area_names": ", ".join(
+                item.vendor_name or item.name for item in snapshot.configured_areas
+            )
+            or "None",
         }
         return await self.async_step_confirm()
 
@@ -130,7 +136,7 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if isinstance(result, str):
                 errors["base"] = result
             else:
-                person_id, _snapshot = result
+                person_id, _snapshot, _identities = result
                 await self.async_set_unique_id(person_id)
                 self._abort_if_unique_id_mismatch(reason="wrong_account")
                 return self.async_update_reload_and_abort(
@@ -142,21 +148,28 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def _async_validate_credentials(self, api_key: str) -> tuple[str, Any] | str:
+    async def _async_validate_credentials(
+        self, api_key: str
+    ) -> tuple[str, Any, ControllerIdentityRegistry] | str:
         """Validate credentials and return a normalized discovery snapshot."""
-        client = RachioApiClient(async_get_clientsession(self.hass), api_key)
+        identities = ControllerIdentityRegistry()
+        adapter = DEFAULT_PROVIDER_FACTORY.create(
+            DEFAULT_CONTROLLER_PROVIDER,
+            async_get_clientsession(self.hass),
+            api_key,
+            identities,
+        )
         try:
-            person_id, payload = await client.async_get_account()
-            snapshot = RachioControllerAdapter.from_person_payload(payload)
-        except RachioAuthenticationError:
+            person_id, snapshot = await adapter.async_get_account()
+        except ControllerAuthenticationError:
             return "invalid_auth"
-        except RachioRateLimitError:
+        except ControllerRateLimitError:
             return "rate_limited"
-        except RachioInvalidResponseError:
+        except ControllerInvalidResponseError:
             return "invalid_response"
-        except (RachioApiError, ValueError):
+        except (ControllerProviderError, ValueError):
             return "cannot_connect"
-        return person_id, snapshot
+        return person_id, snapshot, identities
 
 
 class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
@@ -168,7 +181,10 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Select the irrigation area to edit."""
         coordinator = self.config_entry.runtime_data
-        area_choices = {area.area_id: area.name for area in coordinator.data.areas}
+        area_choices = {
+            area.area_id: area.vendor_name or area.name
+            for area in coordinator.data.configured_areas
+        }
         if not area_choices:
             return self.async_abort(reason="no_areas")
 

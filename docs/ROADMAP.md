@@ -2,10 +2,10 @@
 
 ## Current status
 
-- **Current release:** v0.3.0
+- **Current release:** v0.4.1
 - **Current operating boundary:** Observation only
 - **Current epic:** Epic 2 — Rachio Integration
-- **Next milestone:** v0.3.1 — Home Assistant commissioning and live discovery validation
+- **Next milestone:** v0.5.0 — Observation history, ownership signals, and restart reconciliation
 
 ## Delivery model
 
@@ -32,6 +32,8 @@ Delivered:
 - `v0.1.1` — Project governance and architecture records
 - `v0.2.0` — Controller foundation
 - `v0.3.0` — Landscape Digital Twin foundation
+- `v0.4.0` — First live Home Assistant installation
+- `v0.4.1` — Canonical controller model and observation reliability
 
 ## Epic 2 — Rachio Integration
 
@@ -48,38 +50,51 @@ Delivered:
 - capability reporting
 - Rachio payload translation at the adapter boundary
 
-### v0.3.1 — Live commissioning and observation reliability
+### v0.4.0 — First live installation
+
+**Status: Complete**
 
 - HACS/custom-repository installation validation
 - Rachio API-key config flow in a real Home Assistant instance
 - controller and irrigation-area discovery against a live account
-- verification of the user's four irrigation areas
 - entity/device registry validation
 - diagnostics validation with secret redaction
 - read-only external watering detection
-- current watering session state
-- last-watered and runtime observations
-- controller availability and stale-data handling
-- event normalization and coordinator health
-- restart recovery for observation state
-- observation Flight Recorder
+- best-effort current-watering observation
+- reauthentication and refresh health
 
-### v0.4.0 — Execution boundary
+### v0.4.1 — Canonical controller model and observation reliability
 
-- canonical irrigation operations
-- start-zone, stop-zone, and stop-all operation models
-- Rachio command adapter
-- command delivery receipts
-- execution remains disabled by default
+**Status: Complete**
 
-### v0.5.0 — Safety and ownership
+- persisted provider-neutral controller identities
+- permanent numbered slots through detected controller capacity
+- explicit replaceable vendor bindings
+- v0.4.0 entity, device, and landscape-profile migration
+- timestamped observations with freshness and source quality
+- endpoint-specific partial failures and unknown-versus-idle semantics
+- provider-factory runtime composition
+- dynamic additions and safe missing-hardware behavior
 
-- command attribution
+### v0.5.0 — Observation history and ownership signals
+
 - external/manual operation detection
-- controller ownership model
-- command acknowledgement and timeout handling
+- observation Flight Recorder
+- current watering session and runtime observations
+- controller availability and stale-data history
 - restart reconciliation
-- staged single-zone live commissioning
+- event normalization and coordinator health
+
+This milestone remains Observation-only.
+
+### v0.6.0 — Execution boundary and safety ownership
+
+- canonical irrigation operation models
+- command attribution and receipts
+- controller ownership model
+- acknowledgement and timeout handling
+- restart-safe command reconciliation
+- execution disabled by default behind explicit commissioning gates
 
 **Definition of Done:** IrrigationOS can replace the built-in Rachio integration for discovery, observation, safe command delivery, and explainable ownership behavior.
 
@@ -205,6 +220,6 @@ All new adapters must implement the canonical controller contract without changi
 - cross-property resource coordination
 
 
-## v0.4.0 — First Live Installation
+## Release sequencing correction
 
-Field-test Home Assistant setup, Rachio discovery, observation entities, reauthentication, and diagnostics.
+Earlier drafts used v0.3.1 for live commissioning and v0.4.0 for an execution boundary. The shipped v0.4.0 release was the first live, read-only installation. Execution is intentionally deferred until the canonical model, reliable observation history, ownership, and safety gates are complete.

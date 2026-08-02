@@ -5,15 +5,16 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_API_KEY
+from .const import CONF_API_KEY, CONF_IDENTITY_REGISTRY
 from .coordinator import IrrigationOSCoordinator
+from .diagnostic_data import redact_data
 
 TO_REDACT = {
     CONF_API_KEY,
+    CONF_IDENTITY_REGISTRY,
     "id",
     "person_id",
     "native_id",
@@ -38,7 +39,7 @@ async def async_get_config_entry_diagnostics(
     snapshot = asdict(entry.runtime_data.data)
     landscape = asdict(entry.runtime_data.landscape)
     return {
-        "entry": async_redact_data(dict(entry.data), TO_REDACT),
+        "entry": redact_data(dict(entry.data), TO_REDACT),
         "coordinator": {
             "last_update_success": entry.runtime_data.last_update_success,
             "last_successful_refresh": (
@@ -52,7 +53,7 @@ async def async_get_config_entry_diagnostics(
                 if entry.runtime_data.last_exception is not None
                 else None
             ),
-            "data": async_redact_data(snapshot, TO_REDACT),
-            "landscape": async_redact_data(landscape, TO_REDACT),
+            "data": redact_data(snapshot, TO_REDACT),
+            "landscape": redact_data(landscape, TO_REDACT),
         },
     }

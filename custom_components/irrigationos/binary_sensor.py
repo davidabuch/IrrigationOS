@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .controllers import ControllerAvailability, IrrigationArea, IrrigationController
 from .coordinator import IrrigationOSCoordinator
 from .entity import IrrigationOSAreaEntity, IrrigationOSControllerEntity, IrrigationOSEntity
+from .reconciliation import EntityInventory
 
 
 async def async_setup_entry(
@@ -22,14 +23,34 @@ async def async_setup_entry(
     del hass
     coordinator = entry.runtime_data
     entities: list[BinarySensorEntity] = [IrrigationOSCloudHealthySensor(coordinator)]
-    entities.extend(
-        IrrigationOSControllerOnlineSensor(coordinator, controller)
-        for controller in coordinator.data.controllers
-    )
-    entities.extend(
-        IrrigationOSAreaEnabledSensor(coordinator, area) for area in coordinator.data.areas
-    )
+    inventory = EntityInventory()
+    entities.extend(_new_dynamic_entities(coordinator, inventory))
     async_add_entities(entities)
+
+    def _async_reconcile() -> None:
+        additions = _new_dynamic_entities(coordinator, inventory)
+        if additions:
+            async_add_entities(additions)
+
+    entry.async_on_unload(coordinator.async_add_listener(_async_reconcile))
+
+
+def _new_dynamic_entities(
+    coordinator: IrrigationOSCoordinator,
+    inventory: EntityInventory,
+) -> list[BinarySensorEntity]:
+    """Create binary sensors for newly discovered canonical objects and slots."""
+    candidates: dict[str, BinarySensorEntity] = {}
+    for controller in coordinator.data.controllers:
+        candidates[f"controller:{controller.controller_id}"] = (
+            IrrigationOSControllerOnlineSensor(coordinator, controller)
+        )
+    for area in coordinator.data.areas:
+        candidates[f"area:{area.area_id}"] = IrrigationOSAreaEnabledSensor(
+            coordinator, area
+        )
+    result = inventory.reconcile(set(candidates))
+    return [candidates[key] for key in sorted(result.added)]
 
 
 class IrrigationOSCloudHealthySensor(IrrigationOSEntity, BinarySensorEntity):

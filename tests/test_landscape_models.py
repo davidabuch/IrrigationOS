@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import importlib.util
-import sys
 from pathlib import Path
 from typing import Any
+
+from tests.helpers import load_integration_module
 
 ROOT = Path(__file__).resolve().parents[1]
 MODELS_PATH = ROOT / "custom_components/irrigationos/landscape/models.py"
@@ -13,11 +13,7 @@ BUILDER_PATH = ROOT / "custom_components/irrigationos/landscape/builder.py"
 OPTIONS_PATH = ROOT / "custom_components/irrigationos/config_flow.py"
 SENSOR_PATH = ROOT / "custom_components/irrigationos/sensor.py"
 
-SPEC = importlib.util.spec_from_file_location("irrigationos_landscape_models", MODELS_PATH)
-assert SPEC is not None and SPEC.loader is not None
-MODULE = importlib.util.module_from_spec(SPEC)
-sys.modules[SPEC.name] = MODULE
-SPEC.loader.exec_module(MODULE)
+MODULE = load_integration_module("landscape.models")
 
 IrrigationAreaProfile = MODULE.IrrigationAreaProfile
 IrrigationMethod = MODULE.IrrigationMethod
