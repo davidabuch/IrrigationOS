@@ -25,3 +25,8 @@ class EntityInventory:
         missing = self.known - current
         self.known.update(added)
         return ReconciliationResult(frozenset(added), frozenset(missing))
+
+
+def controller_first(keys: frozenset[str]) -> list[str]:
+    """Order controller devices before child slots and landscape entities."""
+    return sorted(keys, key=lambda key: (not key.startswith("controller:"), key))

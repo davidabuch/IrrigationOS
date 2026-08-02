@@ -11,7 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .controllers import ControllerAvailability, IrrigationArea, IrrigationController
 from .coordinator import IrrigationOSCoordinator
 from .entity import IrrigationOSAreaEntity, IrrigationOSControllerEntity, IrrigationOSEntity
-from .reconciliation import EntityInventory
+from .reconciliation import EntityInventory, controller_first
 
 
 async def async_setup_entry(
@@ -50,7 +50,7 @@ def _new_dynamic_entities(
             coordinator, area
         )
     result = inventory.reconcile(set(candidates))
-    return [candidates[key] for key in sorted(result.added)]
+    return [candidates[key] for key in controller_first(result.added)]
 
 
 class IrrigationOSCloudHealthySensor(IrrigationOSEntity, BinarySensorEntity):

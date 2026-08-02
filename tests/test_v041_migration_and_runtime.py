@@ -81,6 +81,19 @@ def test_dynamic_inventory_reports_additions_and_removals_without_forgetting_ide
     assert rediscovered.added == frozenset()
 
 
+def test_dynamic_additions_register_controller_devices_before_child_slots() -> None:
+    ordered = RECONCILIATION.controller_first(
+        frozenset(
+            {
+                "area:controller_a:slot:1",
+                "landscape:controller_a:slot:1",
+                "controller:controller_a",
+            }
+        )
+    )
+    assert ordered[0] == "controller:controller_a"
+
+
 def test_provider_factory_composes_rachio_adapter() -> None:
     adapter = FACTORY.DEFAULT_PROVIDER_FACTORY.create(
         "rachio", object(), "api-key", ControllerIdentityRegistry()
