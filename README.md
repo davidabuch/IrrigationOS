@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v0.4.0 — Landscape Digital Twin Foundation**
+**v0.4.1 — Canonical Controller Model and Observation Reliability**
 
 The current release:
 
@@ -12,10 +12,13 @@ The current release:
 - discovers the Rachio Person ID, controllers, and zones automatically;
 - polls Rachio every five minutes in read-only Observation mode;
 - creates controller and zone observation entities;
+- assigns persisted provider-neutral controller identities and permanent numbered slots;
+- exposes timestamps, freshness, source quality, and safe partial-failure metadata;
+- distinguishes confirmed idle from unavailable watering status;
 - exports redacted diagnostics;
 - does not start, stop, enable, disable, or reschedule irrigation.
 
-See [`V0_3_0_RELEASE_NOTES.md`](V0_3_0_RELEASE_NOTES.md) for the current release boundary.
+See [`V0_4_1_RELEASE_NOTES.md`](V0_4_1_RELEASE_NOTES.md) and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
 
 ## API key
 
@@ -46,7 +49,7 @@ git diff --check
 
 ## Safety
 
-Observation mode is the default and only implemented operating mode in v0.4.0. Credentials, controller identifiers, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+Observation mode is the default and only implemented operating mode in v0.4.1. Credentials, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
 
 ## Landscape Digital Twin
 

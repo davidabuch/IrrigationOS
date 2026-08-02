@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.1
+
+- Added persisted canonical controller identities and permanent controller slots.
+- Separated replaceable Rachio bindings from IrrigationOS identity.
+- Added observation timestamps, freshness, quality, and endpoint-specific partial failures.
+- Added provider-factory composition and dynamic entity reconciliation.
+- Added v0.4.0 registry and landscape-profile migration.
+- Added behavioral coverage and ADR-009/ADR-010.
+- Preserved the Observation-only safety boundary.
+
 ## 0.4.0
 
 - Added first live Home Assistant installation flow and discovery review.
@@ -52,7 +62,7 @@ All notable changes to IrrigationOS will be documented here.
 
 ### Planned
 
-- Home Assistant installation and live account commissioning.
+- Observation Flight Recorder and restart-state reconciliation.
 - Weather and soil data foundations.
 
 ## [0.0.1] - 2026-08-01

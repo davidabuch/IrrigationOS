@@ -19,6 +19,7 @@ from .entity import (
     IrrigationOSEntity,
     IrrigationOSLandscapeAreaEntity,
 )
+from .reconciliation import EntityInventory, controller_first
 
 
 async def async_setup_entry(
@@ -38,18 +39,38 @@ async def async_setup_entry(
         IrrigationOSLastRefreshSensor(coordinator),
         IrrigationOSDiscoverySummarySensor(coordinator),
     ]
-    entities.extend(
-        IrrigationOSControllerStatusSensor(coordinator, controller)
-        for controller in coordinator.data.controllers
-    )
-    entities.extend(
-        IrrigationOSAreaSummarySensor(coordinator, area) for area in coordinator.data.areas
-    )
-    entities.extend(
-        IrrigationOSLandscapeProfileSensor(coordinator, area)
-        for area in coordinator.data.areas
-    )
+    inventory = EntityInventory()
+    entities.extend(_new_dynamic_entities(coordinator, inventory))
     async_add_entities(entities)
+
+    def _async_reconcile() -> None:
+        additions = _new_dynamic_entities(coordinator, inventory)
+        if additions:
+            async_add_entities(additions)
+
+    entry.async_on_unload(coordinator.async_add_listener(_async_reconcile))
+
+
+def _new_dynamic_entities(
+    coordinator: IrrigationOSCoordinator,
+    inventory: EntityInventory,
+) -> list[SensorEntity]:
+    """Create sensors for newly discovered canonical objects and slots."""
+    candidates: dict[str, SensorEntity] = {}
+    for controller in coordinator.data.controllers:
+        candidates[f"controller:{controller.controller_id}"] = (
+            IrrigationOSControllerStatusSensor(coordinator, controller)
+        )
+    for area in coordinator.data.areas:
+        candidates[f"area:{area.area_id}"] = IrrigationOSAreaSummarySensor(
+            coordinator, area
+        )
+        if area.configured:
+            candidates[f"landscape:{area.area_id}"] = IrrigationOSLandscapeProfileSensor(
+                coordinator, area
+            )
+    result = inventory.reconcile(set(candidates))
+    return [candidates[key] for key in controller_first(result.added)]
 
 
 class IrrigationOSStatusSensor(IrrigationOSEntity, SensorEntity):
@@ -107,7 +128,7 @@ class IrrigationOSAreaCountSensor(IrrigationOSEntity, SensorEntity):
     @property
     def native_value(self) -> int:
         """Return irrigation-area count."""
-        return len(self.coordinator.data.areas)
+        return len(self.coordinator.data.configured_areas)
 
 
 class IrrigationOSControllerStatusSensor(IrrigationOSControllerEntity, SensorEntity):
@@ -142,6 +163,10 @@ class IrrigationOSControllerStatusSensor(IrrigationOSControllerEntity, SensorEnt
             "supports_last_watered": controller.capabilities.observe_last_watered,
             "supports_start_area": controller.capabilities.supports_start_area,
             "supports_stop_area": controller.capabilities.supports_stop_area,
+            "capacity": controller.capacity,
+            "watering_observation_quality": (
+                controller.watering_observation_quality.value
+            ),
         }
 
 
@@ -166,6 +191,9 @@ class IrrigationOSAreaSummarySensor(IrrigationOSAreaEntity, SensorEntity):
         area = self.area
         return {
             "native_number": area.native_number,
+            "slot_number": area.slot_number,
+            "configured": area.configured,
+            "vendor_name": area.vendor_name,
             "enabled": area.enabled,
             "last_watered_epoch_ms": area.last_watered_epoch_ms,
             "root_zone_depth_inches": area.root_zone_depth_inches,
@@ -308,10 +336,17 @@ class IrrigationOSDiscoverySummarySensor(IrrigationOSEntity, SensorEntity):
         """Return discovered names for field validation."""
         return {
             "controller_names": [item.name for item in self.coordinator.data.controllers],
-            "area_names": [item.name for item in self.coordinator.data.areas],
+            "area_names": [
+                item.vendor_name or item.name
+                for item in self.coordinator.data.configured_areas
+            ],
             "watering_areas": [
                 item.name
                 for item in self.coordinator.data.areas
                 if item.state.value == "watering"
             ],
+            "observed_at": self.coordinator.data.observation.observed_at.isoformat(),
+            "fresh_until": self.coordinator.data.observation.fresh_until.isoformat(),
+            "source_quality": self.coordinator.data.observation.quality.value,
+            "partial_failure_count": len(self.coordinator.data.observation.errors),
         }

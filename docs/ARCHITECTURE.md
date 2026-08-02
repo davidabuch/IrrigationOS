@@ -65,7 +65,9 @@ Data flows upward as observations and downward as explicit operations. Lower lay
 
 ## Canonical identities
 
-Every controller, zone, landscape unit, plan, and operation receives an IrrigationOS identifier. Vendor IDs and Home Assistant entity IDs are replaceable bindings.
+Every controller, slot, landscape unit, plan, and operation receives an IrrigationOS identifier. Controller identifiers are generated and persisted by IrrigationOS. Permanent slot identifiers are based on canonical controller identity and physical slot number. Vendor IDs, mutable names, and Home Assistant entity IDs are replaceable bindings.
+
+Controllers expose permanent slots from 1 through detected capacity. Unused slots remain explicit and are registered disabled by default so later configuration reuses the same identity.
 
 ## Failure behavior
 

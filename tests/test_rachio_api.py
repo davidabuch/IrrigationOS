@@ -2,24 +2,13 @@
 
 from __future__ import annotations
 
-import importlib.util
-from pathlib import Path
 from typing import Any
 
 import pytest
 
-MODULE_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "custom_components"
-    / "irrigationos"
-    / "adapters"
-    / "rachio"
-    / "api.py"
-)
-SPEC = importlib.util.spec_from_file_location("irrigationos_rachio_api", MODULE_PATH)
-assert SPEC is not None and SPEC.loader is not None
-MODULE = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(MODULE)
+from tests.helpers import load_integration_module
+
+MODULE = load_integration_module("adapters.rachio.api")
 RachioApiClient = MODULE.RachioApiClient
 RachioAuthenticationError = MODULE.RachioAuthenticationError
 RachioRateLimitError = MODULE.RachioRateLimitError

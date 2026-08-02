@@ -31,7 +31,7 @@ def build_landscape_profile(
         schema_version=LANDSCAPE_SCHEMA_VERSION,
         areas=tuple(
             build_area_profile(area, normalized_overrides.get(area.area_id, {}))
-            for area in snapshot.areas
+            for area in snapshot.configured_areas
         ),
     )
 
@@ -53,7 +53,7 @@ def build_area_profile(
     return IrrigationAreaProfile(
         area_id=area.area_id,
         display_name=_value(
-            _user_text(user, "display_name") or area.name,
+            _user_text(user, "display_name") or area.vendor_name or area.name,
             user_has_value="display_name" in user,
             fallback_source=ProfileValueSource.CONTROLLER,
             fallback_confidence=100,
