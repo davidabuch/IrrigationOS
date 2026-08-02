@@ -19,6 +19,12 @@ def test_ci_includes_home_assistant_and_hacs_validation() -> None:
     assert "requirements-ha-test.txt" in workflow
     assert "tests_ha" in workflow
     assert "hacs/action@main" in workflow
+    assert "REPOSITORY_REF: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
+
+
+def test_local_brand_icon_exists() -> None:
+    """HACS and Home Assistant must have a local integration icon."""
+    assert (ROOT / "custom_components/irrigationos/brand/icon.png").is_file()
 
 
 def test_generated_cache_files_are_ignored() -> None:

@@ -17,6 +17,7 @@ REQUIRED_FILES = (
     "SECURITY.md",
     "PRODUCT_PRINCIPLES.md",
     "V0_4_1_RELEASE_NOTES.md",
+    "custom_components/irrigationos/brand/icon.png",
     "custom_components/irrigationos/manifest.json",
     "custom_components/irrigationos/strings.json",
     "custom_components/irrigationos/translations/en.json",
