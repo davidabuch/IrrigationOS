@@ -19,6 +19,24 @@ OBSERVATION_EVENT_TYPES: Final = frozenset(
 _EVENT_NAME_FIELDS: Final = ("name", "eventType", "type")
 
 
+class _EventCatalogError(RachioApiError):
+    """Safe event-catalog failure with sanitized discovery metadata."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        diagnostic_category: str,
+        count: int,
+        field_names: tuple[str, ...],
+        names: tuple[str, ...],
+    ) -> None:
+        super().__init__(message, diagnostic_category=diagnostic_category)
+        self.discovered_event_type_count = count
+        self.discovered_event_type_field_names = field_names
+        self.discovered_event_type_names = names
+
+
 class RachioWebhookRegistrar:
     """Own only IrrigationOS notification subscriptions on Rachio devices."""
 
@@ -44,6 +62,15 @@ class RachioWebhookRegistrar:
                 "event type discovery failed",
                 err.diagnostic_category,
                 err.http_status,
+                discovered_event_type_count=getattr(
+                    err, "discovered_event_type_count", None
+                ),
+                discovered_event_type_field_names=getattr(
+                    err, "discovered_event_type_field_names", ()
+                ),
+                discovered_event_type_names=getattr(
+                    err, "discovered_event_type_names", ()
+                ),
             )
 
         registered = 0
@@ -141,10 +168,14 @@ class RachioWebhookRegistrar:
 
     async def _selected_event_types(self) -> list[dict[str, str]]:
         available = await self._client.async_get_webhook_event_types()
+        field_names, names = _catalog_summary(available)
         if not available:
-            raise RachioApiError(
+            raise _EventCatalogError(
                 "Rachio returned no webhook event types",
                 diagnostic_category="zero_event_types_returned",
+                count=0,
+                field_names=field_names,
+                names=names,
             )
 
         selected: list[dict[str, str]] = []
@@ -155,9 +186,12 @@ class RachioWebhookRegistrar:
                 selected.append({"id": event_id})
 
         if not selected:
-            raise RachioApiError(
+            raise _EventCatalogError(
                 "Rachio exposed no desired observation webhook event types",
                 diagnostic_category="zero_desired_event_names_matched",
+                count=len(available),
+                field_names=field_names,
+                names=names,
             )
         return selected
 
@@ -165,14 +199,28 @@ class RachioWebhookRegistrar:
         await self._client.async_delete_webhook(_webhook_id(webhook))
 
 
-def _event_type_name(item: dict[str, Any]) -> str | None:
-    """Return a normalized legacy Rachio event type name.
+def _catalog_summary(
+    available: list[dict[str, Any]],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return credential-free event catalog metadata for diagnostics."""
+    field_names = tuple(
+        sorted({str(key) for item in available for key in item if str(key) != "id"})
+    )
+    names = tuple(
+        sorted(
+            {
+                value
+                for item in available
+                for field in _EVENT_NAME_FIELDS
+                if (value := _optional_string(item.get(field))) is not None
+            }
+        )
+    )
+    return field_names, names
 
-    Rachio's legacy catalog has appeared with both ``*_EVENT`` and bare
-    category names, and wrappers may expose the value as ``name``,
-    ``eventType``, or ``type``. Normalize all supported shapes to the
-    canonical ``*_EVENT`` form used by Home Assistant.
-    """
+
+def _event_type_name(item: dict[str, Any]) -> str | None:
+    """Return a normalized legacy Rachio event type name."""
     for field in _EVENT_NAME_FIELDS:
         value = _optional_string(item.get(field))
         if value is None:
@@ -220,6 +268,10 @@ def _failed_health(
     error: str,
     error_category: str,
     http_status: int | None = None,
+    *,
+    discovered_event_type_count: int | None = None,
+    discovered_event_type_field_names: tuple[str, ...] = (),
+    discovered_event_type_names: tuple[str, ...] = (),
 ) -> RealtimeRegistrationHealth:
     return RealtimeRegistrationHealth(
         healthy=False,
@@ -228,4 +280,7 @@ def _failed_health(
         error=error,
         error_category=error_category,
         http_status=http_status,
+        discovered_event_type_count=discovered_event_type_count,
+        discovered_event_type_field_names=discovered_event_type_field_names,
+        discovered_event_type_names=discovered_event_type_names,
     )
