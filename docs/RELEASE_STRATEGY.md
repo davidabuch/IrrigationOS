@@ -54,3 +54,4 @@ Development handoff packages contain repository contents but exclude `.git` and 
 - `v0.3.0` — Landscape Digital Twin foundation
 - `v0.4.0` — First live Home Assistant installation
 - `v0.4.1` — Canonical controller model and observation reliability
+- `v0.4.2` — Real-time Rachio observation

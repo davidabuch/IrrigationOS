@@ -1,5 +1,11 @@
 {
   "title": "IrrigationOS",
+  "issues": {
+    "realtime_observation_unavailable": {
+      "title": "Realtime Rachio observation is unavailable",
+      "description": "IrrigationOS could not enable realtime Rachio events: {reason}. Five-minute polling remains active. Configure an externally reachable HTTPS Home Assistant URL to enable push updates; Home Assistant Cloud is optional."
+    }
+  },
   "config": {
     "step": {
       "user": {

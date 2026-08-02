@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.2
+
+- Added a unique authenticated Home Assistant webhook per config entry.
+- Added optional cloudhook selection for active Home Assistant Cloud subscriptions and standard external HTTPS webhook fallback without a paid subscription.
+- Added idempotent, entry-scoped Rachio subscriptions for controller, zone, schedule, rain-delay, and rain-sensor status events.
+- Matched RachioPy legacy discovery headers and added safe structured event-discovery failure diagnostics.
+- Added HMAC signature and entry authorization validation, bounded event deduplication, and immediate canonical snapshot refreshes.
+- Added dynamic remote subscription reconciliation for controllers discovered or removed after startup.
+- Added nonfatal setup warnings and diagnostics for URL source, registration health, event counts, last event, and polling fallback.
+- Expanded redaction to webhook URLs, identifiers, authorization values, and signatures.
+- Preserved five-minute polling and the Observation-only safety boundary.
+
 ## 0.4.1
 
 - Added persisted canonical controller identities and permanent controller slots.

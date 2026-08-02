@@ -163,3 +163,15 @@ class ControllerRegistrySnapshot:
     def configured_areas(self) -> tuple[IrrigationArea, ...]:
         """Return slots currently bound to provider zones."""
         return tuple(area for area in self.areas if area.configured)
+
+
+@dataclass(frozen=True, slots=True)
+class RealtimeRegistrationHealth:
+    """Provider-neutral result of remote realtime subscription reconciliation."""
+
+    healthy: bool
+    registered_controllers: int
+    expected_controllers: int
+    error: str | None = None
+    error_category: str | None = None
+    http_status: int | None = None

@@ -21,6 +21,7 @@ from .const import (
 from .controllers import ControllerIdentityRegistry
 from .coordinator import IrrigationOSCoordinator
 from .migration import build_v040_migration
+from .realtime import RealtimeObservationManager, async_delete_cloudhook
 
 type IrrigationOSConfigEntry = ConfigEntry[IrrigationOSCoordinator]
 
@@ -29,6 +30,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry)
     """Set up IrrigationOS from a config entry."""
     coordinator = IrrigationOSCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
+    coordinator.realtime = RealtimeObservationManager(hass, entry, coordinator)
+    await coordinator.realtime.async_setup()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -36,7 +39,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry)
 
 async def async_unload_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry) -> bool:
     """Unload an IrrigationOS config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded and entry.runtime_data.realtime is not None:
+        await entry.runtime_data.realtime.async_shutdown()
+    return unloaded
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry) -> None:
+    """Remove the optional cloudhook when the entry is permanently deleted."""
+    await async_delete_cloudhook(hass, entry)
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
-from .models import ControllerRegistrySnapshot
+from .models import ControllerRegistrySnapshot, RealtimeRegistrationHealth
 
 
 class ControllerProviderError(Exception):
@@ -38,4 +38,27 @@ class ControllerAdapter(Protocol):
 
     async def async_get_snapshot(self, account_id: str) -> ControllerRegistrySnapshot:
         """Return the latest normalized controller registry snapshot."""
+        ...
+
+
+@runtime_checkable
+class RealtimeObservationAdapter(Protocol):
+    """Optional provider contract for read-only realtime observations."""
+
+    async def async_reconcile_realtime(
+        self,
+        callback_url: str,
+        external_id: str,
+        external_id_prefix: str,
+        controller_native_ids: tuple[str, ...],
+    ) -> RealtimeRegistrationHealth:
+        """Idempotently reconcile remote observation subscriptions."""
+        ...
+
+    async def async_cleanup_realtime(
+        self,
+        external_id_prefix: str,
+        controller_native_ids: tuple[str, ...],
+    ) -> RealtimeRegistrationHealth:
+        """Remove remote observation subscriptions owned by this entry."""
         ...

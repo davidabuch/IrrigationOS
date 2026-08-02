@@ -1,8 +1,12 @@
-"""Home Assistant runtime smoke tests for IrrigationOS v0.4.1."""
+"""Home Assistant runtime smoke tests for IrrigationOS v0.4.2."""
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -16,6 +20,7 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.irrigationos import async_migrate_entry
+from custom_components.irrigationos import realtime as realtime_module
 from custom_components.irrigationos.adapters.factory import DEFAULT_PROVIDER_FACTORY
 from custom_components.irrigationos.const import (
     CONF_API_KEY,
@@ -24,6 +29,8 @@ from custom_components.irrigationos.const import (
     CONF_IDENTITY_REGISTRY,
     CONF_OPERATING_MODE,
     CONF_PERSON_ID,
+    CONF_WEBHOOK_AUTH,
+    CONF_WEBHOOK_ID,
     DOMAIN,
     MODE_OBSERVATION,
 )
@@ -37,6 +44,7 @@ from custom_components.irrigationos.controllers import (
     IrrigationController,
     ObservationMetadata,
     ObservationQuality,
+    RealtimeRegistrationHealth,
     VendorBinding,
 )
 from custom_components.irrigationos.diagnostics import async_get_config_entry_diagnostics
@@ -121,13 +129,65 @@ class MutableAdapter:
 
     def __init__(self, snapshot: ControllerRegistrySnapshot) -> None:
         self.snapshot = snapshot
+        self.snapshot_requests = 0
+        self.reconcile_calls = 0
+        self.cleanup_calls = 0
+        self.active_external_ids: set[str] = set()
+        self.reconciled_controller_ids: list[tuple[str, ...]] = []
+        self.cleaned_controller_ids: list[tuple[str, ...]] = []
+        self.registration_health: RealtimeRegistrationHealth | None = None
 
     async def async_get_account(self) -> tuple[str, ControllerRegistrySnapshot]:
         return "person-1", self.snapshot
 
     async def async_get_snapshot(self, account_id: str) -> ControllerRegistrySnapshot:
         assert account_id == "person-1"
+        self.snapshot_requests += 1
         return self.snapshot
+
+    async def async_reconcile_realtime(
+        self,
+        callback_url: str,
+        external_id: str,
+        external_id_prefix: str,
+        controller_native_ids: tuple[str, ...],
+    ) -> RealtimeRegistrationHealth:
+        assert callback_url.startswith("https://")
+        assert external_id.startswith(external_id_prefix)
+        self.reconcile_calls += 1
+        self.reconciled_controller_ids.append(controller_native_ids)
+        self.active_external_ids = {external_id}
+        if self.registration_health is not None:
+            return self.registration_health
+        return RealtimeRegistrationHealth(
+            True, len(controller_native_ids), len(controller_native_ids)
+        )
+
+    async def async_cleanup_realtime(
+        self,
+        external_id_prefix: str,
+        controller_native_ids: tuple[str, ...],
+    ) -> RealtimeRegistrationHealth:
+        self.cleanup_calls += 1
+        self.cleaned_controller_ids.append(controller_native_ids)
+        self.active_external_ids = {
+            item
+            for item in self.active_external_ids
+            if not item.startswith(external_id_prefix)
+        }
+        return RealtimeRegistrationHealth(True, 0, len(controller_native_ids))
+
+
+class FakeWebhookRequest:
+    """Minimal request body used to exercise the registered webhook handler."""
+
+    def __init__(self, body: bytes, signature: str) -> None:
+        self._body = body
+        self.content_length = len(body)
+        self.headers = {"x-signature": signature}
+
+    async def read(self) -> bytes:
+        return self._body
 
 
 def _entry_data() -> dict[str, Any]:
@@ -140,6 +200,32 @@ def _entry_data() -> dict[str, Any]:
             "controllers": {"rachio:native-controller-1": "controller_test"}
         },
     }
+
+
+def _signed_event(
+    entry: MockConfigEntry,
+    event_id: str,
+    subtype: str,
+    *,
+    external_id: str | None = None,
+) -> tuple[bytes, str]:
+    payload = {
+        "id": event_id,
+        "type": "ZONE_STATUS",
+        "subType": subtype,
+        "externalId": external_id
+        or (
+            f"homeassistant.irrigationos:{entry.entry_id}:"
+            f"{entry.data[CONF_WEBHOOK_AUTH]}"
+        ),
+        "deviceId": "native-controller-1",
+        "zoneId": "native-zone-1",
+    }
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    signature = hmac.new(
+        str(entry.data[CONF_API_KEY]).encode(), raw, hashlib.sha256
+    ).hexdigest()
+    return raw, signature
 
 
 @pytest.mark.asyncio
@@ -303,3 +389,228 @@ async def test_v040_registry_and_landscape_migration(
         "My Orchard"
     )
     assert entry.version == 2
+
+
+@pytest.mark.asyncio
+async def test_webhook_url_prefers_cloudhook_then_standard_external_url(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, data=_entry_data(), version=2)
+
+    async def cloudhook(*_args: object) -> str:
+        return "https://hooks.nabu.casa/example"
+
+    monkeypatch.setattr(realtime_module, "_async_cloudhook_url", cloudhook)
+    url, source = await realtime_module.async_resolve_webhook_url(
+        hass, entry, "stable-id"
+    )
+    assert url == "https://hooks.nabu.casa/example"
+    assert source == "cloudhook"
+
+    async def no_cloudhook(*_args: object) -> None:
+        return None
+
+    monkeypatch.setattr(realtime_module, "_async_cloudhook_url", no_cloudhook)
+    hass.config.external_url = "https://ha.example.com"
+    url, source = await realtime_module.async_resolve_webhook_url(
+        hass, entry, "stable-id"
+    )
+    assert url == "https://ha.example.com/api/webhook/stable-id"
+    assert source == "standard"
+
+
+@pytest.mark.asyncio
+async def test_signed_push_deduplication_reload_cleanup_and_redaction(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def standard_url(*_args: object) -> tuple[str, str]:
+        return "https://ha.example.com/api/webhook/stable", "standard"
+
+    monkeypatch.setattr(
+        realtime_module, "async_resolve_webhook_url", standard_url
+    )
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=2,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.runtime_data.realtime.enabled
+    assert adapter.reconcile_calls == 1
+    stable_webhook_id = entry.data[CONF_WEBHOOK_ID]
+    manager = entry.runtime_data.realtime
+
+    start_raw, start_signature = _signed_event(entry, "event-start", "ZONE_STARTED")
+    response = await manager._async_handle_webhook(
+        hass, stable_webhook_id, FakeWebhookRequest(start_raw, start_signature)
+    )
+    assert response.status == 204
+    assert entry.runtime_data.realtime.accepted_event_count == 1
+    assert adapter.snapshot_requests == 2
+
+    response = await manager._async_handle_webhook(
+        hass, stable_webhook_id, FakeWebhookRequest(start_raw, start_signature)
+    )
+    assert response.status == 204
+    assert entry.runtime_data.realtime.duplicate_event_count == 1
+    assert adapter.snapshot_requests == 2
+
+    wrong_auth_raw, wrong_auth_signature = _signed_event(
+        entry,
+        "event-wrong-auth",
+        "ZONE_STOPPED",
+        external_id="homeassistant.irrigationos:another-entry:wrong",
+    )
+    response = await manager._async_handle_webhook(
+        hass,
+        stable_webhook_id,
+        FakeWebhookRequest(wrong_auth_raw, wrong_auth_signature),
+    )
+    assert response.status == 403
+
+    response = await manager._async_handle_webhook(
+        hass, stable_webhook_id, FakeWebhookRequest(start_raw, "invalid-signature")
+    )
+    assert response.status == 403
+    assert entry.runtime_data.realtime.rejected_event_count == 2
+
+    stop_raw, stop_signature = _signed_event(entry, "event-stop", "ZONE_STOPPED")
+    response = await manager._async_handle_webhook(
+        hass, stable_webhook_id, FakeWebhookRequest(stop_raw, stop_signature)
+    )
+    assert response.status == 204
+    assert entry.runtime_data.realtime.accepted_event_count == 2
+    assert adapter.snapshot_requests == 3
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    diagnostic_text = repr(diagnostics)
+    assert entry.data[CONF_WEBHOOK_AUTH] not in diagnostic_text
+    assert entry.data[CONF_WEBHOOK_ID] not in diagnostic_text
+    assert "https://ha.example.com/api/webhook/stable" not in diagnostic_text
+    realtime = diagnostics["coordinator"]["realtime"]
+    assert realtime["url_source"] == "standard"
+    assert realtime["fallback_polling"]["interval_minutes"] == 5
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.data[CONF_WEBHOOK_ID] == stable_webhook_id
+    assert adapter.cleanup_calls == 1
+    assert adapter.reconcile_calls == 2
+    assert len(adapter.active_external_ids) == 1
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert adapter.cleanup_calls == 2
+    assert not adapter.active_external_ids
+
+
+@pytest.mark.asyncio
+async def test_no_external_url_keeps_polling_operational(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def no_external_url(*_args: object) -> tuple[None, str]:
+        return None, "none"
+
+    monkeypatch.setattr(
+        realtime_module, "async_resolve_webhook_url", no_external_url
+    )
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(domain=DOMAIN, data=_entry_data(), version=2)
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert not entry.runtime_data.realtime.enabled
+    assert entry.runtime_data.realtime.url_source == "none"
+    assert entry.runtime_data.update_interval == timedelta(minutes=5)
+    assert adapter.snapshot_requests == 1
+
+    await entry.runtime_data.async_refresh()
+    assert entry.runtime_data.last_update_success
+    assert adapter.snapshot_requests == 2
+
+
+@pytest.mark.asyncio
+async def test_polling_reconciles_new_and_removed_controller_webhooks(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def standard_url(*_args: object) -> tuple[str, str]:
+        return "https://ha.example.com/api/webhook/stable", "standard"
+
+    monkeypatch.setattr(
+        realtime_module, "async_resolve_webhook_url", standard_url
+    )
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(domain=DOMAIN, data=_entry_data(), version=2)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert adapter.reconciled_controller_ids[-1] == ("native-controller-1",)
+
+    original = adapter.snapshot.controllers[0]
+    discovered = replace(
+        original,
+        controller_id="controller_discovered",
+        binding=VendorBinding("rachio", "native-controller-2"),
+        name="New Controller",
+        areas=(),
+        capacity=0,
+    )
+    adapter.snapshot = replace(
+        adapter.snapshot, controllers=(original, discovered)
+    )
+    await entry.runtime_data.async_refresh()
+    assert adapter.reconciled_controller_ids[-1] == (
+        "native-controller-1",
+        "native-controller-2",
+    )
+
+    adapter.snapshot = replace(adapter.snapshot, controllers=(original,))
+    await entry.runtime_data.async_refresh()
+    assert adapter.cleaned_controller_ids[-1] == ("native-controller-2",)
+    assert adapter.reconciled_controller_ids[-1] == ("native-controller-1",)
+
+
+@pytest.mark.asyncio
+async def test_remote_registration_failure_keeps_fallback_polling_active(
+    hass: HomeAssistant, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def standard_url(*_args: object) -> tuple[str, str]:
+        return "https://ha.example.com/api/webhook/stable", "standard"
+
+    monkeypatch.setattr(
+        realtime_module, "async_resolve_webhook_url", standard_url
+    )
+    adapter = MutableAdapter(_snapshot())
+    adapter.registration_health = RealtimeRegistrationHealth(
+        False,
+        0,
+        1,
+        "event type discovery failed",
+        "http_status_failure",
+        503,
+    )
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(domain=DOMAIN, data=_entry_data(), version=2)
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    realtime = entry.runtime_data.realtime
+    assert not realtime.enabled
+    assert realtime.remote_health.error_category == "http_status_failure"
+    assert realtime.remote_health.http_status == 503
+    assert realtime.diagnostics()["fallback_polling"] == {
+        "enabled": True,
+        "interval_minutes": 5,
+        "last_update_success": True,
+    }
+    assert entry.runtime_data.update_interval == timedelta(minutes=5)
