@@ -175,3 +175,6 @@ class RealtimeRegistrationHealth:
     error: str | None = None
     error_category: str | None = None
     http_status: int | None = None
+    discovered_event_type_count: int | None = None
+    discovered_event_type_field_names: tuple[str, ...] = ()
+    discovered_event_type_names: tuple[str, ...] = ()
