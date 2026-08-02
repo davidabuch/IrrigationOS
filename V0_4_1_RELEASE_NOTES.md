@@ -16,7 +16,7 @@ This release stabilizes identity and observation semantics before any execution 
 - Automatic migration of v0.4.0 entity/device identities and landscape profile overrides.
 - Behavioral coverage for identity, slots, migration, partial failures, reconciliation, composition, and diagnostics.
 - A dedicated Home Assistant CI smoke suite for config flow, dynamic entities, registry migration, and diagnostics redaction.
-- HACS repository validation on every pull request and main-branch update.
+- HACS-ready metadata and a local brand icon; automated HACS validation is deferred while the repository remains private.
 
 ## Safety boundary
 

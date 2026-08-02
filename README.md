@@ -26,7 +26,7 @@ In the Rachio mobile app, open **Profile**, select **API Key**, and tap **Copy**
 
 ## Development installation
 
-This repository is HACS-compatible. During initial commissioning, repository packages are validated locally before installation into Home Assistant.
+The repository is currently private, so HACS publication and validation are deferred. During initial commissioning, install from a reviewed ZIP or copy the integration directory manually after local validation. The HACS metadata and local brand asset remain in place for future public distribution.
 
 Key documents:
 

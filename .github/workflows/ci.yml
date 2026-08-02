@@ -69,16 +69,3 @@ jobs:
 
       - name: Run Home Assistant smoke tests
         run: python -m pytest -q --asyncio-mode=auto tests_ha
-
-  hacs-validation:
-    name: HACS validation
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Validate integration repository
-        uses: hacs/action@main
-        env:
-          # Slash-containing branch names cannot be used safely in HACS raw URLs.
-          REPOSITORY_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-        with:
-          category: integration

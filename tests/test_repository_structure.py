@@ -13,13 +13,11 @@ def test_github_actions_workflow_exists() -> None:
     assert (ROOT / ".github/workflows/ci.yml").is_file()
 
 
-def test_ci_includes_home_assistant_and_hacs_validation() -> None:
-    """Release CI must exercise Home Assistant and HACS compatibility."""
+def test_ci_includes_home_assistant_validation() -> None:
+    """Release CI must exercise Home Assistant compatibility."""
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "requirements-ha-test.txt" in workflow
     assert "tests_ha" in workflow
-    assert "hacs/action@main" in workflow
-    assert "REPOSITORY_REF: ${{ github.event.pull_request.head.sha || github.sha }}" in workflow
 
 
 def test_local_brand_icon_exists() -> None:

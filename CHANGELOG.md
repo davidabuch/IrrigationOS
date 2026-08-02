@@ -9,6 +9,7 @@
 - Added v0.4.0 registry and landscape-profile migration.
 - Added behavioral coverage and ADR-009/ADR-010.
 - Added Home Assistant runtime, registry-migration, and diagnostics smoke tests to CI.
+- Added HACS-ready packaging metadata and a local brand icon; HACS validation remains deferred while the repository is private.
 - Preserved the Observation-only safety boundary.
 
 ## 0.4.0
