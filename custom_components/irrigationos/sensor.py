@@ -296,7 +296,7 @@ class IrrigationOSLandscapeProfileSensor(
                     profile.application_rate_inches_per_hour.confidence_percent
                 ),
                 "distribution_efficiency": (
-                    profile.distribution_efficiency.source.value
+                    profile.distribution_efficiency.confidence_percent
                 ),
             },
         }
