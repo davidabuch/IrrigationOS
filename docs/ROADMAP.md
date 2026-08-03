@@ -2,7 +2,7 @@
 
 ## Current status
 
-- **Current release:** v0.4.1
+- **Current release:** v0.4.2
 - **Current operating boundary:** Observation only
 - **Current epic:** Epic 2 — Rachio Integration
 - **Next milestone:** v0.5.0 — Observation history, ownership signals, and restart reconciliation
@@ -34,6 +34,7 @@ Delivered:
 - `v0.3.0` — Landscape Digital Twin foundation
 - `v0.4.0` — First live Home Assistant installation
 - `v0.4.1` — Canonical controller model and observation reliability
+- `v0.4.2` — Real-time Rachio observation
 
 ## Epic 2 — Rachio Integration
 
@@ -75,6 +76,19 @@ Delivered:
 - endpoint-specific partial failures and unknown-versus-idle semantics
 - provider-factory runtime composition
 - dynamic additions and safe missing-hardware behavior
+
+### v0.4.2 — Real-time Rachio observation
+
+**Status: Complete**
+
+- unique local Home Assistant webhook per config entry
+- optional active-subscription cloudhook with standard external HTTPS fallback
+- idempotent entry-scoped Rachio notification subscriptions
+- signed event validation, authorization checks, and duplicate suppression
+- immediate canonical snapshot refresh after accepted status events
+- dynamic subscription reconciliation for added and removed controllers
+- five-minute reconciliation polling when push delivery is unavailable or incomplete
+- redacted realtime health and delivery diagnostics
 
 ### v0.5.0 — Observation history and ownership signals
 

@@ -6,7 +6,7 @@ from typing import Final
 
 DOMAIN: Final = "irrigationos"
 NAME: Final = "IrrigationOS"
-VERSION: Final = "0.4.1"
+VERSION: Final = "0.4.2"
 
 CONF_API_KEY: Final = "api_key"
 CONF_PERSON_ID: Final = "person_id"
@@ -15,6 +15,9 @@ CONF_OPERATING_MODE: Final = "operating_mode"
 CONF_AREA_PROFILES: Final = "area_profiles"
 CONF_AREA_ID: Final = "area_id"
 CONF_IDENTITY_REGISTRY: Final = "identity_registry"
+CONF_WEBHOOK_ID: Final = "webhook_id"
+CONF_WEBHOOK_AUTH: Final = "webhook_auth"
+CONF_CLOUDHOOK_URL: Final = "cloudhook_url"
 DEFAULT_CONTROLLER_PROVIDER: Final = "rachio"
 
 MODE_OBSERVATION: Final = "observation"

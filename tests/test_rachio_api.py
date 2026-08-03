@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from aiohttp import ClientConnectionError
 
 from tests.helpers import load_integration_module
 
@@ -23,10 +24,13 @@ class FakeResponse:
         status: int,
         payload: object,
         headers: dict[str, str] | None = None,
+        *,
+        json_error: ValueError | None = None,
     ) -> None:
         self.status = status
         self.payload = payload
-        self.headers = headers or {}
+        self.headers = headers or {"Content-Type": "application/json"}
+        self.json_error = json_error
 
     async def __aenter__(self) -> FakeResponse:
         return self
@@ -35,6 +39,8 @@ class FakeResponse:
         return None
 
     async def json(self) -> object:
+        if self.json_error is not None:
+            raise self.json_error
         return self.payload
 
 
@@ -101,3 +107,139 @@ async def test_current_schedule_uses_read_only_device_endpoint() -> None:
     assert payload["zoneId"] == "zone-1"
     assert session.requests[0]["method"] == "GET"
     assert session.requests[0]["url"].endswith("/device/device-1/current_schedule")
+
+
+@pytest.mark.asyncio
+async def test_notification_subscription_endpoints_and_payloads() -> None:
+    session = FakeSession(
+        [
+            FakeResponse(200, [{"id": "zone", "name": "ZONE_STATUS_EVENT"}]),
+            FakeResponse(200, []),
+            FakeResponse(200, {"id": "hook-1"}),
+            FakeResponse(200, {"id": "hook-1"}),
+            FakeResponse(204, None),
+        ]
+    )
+    client = RachioApiClient(session, "token")
+    payload = {
+        "device": {"id": "device-1"},
+        "externalId": "entry-auth",
+        "url": "https://ha.example.com/api/webhook/stable",
+        "eventTypes": [{"id": "zone"}],
+    }
+
+    assert await client.async_get_webhook_event_types() == [
+        {"id": "zone", "name": "ZONE_STATUS_EVENT"}
+    ]
+    assert await client.async_get_device_webhooks("device-1") == []
+    await client.async_create_webhook(payload)
+    await client.async_update_webhook({**payload, "id": "hook-1"})
+    await client.async_delete_webhook("hook-1")
+
+    assert [item["method"] for item in session.requests] == [
+        "GET",
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+    ]
+    assert session.requests[2]["json"] == payload
+    assert session.requests[4]["url"].endswith("/notification/webhook/hook-1")
+
+
+@pytest.mark.asyncio
+async def test_event_type_discovery_sends_rachiopy_headers() -> None:
+    session = FakeSession(
+        [FakeResponse(200, [{"id": "zone", "name": "ZONE_STATUS_EVENT"}])]
+    )
+    client = RachioApiClient(session, "top-secret-token")
+
+    event_types = await client.async_get_webhook_event_types()
+
+    assert event_types == [{"id": "zone", "name": "ZONE_STATUS_EVENT"}]
+    assert session.requests[0]["headers"] == {
+        "Authorization": "Bearer top-secret-token",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+    }
+
+
+@pytest.mark.asyncio
+async def test_event_type_discovery_reports_safe_http_status() -> None:
+    session = FakeSession([FakeResponse(503, {"private": "body"})])
+    client = RachioApiClient(session, "top-secret-token")
+
+    with pytest.raises(MODULE.RachioApiError) as caught:
+        await client.async_get_webhook_event_types()
+
+    assert caught.value.diagnostic_category == "http_status_failure"
+    assert caught.value.http_status == 503
+    assert "private" not in str(caught.value)
+    assert "top-secret-token" not in str(caught.value)
+
+
+@pytest.mark.asyncio
+async def test_event_type_discovery_reports_invalid_content_type() -> None:
+    session = FakeSession(
+        [FakeResponse(200, "not inspected", {"Content-Type": "text/html"})]
+    )
+    client = RachioApiClient(session, "token")
+
+    with pytest.raises(RachioInvalidResponseError) as caught:
+        await client.async_get_webhook_event_types()
+
+    assert caught.value.diagnostic_category == "invalid_content_type"
+
+
+@pytest.mark.asyncio
+async def test_event_type_discovery_reports_invalid_json() -> None:
+    session = FakeSession(
+        [FakeResponse(200, None, json_error=ValueError("private response body"))]
+    )
+    client = RachioApiClient(session, "token")
+
+    with pytest.raises(RachioInvalidResponseError) as caught:
+        await client.async_get_webhook_event_types()
+
+    assert caught.value.diagnostic_category == "invalid_json"
+    assert "private response body" not in str(caught.value)
+
+
+@pytest.mark.asyncio
+async def test_event_type_discovery_reports_unexpected_shape() -> None:
+    session = FakeSession([FakeResponse(200, {"eventTypes": []})])
+    client = RachioApiClient(session, "token")
+
+    with pytest.raises(RachioInvalidResponseError) as caught:
+        await client.async_get_webhook_event_types()
+
+    assert caught.value.diagnostic_category == "unexpected_response_shape"
+
+
+class FailingSession:
+    """Raise a transport-layer failure before a response exists."""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    def request(self, *_args: object, **_kwargs: object) -> None:
+        raise self.error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error", "expected_category"),
+    [
+        (TimeoutError(), "timeout"),
+        (ClientConnectionError(), "transport_failure"),
+    ],
+)
+async def test_event_type_discovery_reports_transport_category(
+    error: Exception, expected_category: str
+) -> None:
+    client = RachioApiClient(FailingSession(error), "token")
+
+    with pytest.raises(MODULE.RachioApiError) as caught:
+        await client.async_get_webhook_event_types()
+
+    assert caught.value.diagnostic_category == expected_category

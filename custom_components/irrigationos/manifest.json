@@ -6,9 +6,15 @@
   ],
   "config_flow": true,
   "documentation": "https://github.com/davidabuch/IrrigationOS",
+  "after_dependencies": [
+    "cloud"
+  ],
+  "dependencies": [
+    "http"
+  ],
   "integration_type": "hub",
-  "iot_class": "cloud_polling",
+  "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/davidabuch/IrrigationOS/issues",
   "requirements": [],
-  "version": "0.4.1"
+  "version": "0.4.2"
 }

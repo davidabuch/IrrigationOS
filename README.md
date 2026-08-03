@@ -4,13 +4,16 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v0.4.1 — Canonical Controller Model and Observation Reliability**
+**v0.4.2 — Real-Time Rachio Observation**
 
 The current release:
 
 - accepts and validates a Rachio API key through the Home Assistant UI;
 - discovers the Rachio Person ID, controllers, and zones automatically;
-- polls Rachio every five minutes in read-only Observation mode;
+- receives authenticated Rachio status events through a unique Home Assistant webhook;
+- uses an active Home Assistant Cloud cloudhook when available, but does not require a subscription;
+- otherwise uses Home Assistant's standard externally reachable HTTPS webhook URL;
+- preserves five-minute polling as reconciliation and no-external-URL fallback;
 - creates controller and zone observation entities;
 - assigns persisted provider-neutral controller identities and permanent numbered slots;
 - exposes timestamps, freshness, source quality, and safe partial-failure metadata;
@@ -18,7 +21,9 @@ The current release:
 - exports redacted diagnostics;
 - does not start, stop, enable, disable, or reschedule irrigation.
 
-See [`V0_4_1_RELEASE_NOTES.md`](V0_4_1_RELEASE_NOTES.md) and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+See [`V0_4_2_RELEASE_NOTES.md`](V0_4_2_RELEASE_NOTES.md) and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+
+Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can reach. Home Assistant Cloud is optional. If no suitable URL is configured, IrrigationOS reports a repair warning and continues observing through polling.
 
 ## API key
 
@@ -26,7 +31,7 @@ In the Rachio mobile app, open **Profile**, select **API Key**, and tap **Copy**
 
 ## Development installation
 
-This repository is HACS-compatible. During initial commissioning, repository packages are validated locally before installation into Home Assistant.
+The repository is currently private, so HACS publication and validation are deferred. During initial commissioning, install from a reviewed ZIP or copy the integration directory manually after local validation. The HACS metadata and local brand asset remain in place for future public distribution.
 
 Key documents:
 
@@ -47,9 +52,16 @@ python -m mypy custom_components tests
 git diff --check
 ```
 
+Home Assistant runtime and migration smoke tests use an isolated dependency set:
+
+```bash
+python -m pip install -r requirements-ha-test.txt
+python -m pytest -q --asyncio-mode=auto tests_ha
+```
+
 ## Safety
 
-Observation mode is the default and only implemented operating mode in v0.4.1. Credentials, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+Observation mode is the default and only implemented operating mode in v0.4.2. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
 
 ## Landscape Digital Twin
 

@@ -6,6 +6,7 @@ from .base import (
     ControllerInvalidResponseError,
     ControllerProviderError,
     ControllerRateLimitError,
+    RealtimeObservationAdapter,
 )
 from .identity import ControllerIdentityRegistry
 from .models import (
@@ -18,6 +19,7 @@ from .models import (
     ObservationError,
     ObservationMetadata,
     ObservationQuality,
+    RealtimeRegistrationHealth,
     VendorBinding,
 )
 from .registry import ControllerAdapterRegistry
@@ -39,5 +41,7 @@ __all__ = [
     "ObservationError",
     "ObservationMetadata",
     "ObservationQuality",
+    "RealtimeObservationAdapter",
+    "RealtimeRegistrationHealth",
     "VendorBinding",
 ]

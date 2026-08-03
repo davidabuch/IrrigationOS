@@ -19,9 +19,11 @@ from ...controllers import (
     ObservationError,
     ObservationMetadata,
     ObservationQuality,
+    RealtimeRegistrationHealth,
     VendorBinding,
 )
 from .api import RachioApiClient, RachioApiError
+from .realtime import RachioWebhookRegistrar
 
 PROVIDER: Final = "rachio"
 OBSERVATION_FRESHNESS_MINUTES: Final = 10
@@ -39,6 +41,32 @@ class RachioControllerAdapter:
     ) -> None:
         self._client = client
         self._identities = identities
+        self._webhooks = RachioWebhookRegistrar(client)
+
+    async def async_reconcile_realtime(
+        self,
+        callback_url: str,
+        external_id: str,
+        external_id_prefix: str,
+        controller_native_ids: tuple[str, ...],
+    ) -> RealtimeRegistrationHealth:
+        """Reconcile Rachio notification subscriptions for this entry."""
+        return await self._webhooks.async_reconcile(
+            callback_url,
+            external_id,
+            external_id_prefix,
+            controller_native_ids,
+        )
+
+    async def async_cleanup_realtime(
+        self,
+        external_id_prefix: str,
+        controller_native_ids: tuple[str, ...],
+    ) -> RealtimeRegistrationHealth:
+        """Remove Rachio notification subscriptions for this entry."""
+        return await self._webhooks.async_cleanup(
+            external_id_prefix, controller_native_ids
+        )
 
     async def async_get_account(self) -> tuple[str, ControllerRegistrySnapshot]:
         """Resolve the current Rachio account and return its first snapshot."""

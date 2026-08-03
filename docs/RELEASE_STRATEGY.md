@@ -34,6 +34,7 @@ A release is complete only when:
 
 - acceptance criteria are satisfied;
 - tests, Ruff, MyPy, repository validation, and `git diff --check` pass;
+- Home Assistant runtime and migration smoke tests pass for integration releases;
 - GitHub Actions is green;
 - release notes and changelog are complete;
 - architecture records are updated when required;
@@ -53,3 +54,4 @@ Development handoff packages contain repository contents but exclude `.git` and 
 - `v0.3.0` — Landscape Digital Twin foundation
 - `v0.4.0` — First live Home Assistant installation
 - `v0.4.1` — Canonical controller model and observation reliability
+- `v0.4.2` — Real-time Rachio observation

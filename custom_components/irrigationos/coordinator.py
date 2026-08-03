@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -32,6 +32,9 @@ from .controllers import (
 )
 from .landscape import LandscapeProfile, build_landscape_profile
 
+if TYPE_CHECKING:
+    from .realtime import RealtimeObservationManager
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -55,6 +58,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.landscape = LandscapeProfile(schema_version=1, areas=())
         self.last_successful_refresh: datetime | None = None
         self.refresh_count = 0
+        self.realtime: RealtimeObservationManager | None = None
         self.identities = ControllerIdentityRegistry.from_dict(
             entry.data.get(CONF_IDENTITY_REGISTRY)
         )
@@ -88,6 +92,10 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.landscape = build_landscape_profile(snapshot, _string_key_mapping(overrides))
         self.last_successful_refresh = dt_util.utcnow()
         self.refresh_count += 1
+        if self.realtime is not None:
+            await self.realtime.async_reconcile_controllers(
+                tuple(controller.native_id for controller in snapshot.controllers)
+            )
         return snapshot
 
     def _persist_new_identities(self) -> None:

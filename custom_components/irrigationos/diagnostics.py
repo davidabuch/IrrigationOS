@@ -8,13 +8,27 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_API_KEY, CONF_IDENTITY_REGISTRY
+from .const import (
+    CONF_API_KEY,
+    CONF_CLOUDHOOK_URL,
+    CONF_IDENTITY_REGISTRY,
+    CONF_WEBHOOK_AUTH,
+    CONF_WEBHOOK_ID,
+)
 from .coordinator import IrrigationOSCoordinator
 from .diagnostic_data import redact_data
 
 TO_REDACT = {
     CONF_API_KEY,
     CONF_IDENTITY_REGISTRY,
+    CONF_CLOUDHOOK_URL,
+    CONF_WEBHOOK_AUTH,
+    CONF_WEBHOOK_ID,
+    "webhook_url",
+    "external_id",
+    "authorization",
+    "signature",
+    "x-signature",
     "id",
     "person_id",
     "native_id",
@@ -38,6 +52,7 @@ async def async_get_config_entry_diagnostics(
     del hass
     snapshot = asdict(entry.runtime_data.data)
     landscape = asdict(entry.runtime_data.landscape)
+    realtime = entry.runtime_data.realtime
     return {
         "entry": redact_data(dict(entry.data), TO_REDACT),
         "coordinator": {
@@ -55,5 +70,10 @@ async def async_get_config_entry_diagnostics(
             ),
             "data": redact_data(snapshot, TO_REDACT),
             "landscape": redact_data(landscape, TO_REDACT),
+            "realtime": (
+                redact_data(realtime.diagnostics(), TO_REDACT)
+                if realtime is not None
+                else None
+            ),
         },
     }

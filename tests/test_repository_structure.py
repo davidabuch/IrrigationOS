@@ -13,6 +13,18 @@ def test_github_actions_workflow_exists() -> None:
     assert (ROOT / ".github/workflows/ci.yml").is_file()
 
 
+def test_ci_includes_home_assistant_validation() -> None:
+    """Release CI must exercise Home Assistant compatibility."""
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "requirements-ha-test.txt" in workflow
+    assert "tests_ha" in workflow
+
+
+def test_local_brand_icon_exists() -> None:
+    """HACS and Home Assistant must have a local integration icon."""
+    assert (ROOT / "custom_components/irrigationos/brand/icon.png").is_file()
+
+
 def test_generated_cache_files_are_ignored() -> None:
     """Python and Finder cache files must be ignored by Git."""
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
@@ -25,7 +37,7 @@ def test_manifest_and_hacs_versions_are_consistent() -> None:
     manifest = json.loads(
         (ROOT / "custom_components/irrigationos/manifest.json").read_text(encoding="utf-8")
     )
-    assert manifest["version"] == "0.4.1"
+    assert manifest["version"] == "0.4.2"
     assert manifest["domain"] == "irrigationos"
 
 
