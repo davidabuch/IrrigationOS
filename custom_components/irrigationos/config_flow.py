@@ -65,7 +65,7 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._discovery_summary: dict[str, str] = {}
 
     @staticmethod
-    @callback
+    @callback  # type: ignore[untyped-decorator, unused-ignore]
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
