@@ -85,7 +85,6 @@ class RealtimeObservationManager:
         self.last_received_event: dict[str, str] | None = None
         self.last_rejection_reason: str | None = None
         self.last_rejection_timestamp: str | None = None
-        self.last_request_header_names: tuple[str, ...] = ()
         self.accepted_event_count = 0
         self.rejected_event_count = 0
         self.duplicate_event_count = 0
@@ -225,7 +224,6 @@ class RealtimeObservationManager:
             "last_received_event": self.last_received_event,
             "last_rejection_reason": self.last_rejection_reason,
             "last_rejection_timestamp": self.last_rejection_timestamp,
-            "last_request_header_names": self.last_request_header_names,
             "accepted_event_count": self.accepted_event_count,
             "rejected_event_count": self.rejected_event_count,
             "duplicate_event_count": self.duplicate_event_count,
@@ -243,9 +241,6 @@ class RealtimeObservationManager:
         request: web.Request | MockRequest,
     ) -> web.Response:
         del hass, webhook_id
-        self.last_request_header_names = tuple(
-            sorted({str(name).lower() for name in request.headers})
-        )
         content_length = getattr(request, "content_length", None)
         if content_length is not None and content_length > MAX_WEBHOOK_BYTES:
             return self._reject("content_length_exceeded", 413)
