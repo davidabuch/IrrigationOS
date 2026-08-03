@@ -57,7 +57,7 @@ STEP_USER_SCHEMA = vol.Schema(
 class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle IrrigationOS configuration."""
 
-    VERSION = 2
+    VERSION = 3
 
     def __init__(self) -> None:
         self._pending_data: dict[str, Any] | None = None

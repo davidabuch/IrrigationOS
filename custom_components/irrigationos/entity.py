@@ -76,8 +76,16 @@ class IrrigationOSAreaEntity(IrrigationOSEntity):
             via_device=(DOMAIN, area.controller_id),
             manufacturer=self.coordinator.data.provider.title(),
             model="Irrigation slot",
-            name=area.name,
+            name=self._display_name(area),
         )
+
+    def _display_name(self, area: IrrigationArea) -> str:
+        """Return a user override or the canonical slot name."""
+        with suppress(KeyError):
+            profile = self.coordinator.landscape.get_area(area.area_id)
+            if profile.display_name.source.value == "user":
+                return profile.display_name.value
+        return f"Zone {area.slot_number}"
 
     def _current_area(self) -> IrrigationArea | None:
         return next(

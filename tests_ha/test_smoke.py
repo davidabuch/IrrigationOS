@@ -259,7 +259,7 @@ async def test_fresh_config_flow_discovery(
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     entry = result["result"]
-    assert entry.version == 2
+    assert entry.version == 3
     assert entry.data[CONF_IDENTITY_REGISTRY]["controllers"][
         "rachio:native-controller-1"
     ].startswith("controller_")
@@ -387,7 +387,7 @@ async def test_v040_registry_and_landscape_migration(
     assert entry.options[CONF_AREA_PROFILES][canonical_area_id]["display_name"] == (
         "My Orchard"
     )
-    assert entry.version == 2
+    assert entry.version == 3
 
 
 @pytest.mark.asyncio
