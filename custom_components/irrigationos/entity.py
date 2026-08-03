@@ -76,8 +76,14 @@ class IrrigationOSAreaEntity(IrrigationOSEntity):
             via_device=(DOMAIN, area.controller_id),
             manufacturer=self.coordinator.data.provider.title(),
             model="Irrigation slot",
-            name=area.name,
+            name=self._display_name(area),
         )
+
+    def _display_name(self, area: IrrigationArea) -> str:
+        """Return the user-facing name without changing slot identity."""
+        with suppress(KeyError):
+            return self.coordinator.landscape.get_area(area.area_id).display_name.value
+        return area.vendor_name or area.name
 
     def _current_area(self) -> IrrigationArea | None:
         return next(
