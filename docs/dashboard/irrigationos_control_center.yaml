@@ -1,0 +1,212 @@
+# IrrigationOS Control Center
+#
+# Home Assistant installation:
+# 1. Settings > Dashboards > Add dashboard.
+# 2. Open the new dashboard, choose Edit dashboard, then Raw configuration editor.
+# 3. Replace the generated content with this entire file.
+#
+# This dashboard uses only built-in Home Assistant cards. It requires the
+# IrrigationOS v0.4.3 entity contract and remains observation-only.
+
+title: IrrigationOS Control Center
+views:
+  - title: Control Center
+    path: irrigationos
+    icon: mdi:sprinkler-variant
+    type: sections
+    max_columns: 4
+    sections:
+      - type: grid
+        title: System Health
+        cards:
+          - type: heading
+            heading: IrrigationOS
+            icon: mdi:sprinkler-variant
+          - type: tile
+            entity: sensor.irrigationos_status
+            name: Operating mode
+            icon: mdi:shield-eye
+          - type: tile
+            entity: binary_sensor.irrigationos_cloud_connection
+            name: Cloud connection
+            icon: mdi:cloud-check
+          - type: tile
+            entity: binary_sensor.irrigationos_realtime_observation
+            name: Realtime observation
+            icon: mdi:access-point
+          - type: tile
+            entity: binary_sensor.irrigationos_polling_fallback
+            name: Polling fallback
+            icon: mdi:refresh-auto
+          - type: tile
+            entity: sensor.irrigationos_last_successful_refresh
+            name: Last successful refresh
+            icon: mdi:clock-check-outline
+          - type: tile
+            entity: sensor.irrigationos_landscape_profile_status
+            name: Landscape profiles
+            icon: mdi:land-plots
+
+      - type: grid
+        title: Current Activity
+        cards:
+          - type: heading
+            heading: Watering Activity
+            icon: mdi:water
+          - type: tile
+            entity: binary_sensor.irrigationos_watering_active
+            name: Watering active
+            icon: mdi:sprinkler
+          - type: markdown
+            title: Active zone details
+            content: >-
+              {% set active = state_attr('binary_sensor.irrigationos_watering_active', 'friendly_names') or [] %}
+              {% set slots = state_attr('binary_sensor.irrigationos_watering_active', 'slot_numbers') or [] %}
+              {% set vendors = state_attr('binary_sensor.irrigationos_watering_active', 'vendor_names') or [] %}
+              {% if is_state('binary_sensor.irrigationos_watering_active', 'on') %}
+              **Currently watering:** {{ active | join(', ') if active else 'Active zone' }}
+
+              **Slots:** {{ slots | join(', ') if slots else 'Unknown' }}
+
+              **Vendor names:** {{ vendors | join(', ') if vendors else 'Not supplied' }}
+              {% else %}
+              No zones are currently watering.
+              {% endif %}
+          - type: entities
+            title: Realtime telemetry
+            show_header_toggle: false
+            entities:
+              - entity: binary_sensor.irrigationos_realtime_observation
+                name: Registration health
+              - type: attribute
+                entity: binary_sensor.irrigationos_realtime_observation
+                attribute: registered_controllers
+                name: Registered controllers
+              - type: attribute
+                entity: binary_sensor.irrigationos_realtime_observation
+                attribute: expected_controllers
+                name: Expected controllers
+              - type: attribute
+                entity: binary_sensor.irrigationos_realtime_observation
+                attribute: accepted_event_count
+                name: Accepted events
+              - type: attribute
+                entity: binary_sensor.irrigationos_realtime_observation
+                attribute: rejected_event_count
+                name: Rejected events
+              - type: attribute
+                entity: binary_sensor.irrigationos_realtime_observation
+                attribute: duplicate_event_count
+                name: Duplicate events
+
+      - type: grid
+        title: Zones 1–8
+        cards:
+          - type: heading
+            heading: Zones 1–8
+            icon: mdi:numeric-1-box-multiple-outline
+          - type: entities
+            title: Zone observations
+            show_header_toggle: false
+            entities:
+              - entity: sensor.zone_1_observation
+                name: Zone 1
+                secondary_info: last-changed
+              - entity: sensor.zone_2_observation
+                name: Zone 2
+                secondary_info: last-changed
+              - entity: sensor.zone_3_observation
+                name: Zone 3
+                secondary_info: last-changed
+              - entity: sensor.zone_4_observation
+                name: Zone 4
+                secondary_info: last-changed
+              - entity: sensor.zone_5_observation
+                name: Zone 5
+                secondary_info: last-changed
+              - entity: sensor.zone_6_observation
+                name: Zone 6
+                secondary_info: last-changed
+              - entity: sensor.zone_7_observation
+                name: Zone 7
+                secondary_info: last-changed
+              - entity: sensor.zone_8_observation
+                name: Zone 8
+                secondary_info: last-changed
+          - type: entities
+            title: Enabled state
+            show_header_toggle: false
+            entities:
+              - binary_sensor.zone_1_enabled
+              - binary_sensor.zone_2_enabled
+              - binary_sensor.zone_3_enabled
+              - binary_sensor.zone_4_enabled
+              - binary_sensor.zone_5_enabled
+              - binary_sensor.zone_6_enabled
+              - binary_sensor.zone_7_enabled
+              - binary_sensor.zone_8_enabled
+
+      - type: grid
+        title: Zones 9–16
+        cards:
+          - type: heading
+            heading: Zones 9–16
+            icon: mdi:numeric-9-plus-box-multiple-outline
+          - type: entities
+            title: Zone observations
+            show_header_toggle: false
+            entities:
+              - entity: sensor.zone_9_observation
+                name: Zone 9
+                secondary_info: last-changed
+              - entity: sensor.zone_10_observation
+                name: Zone 10
+                secondary_info: last-changed
+              - entity: sensor.zone_11_observation
+                name: Zone 11
+                secondary_info: last-changed
+              - entity: sensor.zone_12_observation
+                name: Zone 12
+                secondary_info: last-changed
+              - entity: sensor.zone_13_observation
+                name: Zone 13
+                secondary_info: last-changed
+              - entity: sensor.zone_14_observation
+                name: Zone 14
+                secondary_info: last-changed
+              - entity: sensor.zone_15_observation
+                name: Zone 15
+                secondary_info: last-changed
+              - entity: sensor.zone_16_observation
+                name: Zone 16
+                secondary_info: last-changed
+          - type: entities
+            title: Enabled state
+            show_header_toggle: false
+            entities:
+              - binary_sensor.zone_9_enabled
+              - binary_sensor.zone_10_enabled
+              - binary_sensor.zone_11_enabled
+              - binary_sensor.zone_12_enabled
+              - binary_sensor.zone_13_enabled
+              - binary_sensor.zone_14_enabled
+              - binary_sensor.zone_15_enabled
+              - binary_sensor.zone_16_enabled
+
+      - type: grid
+        title: Diagnostics
+        cards:
+          - type: heading
+            heading: Diagnostics
+            icon: mdi:stethoscope
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - sensor.irrigationos_controller_provider
+              - sensor.irrigationos_controller_count
+              - sensor.irrigationos_area_count
+              - sensor.irrigationos_discovery_summary
+              - sensor.irrigationos_last_successful_refresh
+              - binary_sensor.irrigationos_cloud_connection
+              - binary_sensor.irrigationos_realtime_observation
+              - binary_sensor.irrigationos_polling_fallback
