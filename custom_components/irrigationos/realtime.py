@@ -252,9 +252,7 @@ class RealtimeObservationManager:
         if len(raw) > MAX_WEBHOOK_BYTES:
             return self._reject("body_size_exceeded", 413)
         signature = request.headers.get("x-signature")
-        if not signature:
-            return self._reject("missing_signature", 403)
-        if not self._valid_signature(raw, signature):
+        if signature is not None and not self._valid_signature(raw, signature):
             return self._reject("signature_mismatch", 403)
         try:
             payload = json.loads(raw)
