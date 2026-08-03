@@ -37,6 +37,50 @@ from custom_components.irrigationos.controllers import (
     VendorBinding,
 )
 
+GLOBAL_ENTITY_IDS = {
+    "irrigationos_status": ("sensor.status", "sensor.irrigationos_status"),
+    "irrigationos_controller_provider": (
+        "sensor.controller_provider",
+        "sensor.irrigationos_controller_provider",
+    ),
+    "irrigationos_controller_count": (
+        "sensor.controller_count",
+        "sensor.irrigationos_controller_count",
+    ),
+    "irrigationos_area_count": (
+        "sensor.irrigation_area_count",
+        "sensor.irrigationos_area_count",
+    ),
+    "irrigationos_landscape_profile_status": (
+        "sensor.landscape_profile_status",
+        "sensor.irrigationos_landscape_profile_status",
+    ),
+    "irrigationos_last_successful_refresh": (
+        "sensor.last_successful_refresh",
+        "sensor.irrigationos_last_successful_refresh",
+    ),
+    "irrigationos_discovery_summary": (
+        "sensor.discovery_summary",
+        "sensor.irrigationos_discovery_summary",
+    ),
+    "irrigationos_cloud_connection": (
+        "binary_sensor.cloud_connection",
+        "binary_sensor.irrigationos_cloud_connection",
+    ),
+    "irrigationos_realtime_observation": (
+        "binary_sensor.realtime_observation",
+        "binary_sensor.irrigationos_realtime_observation",
+    ),
+    "irrigationos_polling_fallback": (
+        "binary_sensor.polling_fallback",
+        "binary_sensor.irrigationos_polling_fallback",
+    ),
+    "irrigationos_watering_active": (
+        "binary_sensor.watering_active",
+        "binary_sensor.irrigationos_watering_active",
+    ),
+}
+
 
 def _area(controller_id: str, slot: int, *, configured: bool) -> IrrigationArea:
     return IrrigationArea(
@@ -229,3 +273,123 @@ async def test_zone_name_priority_and_identity_survive_reload(
     state = hass.states.get(original_entity_id)
     assert state is not None
     assert state.attributes["vendor_name"] == "Renamed in Rachio"
+
+
+@pytest.mark.asyncio
+async def test_fresh_install_uses_namespaced_global_entity_ids(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    entries_by_unique_id = {
+        item.unique_id: item
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+    for unique_id, (old_entity_id, expected_entity_id) in GLOBAL_ENTITY_IDS.items():
+        assert entries_by_unique_id[unique_id].entity_id == expected_entity_id
+        assert registry.async_get(old_entity_id) is None
+
+    assert _zone_entry(registry, entry.entry_id).entity_id == (
+        "sensor.zone_1_observation"
+    )
+    assert entries_by_unique_id["controller_test:slot:1_enabled"].entity_id == (
+        "binary_sensor.zone_1_enabled"
+    )
+
+
+@pytest.mark.asyncio
+async def test_upgrade_renames_global_registry_entries_in_place(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=2,
+    )
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    original_registry_ids: dict[str, str] = {}
+    for unique_id, (old_entity_id, _expected_entity_id) in GLOBAL_ENTITY_IDS.items():
+        domain, object_id = old_entity_id.split(".", maxsplit=1)
+        old_entry = registry.async_get_or_create(
+            domain,
+            DOMAIN,
+            unique_id,
+            config_entry=entry,
+            suggested_object_id=object_id,
+        )
+        assert old_entry.entity_id == old_entity_id
+        original_registry_ids[unique_id] = old_entry.id
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert entry.version == 3
+    entries = er.async_entries_for_config_entry(registry, entry.entry_id)
+    entries_by_unique_id = {item.unique_id: item for item in entries}
+    for unique_id, (old_entity_id, expected_entity_id) in GLOBAL_ENTITY_IDS.items():
+        migrated = entries_by_unique_id[unique_id]
+        assert migrated.entity_id == expected_entity_id
+        assert migrated.unique_id == unique_id
+        assert migrated.id == original_registry_ids[unique_id]
+        assert registry.async_get(old_entity_id) is None
+        assert sum(item.unique_id == unique_id for item in entries) == 1
+
+
+@pytest.mark.asyncio
+async def test_watering_active_exposes_control_center_attributes(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    controller = adapter.snapshot.controllers[0]
+    watering_area = replace(
+        controller.areas[0], state=IrrigationAreaState.WATERING
+    )
+    adapter.snapshot = replace(
+        adapter.snapshot,
+        controllers=(
+            replace(
+                controller,
+                areas=(watering_area, controller.areas[1]),
+            ),
+        ),
+    )
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+
+    state = hass.states.get("binary_sensor.irrigationos_watering_active")
+    assert state is not None
+    assert state.state == "on"
+    assert state.attributes["active_zone_count"] == 1
+    assert state.attributes["active_zone_slots"] == [1]
+    assert state.attributes["active_zone_names"] == ["Zone 1"]
+    assert state.attributes["active_zone_vendor_names"] == ["Orchard"]

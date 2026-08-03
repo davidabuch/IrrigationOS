@@ -78,6 +78,7 @@ class IrrigationOSStatusSensor(IrrigationOSEntity, SensorEntity):
 
     _attr_name = "Status"
     _attr_unique_id = "irrigationos_status"
+    entity_id = "sensor.irrigationos_status"
     _attr_icon = "mdi:sprinkler-variant"
 
     @property
@@ -93,6 +94,7 @@ class IrrigationOSProviderSensor(IrrigationOSEntity, SensorEntity):
 
     _attr_name = "Controller provider"
     _attr_unique_id = "irrigationos_controller_provider"
+    entity_id = "sensor.irrigationos_controller_provider"
     _attr_icon = "mdi:access-point-network"
 
     @property
@@ -108,6 +110,7 @@ class IrrigationOSControllerCountSensor(IrrigationOSEntity, SensorEntity):
 
     _attr_name = "Controller count"
     _attr_unique_id = "irrigationos_controller_count"
+    entity_id = "sensor.irrigationos_controller_count"
     _attr_native_unit_of_measurement = "controllers"
 
     @property
@@ -123,6 +126,7 @@ class IrrigationOSAreaCountSensor(IrrigationOSEntity, SensorEntity):
 
     _attr_name = "Irrigation area count"
     _attr_unique_id = "irrigationos_area_count"
+    entity_id = "sensor.irrigationos_area_count"
     _attr_native_unit_of_measurement = "areas"
 
     @property
@@ -211,6 +215,7 @@ class IrrigationOSLandscapeStatusSensor(IrrigationOSEntity, SensorEntity):
 
     _attr_name = "Landscape profile status"
     _attr_unique_id = "irrigationos_landscape_profile_status"
+    entity_id = "sensor.irrigationos_landscape_profile_status"
     _attr_icon = "mdi:land-plots"
 
     @property
@@ -307,6 +312,7 @@ class IrrigationOSLastRefreshSensor(IrrigationOSEntity, SensorEntity):
 
     _attr_name = "Last successful refresh"
     _attr_unique_id = "irrigationos_last_successful_refresh"
+    entity_id = "sensor.irrigationos_last_successful_refresh"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -326,6 +332,7 @@ class IrrigationOSDiscoverySummarySensor(IrrigationOSEntity, SensorEntity):
 
     _attr_name = "Discovery summary"
     _attr_unique_id = "irrigationos_discovery_summary"
+    entity_id = "sensor.irrigationos_discovery_summary"
     _attr_icon = "mdi:radar"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 

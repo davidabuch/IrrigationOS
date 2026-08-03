@@ -70,6 +70,7 @@ class IrrigationOSCloudHealthySensor(IrrigationOSEntity, BinarySensorEntity):
 
     _attr_name = "Cloud connection"
     _attr_unique_id = "irrigationos_cloud_connection"
+    entity_id = "binary_sensor.irrigationos_cloud_connection"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -84,6 +85,7 @@ class IrrigationOSRealtimeHealthySensor(IrrigationOSEntity, BinarySensorEntity):
 
     _attr_name = "Realtime observation"
     _attr_unique_id = "irrigationos_realtime_observation"
+    entity_id = "binary_sensor.irrigationos_realtime_observation"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -128,6 +130,7 @@ class IrrigationOSPollingFallbackHealthySensor(IrrigationOSEntity, BinarySensorE
 
     _attr_name = "Polling fallback"
     _attr_unique_id = "irrigationos_polling_fallback"
+    entity_id = "binary_sensor.irrigationos_polling_fallback"
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -155,6 +158,7 @@ class IrrigationOSWateringActiveSensor(IrrigationOSEntity, BinarySensorEntity):
 
     _attr_name = "Watering active"
     _attr_unique_id = "irrigationos_watering_active"
+    entity_id = "binary_sensor.irrigationos_watering_active"
     _attr_icon = "mdi:sprinkler-variant"
 
     @property
