@@ -20,6 +20,7 @@ from homeassistant.components import webhook
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import EVENT_HOMEASSISTANT_STOP, Event, HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.util.aiohttp import MockRequest
 
 from .const import (
     CONF_API_KEY,
@@ -229,13 +230,20 @@ class RealtimeObservationManager:
         }
 
     async def _async_handle_webhook(
-        self, hass: HomeAssistant, webhook_id: str, request: web.Request
+        self,
+        hass: HomeAssistant,
+        webhook_id: str,
+        request: web.Request | MockRequest,
     ) -> web.Response:
         del hass, webhook_id
-        if request.content_length is not None and request.content_length > MAX_WEBHOOK_BYTES:
+        content_length = getattr(request, "content_length", None)
+        if content_length is not None and content_length > MAX_WEBHOOK_BYTES:
             self.rejected_event_count += 1
             return web.Response(status=413)
-        raw = await request.read()
+        raw = await request.content.read()
+        if len(raw) > MAX_WEBHOOK_BYTES:
+            self.rejected_event_count += 1
+            return web.Response(status=413)
         if not self._valid_signature(raw, request.headers.get("x-signature")):
             self.rejected_event_count += 1
             return web.Response(status=403)

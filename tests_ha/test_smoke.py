@@ -17,6 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.util.aiohttp import MockRequest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.irrigationos import async_migrate_entry
@@ -178,16 +179,14 @@ class MutableAdapter:
         return RealtimeRegistrationHealth(True, 0, len(controller_native_ids))
 
 
-class FakeWebhookRequest:
-    """Minimal request body used to exercise the registered webhook handler."""
-
-    def __init__(self, body: bytes, signature: str) -> None:
-        self._body = body
-        self.content_length = len(body)
-        self.headers = {"x-signature": signature}
-
-    async def read(self) -> bytes:
-        return self._body
+def _mock_webhook_request(body: bytes, signature: str) -> MockRequest:
+    """Build the same content-length-free request used by HA webhook relays."""
+    return MockRequest(
+        content=body,
+        mock_source="irrigationos-test",
+        method="POST",
+        headers={"x-signature": signature},
+    )
 
 
 def _entry_data() -> dict[str, Any]:
@@ -420,7 +419,7 @@ async def test_webhook_url_prefers_cloudhook_then_standard_external_url(
 
 
 @pytest.mark.asyncio
-async def test_signed_push_deduplication_reload_cleanup_and_redaction(
+async def test_signed_push_via_mock_request_deduplication_reload_and_redaction(
     hass: HomeAssistant,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -448,15 +447,19 @@ async def test_signed_push_deduplication_reload_cleanup_and_redaction(
     manager = entry.runtime_data.realtime
 
     start_raw, start_signature = _signed_event(entry, "event-start", "ZONE_STARTED")
+    start_request = _mock_webhook_request(start_raw, start_signature)
+    assert not hasattr(start_request, "content_length")
     response = await manager._async_handle_webhook(
-        hass, stable_webhook_id, FakeWebhookRequest(start_raw, start_signature)
+        hass, stable_webhook_id, start_request
     )
     assert response.status == 204
     assert entry.runtime_data.realtime.accepted_event_count == 1
     assert adapter.snapshot_requests == 2
 
     response = await manager._async_handle_webhook(
-        hass, stable_webhook_id, FakeWebhookRequest(start_raw, start_signature)
+        hass,
+        stable_webhook_id,
+        _mock_webhook_request(start_raw, start_signature),
     )
     assert response.status == 204
     assert entry.runtime_data.realtime.duplicate_event_count == 1
@@ -471,19 +474,23 @@ async def test_signed_push_deduplication_reload_cleanup_and_redaction(
     response = await manager._async_handle_webhook(
         hass,
         stable_webhook_id,
-        FakeWebhookRequest(wrong_auth_raw, wrong_auth_signature),
+        _mock_webhook_request(wrong_auth_raw, wrong_auth_signature),
     )
     assert response.status == 403
 
     response = await manager._async_handle_webhook(
-        hass, stable_webhook_id, FakeWebhookRequest(start_raw, "invalid-signature")
+        hass,
+        stable_webhook_id,
+        _mock_webhook_request(start_raw, "invalid-signature"),
     )
     assert response.status == 403
     assert entry.runtime_data.realtime.rejected_event_count == 2
 
     stop_raw, stop_signature = _signed_event(entry, "event-stop", "ZONE_STOPPED")
     response = await manager._async_handle_webhook(
-        hass, stable_webhook_id, FakeWebhookRequest(stop_raw, stop_signature)
+        hass,
+        stable_webhook_id,
+        _mock_webhook_request(stop_raw, stop_signature),
     )
     assert response.status == 204
     assert entry.runtime_data.realtime.accepted_event_count == 2
