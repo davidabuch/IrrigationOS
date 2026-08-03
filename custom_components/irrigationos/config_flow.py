@@ -8,7 +8,6 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .adapters.factory import DEFAULT_PROVIDER_FACTORY
@@ -66,7 +65,7 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._discovery_summary: dict[str, str] = {}
 
     @staticmethod
-    @callback  # type: ignore[untyped-decorator]
+    @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
@@ -74,7 +73,9 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         del config_entry
         return IrrigationOSOptionsFlow()
 
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Collect and validate the Rachio API key."""
         if user_input is None:
             return self.async_show_form(step_id="user", data_schema=STEP_USER_SCHEMA)
@@ -108,7 +109,9 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         }
         return await self.async_step_confirm()
 
-    async def async_step_confirm(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Show discovered hardware before creating the config entry."""
         if self._pending_data is None:
             return await self.async_step_user()
@@ -120,14 +123,16 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders=self._discovery_summary,
         )
 
-    async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
+    async def async_step_reauth(
+        self, entry_data: dict[str, Any]
+    ) -> config_entries.ConfigFlowResult:
         """Start a Rachio API-key reauthentication flow."""
         del entry_data
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Validate and store a replacement Rachio API key."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -178,7 +183,9 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
     def __init__(self) -> None:
         self._selected_area_id: str | None = None
 
-    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Select the irrigation area to edit."""
         coordinator = self.config_entry.runtime_data
         area_choices = {
@@ -197,7 +204,9 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
             data_schema=vol.Schema({vol.Required(CONF_AREA_ID): vol.In(area_choices)}),
         )
 
-    async def async_step_area(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_area(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Edit the selected area profile."""
         if self._selected_area_id is None:
             return await self.async_step_init()
@@ -246,15 +255,11 @@ def _area_schema(existing: dict[str, Any], profile: Any) -> vol.Schema:
             ): vol.In([item.value for item in PlantType]),
             vol.Optional(
                 CONF_PLANT_DESCRIPTION,
-                default=existing.get(
-                    CONF_PLANT_DESCRIPTION, profile.plant_description.value or ""
-                ),
+                default=existing.get(CONF_PLANT_DESCRIPTION, profile.plant_description.value or ""),
             ): str,
             vol.Required(
                 CONF_IRRIGATION_METHOD,
-                default=existing.get(
-                    CONF_IRRIGATION_METHOD, profile.irrigation_method.value.value
-                ),
+                default=existing.get(CONF_IRRIGATION_METHOD, profile.irrigation_method.value.value),
             ): vol.In([item.value for item in IrrigationMethod]),
             vol.Required(
                 CONF_SUN_EXPOSURE,
@@ -336,9 +341,7 @@ def _normalize_profile_input(user_input: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def _validate_range(
-    values: dict[str, Any], field: str, minimum: float, maximum: float
-) -> None:
+def _validate_range(values: dict[str, Any], field: str, minimum: float, maximum: float) -> None:
     """Validate an optional numeric field."""
     value = values.get(field)
     if value == "":

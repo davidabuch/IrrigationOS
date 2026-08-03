@@ -18,7 +18,8 @@ from urllib.parse import urlsplit
 from aiohttp import web
 from homeassistant.components import webhook
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import EVENT_HOMEASSISTANT_STOP, Event, HomeAssistant
+from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.util.aiohttp import MockRequest
 
@@ -243,7 +244,7 @@ class RealtimeObservationManager:
     ) -> web.Response:
         del hass, webhook_id
         self.last_request_header_names = tuple(
-            sorted({str(name).lower() for name in request.headers.keys()})
+            sorted({str(name).lower() for name in request.headers})
         )
         content_length = getattr(request, "content_length", None)
         if content_length is not None and content_length > MAX_WEBHOOK_BYTES:
