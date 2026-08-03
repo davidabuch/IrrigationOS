@@ -82,6 +82,8 @@ class RealtimeObservationManager:
         self.url_source = "none"
         self.remote_health = RealtimeRegistrationHealth(False, 0, 0, "not configured")
         self.last_received_event: dict[str, str] | None = None
+        self.last_rejection_reason: str | None = None
+        self.last_rejection_timestamp: str | None = None
         self.accepted_event_count = 0
         self.rejected_event_count = 0
         self.duplicate_event_count = 0
@@ -219,6 +221,8 @@ class RealtimeObservationManager:
             "url_source": self.url_source,
             "remote_registration": asdict(self.remote_health),
             "last_received_event": self.last_received_event,
+            "last_rejection_reason": self.last_rejection_reason,
+            "last_rejection_timestamp": self.last_rejection_timestamp,
             "accepted_event_count": self.accepted_event_count,
             "rejected_event_count": self.rejected_event_count,
             "duplicate_event_count": self.duplicate_event_count,
@@ -238,29 +242,28 @@ class RealtimeObservationManager:
         del hass, webhook_id
         content_length = getattr(request, "content_length", None)
         if content_length is not None and content_length > MAX_WEBHOOK_BYTES:
-            self.rejected_event_count += 1
-            return web.Response(status=413)
+            return self._reject("content_length_exceeded", 413)
         raw = await request.content.read()
         if len(raw) > MAX_WEBHOOK_BYTES:
-            self.rejected_event_count += 1
-            return web.Response(status=413)
-        if not self._valid_signature(raw, request.headers.get("x-signature")):
-            self.rejected_event_count += 1
-            return web.Response(status=403)
+            return self._reject("body_size_exceeded", 413)
+        signature = request.headers.get("x-signature")
+        if not signature:
+            return self._reject("missing_signature", 403)
+        if not self._valid_signature(raw, signature):
+            return self._reject("signature_mismatch", 403)
         try:
             payload = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError):
-            self.rejected_event_count += 1
-            return web.Response(status=400)
-        if not isinstance(payload, dict) or payload.get("externalId") != self._external_id:
-            self.rejected_event_count += 1
-            return web.Response(status=403)
+            return self._reject("malformed_json", 400)
+        if not isinstance(payload, dict):
+            return self._reject("unexpected_payload_shape", 400)
+        if payload.get("externalId") != self._external_id:
+            return self._reject("authorization_failed", 403)
 
         event_type = _event_type(payload)
         event_subtype = _event_subtype(payload)
         if not _is_observation_event(event_type, event_subtype):
-            self.rejected_event_count += 1
-            return web.Response(status=422)
+            return self._reject("unsupported_event_type", 422)
         event_id = _event_id(payload, raw)
         if event_id in self._seen_event_ids:
             self.duplicate_event_count += 1
@@ -274,6 +277,15 @@ class RealtimeObservationManager:
         }
         await self._coordinator.async_refresh()
         return web.Response(status=204)
+
+    def _reject(self, reason: str, status: int) -> web.Response:
+        """Record a safe webhook rejection reason and return its response."""
+        timestamp = datetime.now(UTC).isoformat()
+        self.rejected_event_count += 1
+        self.last_rejection_reason = reason
+        self.last_rejection_timestamp = timestamp
+        _LOGGER.debug("Rejected IrrigationOS webhook: %s", reason)
+        return web.Response(status=status)
 
     def _ensure_credentials(self) -> None:
         webhook_id = self._entry.data.get(CONF_WEBHOOK_ID)
