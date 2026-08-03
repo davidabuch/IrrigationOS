@@ -80,10 +80,12 @@ class IrrigationOSAreaEntity(IrrigationOSEntity):
         )
 
     def _display_name(self, area: IrrigationArea) -> str:
-        """Return the user-facing name without changing slot identity."""
+        """Return a user override or the canonical slot name."""
         with suppress(KeyError):
-            return self.coordinator.landscape.get_area(area.area_id).display_name.value
-        return area.vendor_name or area.name
+            profile = self.coordinator.landscape.get_area(area.area_id)
+            if profile.display_name.source.value == "user":
+                return profile.display_name.value
+        return f"Zone {area.slot_number}"
 
     def _current_area(self) -> IrrigationArea | None:
         return next(
