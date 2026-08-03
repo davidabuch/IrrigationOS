@@ -179,6 +179,7 @@ class IrrigationOSAreaSummarySensor(IrrigationOSAreaEntity, SensorEntity):
     def __init__(self, coordinator: IrrigationOSCoordinator, area: IrrigationArea) -> None:
         super().__init__(coordinator, area)
         self._attr_unique_id = f"{area.area_id}_observation"
+        self._attr_suggested_object_id = f"zone_{area.slot_number}_observation"
 
     @property
     def native_value(self) -> str:
@@ -244,6 +245,7 @@ class IrrigationOSLandscapeProfileSensor(
     def __init__(self, coordinator: IrrigationOSCoordinator, area: IrrigationArea) -> None:
         super().__init__(coordinator, area)
         self._attr_unique_id = f"{area.area_id}_landscape_profile"
+        self._attr_suggested_object_id = f"zone_{area.slot_number}_landscape_profile"
 
     @property
     def native_value(self) -> str:
@@ -294,10 +296,11 @@ class IrrigationOSLandscapeProfileSensor(
                     profile.application_rate_inches_per_hour.confidence_percent
                 ),
                 "distribution_efficiency": (
-                    profile.distribution_efficiency.confidence_percent
+                    profile.distribution_efficiency.source.value
                 ),
             },
         }
+
 
 class IrrigationOSLastRefreshSensor(IrrigationOSEntity, SensorEntity):
     """Expose the last successful controller refresh."""
