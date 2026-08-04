@@ -1,5 +1,14 @@
 """Environmental Intelligence foundation for IrrigationOS."""
 
+from .engine import (
+    ALGORITHM_SUITE_VERSION,
+    AtmosphericBalanceSummary,
+    DryingClassification,
+    EnvironmentalCalculationPolicy,
+    EnvironmentalMetricSummary,
+    WaterAndDryingAnalysis,
+    analyze_water_and_drying,
+)
 from .models import (
     ENVIRONMENTAL_INTELLIGENCE_SCHEMA_VERSION,
     EnvironmentalAnalysisWindow,
@@ -18,13 +27,18 @@ from .models import (
 )
 
 __all__ = [
+    "ALGORITHM_SUITE_VERSION",
     "ENVIRONMENTAL_INTELLIGENCE_SCHEMA_VERSION",
+    "AtmosphericBalanceSummary",
+    "DryingClassification",
     "EnvironmentalAnalysisWindow",
+    "EnvironmentalCalculationPolicy",
     "EnvironmentalConfidence",
     "EnvironmentalEvidenceReference",
     "EnvironmentalEvidenceType",
     "EnvironmentalExplanation",
     "EnvironmentalIntelligenceReport",
+    "EnvironmentalMetricSummary",
     "EnvironmentalProvenance",
     "EnvironmentalProvenanceType",
     "EnvironmentalSignal",
@@ -32,4 +46,6 @@ __all__ = [
     "EnvironmentalSignalType",
     "EnvironmentalThreshold",
     "EnvironmentalThresholdPolicy",
+    "WaterAndDryingAnalysis",
+    "analyze_water_and_drying",
 ]
