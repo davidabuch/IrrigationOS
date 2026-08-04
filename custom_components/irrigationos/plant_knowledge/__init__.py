@@ -1,5 +1,6 @@
 """Stable public API for the IrrigationOS Plant Knowledge Framework."""
 
+from .curated import build_curated_plant_knowledge_library
 from .library import PlantKnowledgeLibrary, calculate_library_checksum
 from .models import (
     MAX_FUNCTIONAL_GROUP_DEPTH,
@@ -99,6 +100,7 @@ __all__ = (
     "SourceType",
     "Susceptibility",
     "WaterStressSensitivity",
+    "build_curated_plant_knowledge_library",
     "calculate_library_checksum",
     "get_field_contract",
     "resolve_plant_knowledge",
