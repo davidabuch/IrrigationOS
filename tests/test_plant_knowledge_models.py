@@ -31,6 +31,13 @@ def test_stable_enum_values_and_public_field_contracts() -> None:
     contract = PK.get_field_contract("growth.typical_root_depth_meters")
     assert contract.allowed_units == (PK.KnowledgeUnit.METERS,)
     assert contract.range_permitted is True
+    plant_factor = PK.get_field_contract("water.plant_factor")
+    assert plant_factor.value_kind is PK.ClaimValueKind.FLOAT
+    assert plant_factor.allowed_units == (PK.KnowledgeUnit.RATIO,)
+    assert plant_factor.range_permitted is True
+    assert plant_factor.negative_values_permitted is False
+    assert plant_factor.minimum == 0
+    assert plant_factor.maximum == 2
     enum_contract = PK.get_field_contract("visual.leaf_shape")
     assert enum_contract.to_dict()["enum_type"] == "LeafShape"
 
@@ -98,6 +105,13 @@ def test_claim_field_contract_units_ranges_and_negative_temperature() -> None:
         unit=PK.KnowledgeUnit.METERS,
     )
     assert root_depth.unit is PK.KnowledgeUnit.METERS
+    plant_factor = claim(
+        "pk.claim.synthetic_plant_factor",
+        "water.plant_factor",
+        PK.KnowledgeRange(0.1, 0.3, PK.KnowledgeUnit.RATIO),
+        unit=PK.KnowledgeUnit.RATIO,
+    )
+    assert plant_factor.value.maximum == 0.3
     temperature = claim(
         "pk.claim.synthetic_temperature",
         "environment.minimum_temperature_celsius",
@@ -111,6 +125,11 @@ def test_claim_field_contract_units_ranges_and_negative_temperature() -> None:
         replace(
             root_depth,
             value=PK.KnowledgeRange(-1, 1, PK.KnowledgeUnit.METERS),
+        )
+    with pytest.raises(ValueError, match="negative"):
+        replace(
+            plant_factor,
+            value=PK.KnowledgeRange(-0.1, 0.3, PK.KnowledgeUnit.RATIO),
         )
     with pytest.raises(KeyError, match="unsupported"):
         replace(root_depth, field_path="unsupported.future_field")

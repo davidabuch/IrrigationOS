@@ -672,6 +672,15 @@ _FIELD_CONTRACTS = MappingProxyType(
                 maximum=2,
             ),
             PlantKnowledgeFieldContract(
+                "water.plant_factor",
+                ClaimValueKind.FLOAT,
+                (KnowledgeUnit.RATIO,),
+                False,
+                True,
+                minimum=0,
+                maximum=2,
+            ),
+            PlantKnowledgeFieldContract(
                 "water.water_stress_sensitivity",
                 ClaimValueKind.ENUM,
                 (),

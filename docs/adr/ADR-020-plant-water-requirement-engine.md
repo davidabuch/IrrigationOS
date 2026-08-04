@@ -10,10 +10,10 @@
 ADR-018 established immutable, source-backed Plant Knowledge, and ADR-019 established the
 initial curated Plant Knowledge Dataset.
 
-The Plant Knowledge field registry already supports evidence-backed water characteristics,
-including `water.landscape_coefficient`, and declares `water_demand` as a potential consumer
-capability. The current curated profiles intentionally contain identity evidence only. They do not
-yet contain production water-requirement claims.
+The Plant Knowledge field registry supports evidence-backed water characteristics, including
+`water.plant_factor`, and declares `water_demand` as a potential consumer capability. Plant factor
+is immutable general Plant Knowledge, distinct from a property-specific composite landscape
+coefficient.
 
 IrrigationOS now needs a stable boundary for interpreting water-related Plant Knowledge without
 confusing general plant characteristics with current landscape water demand, irrigation runtime,
@@ -72,6 +72,10 @@ It does not mean:
 Actual landscape water demand requires later composition with Environmental Intelligence,
 Landscape Digital Twin data, soil and root-zone characteristics, water-delivery efficiency, and
 operating policy.
+
+A later calculation layer may derive a composite landscape coefficient by combining plant factor
+with landscape density and microclimate context. This foundation neither calculates that composite
+coefficient nor treats a source plant factor as if it were one.
 
 ### Stable input contract
 
@@ -211,12 +215,12 @@ water field paths.
 The initial accepted path is expected to be:
 
 ```text
-water.landscape_coefficient
+water.plant_factor
 ```
 
 Adding another field path requires an explicit compatible policy and schema decision.
 
-The engine does not infer missing coefficients from plant category, common name, taxonomy, visual
+The engine does not infer missing plant factors from plant category, common name, taxonomy, visual
 appearance, functional-group membership, or external services unless a later ADR explicitly adds
 a reviewed deterministic fallback policy.
 

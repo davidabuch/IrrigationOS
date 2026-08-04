@@ -16,16 +16,16 @@ from .functional_groups import curated_functional_groups
 from .profiles import curated_profiles
 from .sources import curated_sources
 
-CURATED_PLANT_KNOWLEDGE_LIBRARY_VERSION = "1.2.0"
-_CURATED_LIBRARY_GENERATED_AT = datetime(2026, 8, 4, 9, 0, tzinfo=UTC)
+CURATED_PLANT_KNOWLEDGE_LIBRARY_VERSION = "1.3.0"
+_CURATED_LIBRARY_GENERATED_AT = datetime(2026, 8, 4, 10, 15, tzinfo=UTC)
 _EMPTY_CHECKSUM = "0" * 64
 
 
 def build_curated_plant_knowledge_library() -> PlantKnowledgeLibrary:
     """Build the immutable, validated curated Plant Knowledge library.
 
-    Capability 6.2C adds the first approved identity claims and published species profiles to the
-    sources and descriptive functional-group hierarchy established by Capability 6.2B.
+    Capability 7.0B adds the first approved, region-scoped water evidence without introducing
+    demand calculations, recommendations, planning, or execution behavior.
     """
     sources = curated_sources()
     claims = curated_claims()
@@ -58,7 +58,7 @@ def build_curated_plant_knowledge_library() -> PlantKnowledgeLibrary:
             mean=round(sum(confidences) / len(confidences), 6),
         ),
         validation_checksum=_EMPTY_CHECKSUM,
-        previous_library_version="1.1.0",
+        previous_library_version="1.2.0",
     )
     manifest = replace(
         manifest,
