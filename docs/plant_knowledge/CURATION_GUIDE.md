@@ -6,8 +6,9 @@ This guide defines the review rules for records added to the canonical Irrigatio
 Knowledge library. ADR-018 defines the domain model and validation rules. ADR-019 defines the
 curated-library boundary and scope.
 
-Capability 6.2A establishes the deterministic library-construction boundary only. It intentionally
-contains no production botanical records.
+Capabilities 6.2A and 6.2B established the deterministic library boundary, approved source
+catalog, and functional-group hierarchy. Capability 6.2C adds the first published,
+production-valid identity profiles without introducing horticultural guidance.
 
 ## Curation principles
 
@@ -72,3 +73,15 @@ Functional groups are descriptive memberships, not claim inheritance. The initia
 woody trees and shrubs, herbaceous groundcovers and ornamental grasses, turfgrasses, succulents,
 California natives, and Mediterranean-climate plants. Cross-cutting groups remain roots because a
 profile may belong to several groups independently.
+
+## Initial identity profile catalog
+
+The v1.2.0 library adds eight published species profiles. Each accepted scientific name is an
+approved identity claim supported by Plants of the World Online. Preferred common names and
+normalized aliases support deterministic exact-name resolution; they do not add horticultural,
+water-demand, health, or recommendation claims.
+
+Profile applicability explicitly identifies the Southern California curation scope. That scope
+describes where the starter catalog is intended to support identity resolution; it is not a claim
+of suitability, water need, irrigation frequency, or regional nativity. Taxonomic claims remain
+explicitly unrestricted because an accepted scientific identity is not region-specific.
