@@ -1,5 +1,6 @@
-"""Stable public API for the Plant Water Requirement foundation."""
+"""Stable public API for Plant Water Requirement assessment."""
 
+from .engine import assess_plant_water_requirement
 from .models import (
     PLANT_WATER_REQUIREMENT_ALGORITHM_VERSION,
     PLANT_WATER_REQUIREMENT_SCHEMA_VERSION,
@@ -38,4 +39,5 @@ __all__ = (
     "PlantWaterRequirementStatus",
     "RangeHandling",
     "RegionalApplicabilityResult",
+    "assess_plant_water_requirement",
 )

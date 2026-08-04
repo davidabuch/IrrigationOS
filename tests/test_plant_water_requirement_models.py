@@ -110,6 +110,7 @@ def assessment(**changes: object) -> Any:
         "confidence": confidence(completeness=1.0, known_required_input_count=2),
         "claim_ids": ("pk.claim.acacia.water",),
         "source_ids": ("pk.source.primary",),
+        "claim_resolution_ids": (),
         "claim_traces": (),
         "policy_id": "water-requirement-policy",
         "policy_version": "1.0.0",
@@ -191,6 +192,16 @@ def test_explanations_and_collections_require_deterministic_order() -> None:
         )
     with pytest.raises(ValueError, match="deterministic ordering"):
         assessment(claim_ids=("pk.claim.z", "pk.claim.a"))
+    with pytest.raises(ValueError, match="immutable tuple"):
+        assessment(claim_resolution_ids=["pk.resolution.water"])
+    with pytest.raises(ValueError, match="duplicates"):
+        assessment(
+            claim_resolution_ids=("pk.resolution.water", "pk.resolution.water")
+        )
+    with pytest.raises(ValueError, match="deterministic ordering"):
+        assessment(claim_resolution_ids=("pk.resolution.z", "pk.resolution.a"))
+    with pytest.raises(ValueError, match="stable identifier"):
+        assessment(claim_resolution_ids=("not a stable identifier",))
 
 
 def test_context_and_request_reject_wrong_domain_types() -> None:
