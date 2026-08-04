@@ -52,3 +52,23 @@ test.
 The initial curated library is authored in typed Python using immutable ADR-018 objects. YAML,
 JSON ingestion, databases, remote updates, and community-submission infrastructure remain deferred
 until their requirements are explicitly designed.
+
+## Initial canonical source catalog
+
+The v1.1.0 library registers a deliberately small approved source catalog before adding claims:
+
+- Calflora for California wild-plant identity, native status, and distribution support;
+- Plants of the World Online for accepted names, synonyms, and broad native ranges;
+- USDA PLANTS for United States identity, native-status, and distribution support; and
+- WUCOLS IV for California regional landscape water-use classifications.
+
+Registration does not authorize bulk copying. Curators must create independently normalized claims,
+retain source attribution, respect the recorded reuse notes, and avoid importing source text,
+images, or database payloads.
+
+## Initial functional-group hierarchy
+
+Functional groups are descriptive memberships, not claim inheritance. The initial hierarchy covers
+woody trees and shrubs, herbaceous groundcovers and ornamental grasses, turfgrasses, succulents,
+California natives, and Mediterranean-climate plants. Cross-cutting groups remain roots because a
+profile may belong to several groups independently.
