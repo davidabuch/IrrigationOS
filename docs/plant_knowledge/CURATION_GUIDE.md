@@ -8,7 +8,8 @@ curated-library boundary and scope.
 
 Capabilities 6.2A and 6.2B established the deterministic library boundary, approved source
 catalog, and functional-group hierarchy. Capability 6.2C adds the first published,
-production-valid identity profiles without introducing horticultural guidance.
+production-valid identity profiles. Capability 7.0B adds a deliberately partial first set of
+reviewed water evidence without introducing runtime water-demand calculations.
 
 ## Curation principles
 
@@ -85,3 +86,32 @@ Profile applicability explicitly identifies the Southern California curation sco
 describes where the starter catalog is intended to support identity resolution; it is not a claim
 of suitability, water need, irrigation frequency, or regional nativity. Taxonomic claims remain
 explicitly unrestricted because an accepted scientific identity is not region-specific.
+
+## Initial curated water evidence
+
+The v1.3.0 library registers WUCOLS V as a separate approved source instead of rewriting the
+immutable WUCOLS IV source record. The new claims normalize only values explicitly published by
+WUCOLS into the closed `water.plant_factor` ratio contract:
+
+- `Cynodon dactylon`: scalar `0.60` for California, preserving the source's explicitly labeled
+  optimal-irrigation context for common bermudagrass;
+- `Dymondia margaretae`: range `0.10-0.30` for WUCOLS Regions 3 (South Coastal) and 4 (South
+  Inland);
+- `Muhlenbergia rigens`: range `0.10-0.30` for WUCOLS Regions 3 and 4; and
+- `Rhaphiolepis indica`: range `0.10-0.30` for WUCOLS Region 3 only. Region 4's separate Moderate
+  classification is not merged into the Region 3 claim.
+
+The range claims preserve the WUCOLS Low plant-factor band without selecting a midpoint. Plant
+factor is immutable general Plant Knowledge: it describes the source-backed relative water factor
+for a plant type under the claim's applicability, not a property-specific result. A future domain
+will calculate a composite landscape coefficient by combining plant factor with landscape density
+and microclimate context. These curated records calculate no composite landscape coefficient, ET
+demand, runtime, frequency, or recommendation.
+
+Four profiles intentionally remain without water evidence. WUCOLS reports `Agave attenuata`,
+`Heteromeles arbutifolia`, and `Quercus agrifolia` as Very Low (`<0.10`) in South Coastal Region 3;
+the current closed `KnowledgeRange` model cannot preserve that strict open upper bound without
+changing its meaning. The current WUCOLS dataset has cultivar records but no species-level
+`Lagerstroemia indica` record, so cultivar evidence is not promoted to the species profile. Missing
+water evidence remains missing rather than being inferred from category, functional group, common
+name, or a related taxon.

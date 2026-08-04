@@ -21,6 +21,12 @@ _IDENTITY_CONSUMERS = (
     ConsumerCapability.LEARNING,
     ConsumerCapability.VISUAL_IDENTIFICATION,
 )
+_WATER_CONSUMERS = (
+    ConsumerCapability.LEARNING,
+    ConsumerCapability.VISUAL_IDENTIFICATION,
+    ConsumerCapability.WATER_DEMAND,
+)
+_WATER_REVIEWED_AT = datetime(2026, 8, 4, 10, 0, tzinfo=UTC)
 _SOUTHERN_CALIFORNIA_SCOPE = RegionalApplicability(
     scope=RegionalScope.REGIONAL,
     countries=("US",),
@@ -42,7 +48,10 @@ def _published_species_profile(
     broad_category: PlantCategory,
     functional_group_ids: tuple[str, ...],
     claim_id: str,
+    water_claim_id: str | None = None,
 ) -> PlantKnowledgeProfile:
+    has_water_evidence = water_claim_id is not None
+    claim_ids = tuple(sorted((claim_id,) if water_claim_id is None else (claim_id, water_claim_id)))
     return PlantKnowledgeProfile(
         profile_id=profile_id,
         preferred_common_name=preferred_common_name,
@@ -53,14 +62,16 @@ def _published_species_profile(
         resolution_level=ProfileResolutionLevel.SPECIES,
         parent_profile_id=None,
         functional_group_ids=functional_group_ids,
-        claim_ids=(claim_id,),
+        claim_ids=claim_ids,
         regional_applicability=_SOUTHERN_CALIFORNIA_SCOPE,
-        intended_consumer_capabilities=_IDENTITY_CONSUMERS,
+        intended_consumer_capabilities=(
+            _WATER_CONSUMERS if has_water_evidence else _IDENTITY_CONSUMERS
+        ),
         schema_version=PLANT_KNOWLEDGE_SCHEMA_VERSION,
-        profile_version=1,
+        profile_version=2 if has_water_evidence else 1,
         lifecycle_state=LifecycleState.PUBLISHED,
         created_at=_CREATED_AT,
-        reviewed_at=_REVIEWED_AT,
+        reviewed_at=_WATER_REVIEWED_AT if has_water_evidence else _REVIEWED_AT,
     )
 
 
@@ -87,6 +98,7 @@ def curated_profiles() -> tuple[PlantKnowledgeProfile, ...]:
             broad_category=PlantCategory.TURF,
             functional_group_ids=("pk.group.turfgrass",),
             claim_id="pk.claim.cynodon_dactylon.scientific_name",
+            water_claim_id="pk.claim.cynodon_dactylon.plant_factor",
         ),
         _published_species_profile(
             profile_id="pk.species.dymondia_margaretae",
@@ -99,6 +111,7 @@ def curated_profiles() -> tuple[PlantKnowledgeProfile, ...]:
                 "pk.group.mediterranean_climate",
             ),
             claim_id="pk.claim.dymondia_margaretae.scientific_name",
+            water_claim_id="pk.claim.dymondia_margaretae.plant_factor",
         ),
         _published_species_profile(
             profile_id="pk.species.heteromeles_arbutifolia",
@@ -134,6 +147,7 @@ def curated_profiles() -> tuple[PlantKnowledgeProfile, ...]:
                 "pk.group.mediterranean_climate",
             ),
             claim_id="pk.claim.muhlenbergia_rigens.scientific_name",
+            water_claim_id="pk.claim.muhlenbergia_rigens.plant_factor",
         ),
         _published_species_profile(
             profile_id="pk.species.quercus_agrifolia",
@@ -159,5 +173,6 @@ def curated_profiles() -> tuple[PlantKnowledgeProfile, ...]:
                 "pk.group.woody.shrub",
             ),
             claim_id="pk.claim.rhaphiolepis_indica.scientific_name",
+            water_claim_id="pk.claim.rhaphiolepis_indica.plant_factor",
         ),
     )

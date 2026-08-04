@@ -124,4 +124,29 @@ def curated_sources() -> tuple[PlantKnowledgeSource, ...]:
             ),
             notes="Intended for California regional landscape water-use classifications.",
         ),
+        PlantKnowledgeSource(
+            source_id="pk.source.wucols_v",
+            organization="University of California, Davis",
+            title="Water Use Classification of Landscape Species V",
+            authors=(),
+            publication_date=date(2025, 1, 1),
+            accessed_date=_ACCESSED_DATE,
+            citation=(
+                "University of California, Davis and California Department of Water Resources. "
+                "Water Use Classification of Landscape Species V."
+            ),
+            source_type=SourceType.UNIVERSITY_EXTENSION,
+            geographic_scope=("California",),
+            review_state=ReviewState.APPROVED,
+            review_history=_approved_review_history(),
+            url="https://wucols.ucdavis.edu/",
+            licensing_notes=(
+                "Use independently normalized plant-factor classifications with citation; do "
+                "not reproduce source tables, photographs, or substantial explanatory text."
+            ),
+            notes=(
+                "Intended for current California regional plant-factor classifications and the "
+                "published turfgrass factors linked from the WUCOLS site."
+            ),
+        ),
     )

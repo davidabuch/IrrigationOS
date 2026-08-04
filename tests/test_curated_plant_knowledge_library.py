@@ -11,6 +11,7 @@ _EXPECTED_SOURCE_IDS = (
     "pk.source.kew_powo",
     "pk.source.usda_plants",
     "pk.source.wucols_iv",
+    "pk.source.wucols_v",
 )
 _EXPECTED_GROUP_IDS = (
     "pk.group.california_native",
@@ -26,12 +27,16 @@ _EXPECTED_GROUP_IDS = (
 )
 _EXPECTED_CLAIM_IDS = (
     "pk.claim.agave_attenuata.scientific_name",
+    "pk.claim.cynodon_dactylon.plant_factor",
     "pk.claim.cynodon_dactylon.scientific_name",
+    "pk.claim.dymondia_margaretae.plant_factor",
     "pk.claim.dymondia_margaretae.scientific_name",
     "pk.claim.heteromeles_arbutifolia.scientific_name",
     "pk.claim.lagerstroemia_indica.scientific_name",
+    "pk.claim.muhlenbergia_rigens.plant_factor",
     "pk.claim.muhlenbergia_rigens.scientific_name",
     "pk.claim.quercus_agrifolia.scientific_name",
+    "pk.claim.rhaphiolepis_indica.plant_factor",
     "pk.claim.rhaphiolepis_indica.scientific_name",
 )
 _EXPECTED_PROFILE_IDS = (
@@ -54,22 +59,28 @@ _EXPECTED_IDENTITIES = {
     "pk.species.quercus_agrifolia": ("Quercus agrifolia", "Coast live oak"),
     "pk.species.rhaphiolepis_indica": ("Rhaphiolepis indica", "Indian hawthorn"),
 }
-_EXPECTED_CHECKSUM = "36e347349ca2107d9754346e209bc1668dc66a9a5856044b4dfb1db19ae5c1d8"
+_EXPECTED_CHECKSUM = "640fb7a1e4c2520f44ea2fb691fde23e0cd1c78c4f0708e83d25e4a7f5a22636"
+_EXPECTED_WATER_PROFILE_IDS = {
+    "pk.species.cynodon_dactylon",
+    "pk.species.dymondia_margaretae",
+    "pk.species.muhlenbergia_rigens",
+    "pk.species.rhaphiolepis_indica",
+}
 
 
 def test_curated_library_builds_with_published_identity_profiles() -> None:
-    """The curated boundary builds one fully validated v1.2.0 aggregate."""
+    """The curated boundary builds one fully validated v1.3.0 aggregate."""
     library = PK.build_curated_plant_knowledge_library()
 
-    assert library.manifest.library_version == "1.2.0"
-    assert library.manifest.previous_library_version == "1.1.0"
+    assert library.manifest.library_version == "1.3.0"
+    assert library.manifest.previous_library_version == "1.2.0"
     assert library.manifest.schema_version == PK.PLANT_KNOWLEDGE_SCHEMA_VERSION
-    assert library.manifest.source_count == 4
+    assert library.manifest.source_count == 5
     assert library.manifest.functional_group_count == 10
     assert library.manifest.profile_count == 8
     assert library.manifest.species_count == 8
     assert library.manifest.published_profile_count == 8
-    assert library.manifest.claim_count == 8
+    assert library.manifest.claim_count == 12
     assert library.manifest.claim_resolution_count == 0
     assert tuple(source.source_id for source in library.sources) == _EXPECTED_SOURCE_IDS
     assert tuple(group.group_id for group in library.functional_groups) == _EXPECTED_GROUP_IDS
@@ -94,7 +105,7 @@ def test_curated_sources_are_approved_and_auditable() -> None:
 
 
 def test_curated_profiles_and_claims_satisfy_publication_requirements() -> None:
-    """All initial profiles use one approved POWO-backed identity claim."""
+    """Every profile retains its approved POWO-backed identity claim."""
     library = PK.build_curated_plant_knowledge_library()
     claims = {claim.claim_id: claim for claim in library.claims}
 
@@ -106,8 +117,11 @@ def test_curated_profiles_and_claims_satisfy_publication_requirements() -> None:
         assert profile.preferred_common_name == preferred_common_name
         assert profile.aliases
         assert profile.reviewed_at is not None
-        assert len(profile.claim_ids) == 1
-        identity_claim = claims[profile.claim_ids[0]]
+        identity_claim = next(
+            claims[claim_id]
+            for claim_id in profile.claim_ids
+            if claims[claim_id].field_path == "identity.scientific_name"
+        )
         assert identity_claim.field_path == "identity.scientific_name"
         assert identity_claim.value == scientific_name
         assert identity_claim.review_state is PK.ReviewState.APPROVED
@@ -116,6 +130,14 @@ def test_curated_profiles_and_claims_satisfy_publication_requirements() -> None:
         assert set(identity_claim.intended_consumer_capabilities) & set(
             profile.intended_consumer_capabilities
         )
+        if profile.profile_id in _EXPECTED_WATER_PROFILE_IDS:
+            assert profile.profile_version == 2
+            assert PK.ConsumerCapability.WATER_DEMAND in profile.intended_consumer_capabilities
+            assert len(profile.claim_ids) == 2
+        else:
+            assert profile.profile_version == 1
+            assert PK.ConsumerCapability.WATER_DEMAND not in profile.intended_consumer_capabilities
+            assert len(profile.claim_ids) == 1
 
 
 def test_curated_ids_and_collections_are_unique_and_canonically_ordered() -> None:
@@ -157,7 +179,7 @@ def test_curated_functional_group_memberships_resolve_to_existing_groups() -> No
 
 
 def test_curated_regional_applicability_is_explicit() -> None:
-    """Profile curation scope is regional while taxonomy claims are explicitly broad."""
+    """Profile, water, and taxonomy applicability retain separate explicit scopes."""
     library = PK.build_curated_plant_knowledge_library()
 
     for profile in library.profiles:
@@ -169,10 +191,127 @@ def test_curated_regional_applicability_is_explicit() -> None:
             "southern_california_mediterranean",
         )
         assert applicability.notes is not None
+    identity_claims = tuple(
+        claim for claim in library.claims if claim.field_path == "identity.scientific_name"
+    )
+    water_claims = tuple(
+        claim for claim in library.claims if claim.field_path == "water.plant_factor"
+    )
     assert all(
         claim.regional_applicability.scope is PK.RegionalScope.UNRESTRICTED
-        for claim in library.claims
+        for claim in identity_claims
     )
+    assert all(
+        claim.regional_applicability.scope is PK.RegionalScope.REGIONAL
+        and claim.regional_applicability.countries == ("US",)
+        and claim.regional_applicability.states_or_provinces == ("California",)
+        for claim in water_claims
+    )
+
+
+def test_curated_water_evidence_preserves_source_values_and_context() -> None:
+    """Water claims preserve scalar-versus-range form and exact WUCOLS regional scope."""
+    library = PK.build_curated_plant_knowledge_library()
+    sources = {source.source_id: source for source in library.sources}
+    water_claims = {
+        claim.claim_id: claim
+        for claim in library.claims
+        if claim.field_path == "water.plant_factor"
+    }
+
+    assert set(water_claims) == {
+        "pk.claim.cynodon_dactylon.plant_factor",
+        "pk.claim.dymondia_margaretae.plant_factor",
+        "pk.claim.muhlenbergia_rigens.plant_factor",
+        "pk.claim.rhaphiolepis_indica.plant_factor",
+    }
+    bermudagrass = water_claims["pk.claim.cynodon_dactylon.plant_factor"]
+    assert bermudagrass.value == 0.6
+    assert not isinstance(bermudagrass.value, PK.KnowledgeRange)
+    assert bermudagrass.regional_applicability.wucols_regions == ()
+    assert bermudagrass.evidence_grade is PK.EvidenceGrade.HIGH
+    assert bermudagrass.confidence == 0.9
+
+    expected_regions = {
+        "pk.claim.dymondia_margaretae.plant_factor": (
+            "3_south_coastal",
+            "4_south_inland",
+        ),
+        "pk.claim.muhlenbergia_rigens.plant_factor": (
+            "3_south_coastal",
+            "4_south_inland",
+        ),
+        "pk.claim.rhaphiolepis_indica.plant_factor": (
+            "3_south_coastal",
+        ),
+    }
+    for claim_id, regions in expected_regions.items():
+        claim = water_claims[claim_id]
+        assert claim.value == PK.KnowledgeRange(
+            minimum=0.1,
+            maximum=0.3,
+            unit=PK.KnowledgeUnit.RATIO,
+        )
+        assert claim.regional_applicability.wucols_regions == regions
+        assert claim.evidence_grade is PK.EvidenceGrade.EXPERT_CONSENSUS
+        assert claim.confidence == 0.85
+
+    for claim in water_claims.values():
+        assert claim.unit is PK.KnowledgeUnit.RATIO
+        assert claim.review_state is PK.ReviewState.APPROVED
+        assert claim.reviewed_at is not None
+        assert claim.source_ids == ("pk.source.wucols_v",)
+        assert sources[claim.source_ids[0]].review_state is PK.ReviewState.APPROVED
+        assert claim.intended_consumer_capabilities == (
+            PK.ConsumerCapability.WATER_DEMAND,
+        )
+
+
+def test_curated_coverage_is_explicit_and_does_not_force_water_evidence() -> None:
+    """Coverage reports identity and water evidence without manufacturing missing claims."""
+    library = PK.build_curated_plant_knowledge_library()
+    claims = {claim.claim_id: claim for claim in library.claims}
+    published = tuple(
+        profile
+        for profile in library.profiles
+        if profile.lifecycle_state is PK.LifecycleState.PUBLISHED
+    )
+    profiles_with_identity = {
+        profile.profile_id
+        for profile in published
+        if any(
+            claims[claim_id].field_path == "identity.scientific_name"
+            for claim_id in profile.claim_ids
+        )
+    }
+    profiles_with_water = {
+        profile.profile_id
+        for profile in published
+        if any(
+            claims[claim_id].field_path == "water.plant_factor"
+            for claim_id in profile.claim_ids
+        )
+    }
+
+    assert len(published) == 8
+    assert len(profiles_with_identity) == 8
+    assert profiles_with_water == _EXPECTED_WATER_PROFILE_IDS
+    assert {profile.profile_id for profile in published} - profiles_with_water == {
+        "pk.species.agave_attenuata",
+        "pk.species.heteromeles_arbutifolia",
+        "pk.species.lagerstroemia_indica",
+        "pk.species.quercus_agrifolia",
+    }
+    assert sum(
+        claim.field_path == "identity.scientific_name" for claim in library.claims
+    ) == 8
+    assert sum(
+        claim.field_path == "water.plant_factor" for claim in library.claims
+    ) == 4
+    assert {claim.field_path for claim in library.claims} == {
+        "identity.scientific_name",
+        "water.plant_factor",
+    }
 
 
 def test_curated_scientific_common_and_alias_resolution() -> None:
@@ -227,10 +366,10 @@ def test_curated_manifest_counts_statistics_and_checksum_match_content() -> None
     assert manifest.genus_count == 0
     assert manifest.cultivar_count == 0
     assert manifest.confidence_statistics == PK.ClaimConfidenceStatistics(
-        claim_count=8,
-        minimum=1.0,
+        claim_count=12,
+        minimum=0.85,
         maximum=1.0,
-        mean=1.0,
+        mean=0.954167,
     )
     assert manifest.validation_checksum == _EXPECTED_CHECKSUM
     assert manifest.validation_checksum == PK.calculate_library_checksum(

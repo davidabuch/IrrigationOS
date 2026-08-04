@@ -49,7 +49,7 @@ def policy(**changes: object) -> Any:
     values: dict[str, object] = {
         "policy_id": "water-requirement-policy",
         "policy_version": "1.0.0",
-        "accepted_claim_paths": ("water.landscape_coefficient",),
+        "accepted_claim_paths": ("water.plant_factor",),
         "minimum_review_state": PK.ReviewState.APPROVED,
         "minimum_evidence_grade": PK.EvidenceGrade.MODERATE,
         "minimum_confidence": 0.75,
@@ -129,7 +129,7 @@ def test_request_is_immutable_and_serializes_deterministically() -> None:
     assert first == current.to_dict()
     assert current.selected_profile_id is not None
     assert first["knowledge_resolution"]["selected_profile_id"] is not None
-    assert first["policy"]["accepted_claim_paths"] == ["water.landscape_coefficient"]
+    assert first["policy"]["accepted_claim_paths"] == ["water.plant_factor"]
     with pytest.raises(FrozenInstanceError):
         current.__setattr__("request_id", "changed")
 
