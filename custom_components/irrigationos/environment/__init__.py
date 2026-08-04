@@ -49,3 +49,19 @@ __all__ = [
     "WaterAndDryingAnalysis",
     "analyze_water_and_drying",
 ]
+
+from .signals import (
+    SIGNAL_ALGORITHM_VERSION,
+    SIGNAL_CONFIDENCE_POLICY_VERSION,
+    EnvironmentalSignalAnalysis,
+    EnvironmentalSignalPolicy,
+    analyze_environmental_signals,
+)
+
+__all__ += [
+    "SIGNAL_ALGORITHM_VERSION",
+    "SIGNAL_CONFIDENCE_POLICY_VERSION",
+    "EnvironmentalSignalAnalysis",
+    "EnvironmentalSignalPolicy",
+    "analyze_environmental_signals",
+]
