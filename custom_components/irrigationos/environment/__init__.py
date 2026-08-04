@@ -1,0 +1,67 @@
+"""Environmental Intelligence foundation for IrrigationOS."""
+
+from .engine import (
+    ALGORITHM_SUITE_VERSION,
+    AtmosphericBalanceSummary,
+    DryingClassification,
+    EnvironmentalCalculationPolicy,
+    EnvironmentalMetricSummary,
+    WaterAndDryingAnalysis,
+    analyze_water_and_drying,
+)
+from .models import (
+    ENVIRONMENTAL_INTELLIGENCE_SCHEMA_VERSION,
+    EnvironmentalAnalysisWindow,
+    EnvironmentalConfidence,
+    EnvironmentalEvidenceReference,
+    EnvironmentalEvidenceType,
+    EnvironmentalExplanation,
+    EnvironmentalIntelligenceReport,
+    EnvironmentalProvenance,
+    EnvironmentalProvenanceType,
+    EnvironmentalSignal,
+    EnvironmentalSignalClassification,
+    EnvironmentalSignalType,
+    EnvironmentalThreshold,
+    EnvironmentalThresholdPolicy,
+)
+
+__all__ = [
+    "ALGORITHM_SUITE_VERSION",
+    "ENVIRONMENTAL_INTELLIGENCE_SCHEMA_VERSION",
+    "AtmosphericBalanceSummary",
+    "DryingClassification",
+    "EnvironmentalAnalysisWindow",
+    "EnvironmentalCalculationPolicy",
+    "EnvironmentalConfidence",
+    "EnvironmentalEvidenceReference",
+    "EnvironmentalEvidenceType",
+    "EnvironmentalExplanation",
+    "EnvironmentalIntelligenceReport",
+    "EnvironmentalMetricSummary",
+    "EnvironmentalProvenance",
+    "EnvironmentalProvenanceType",
+    "EnvironmentalSignal",
+    "EnvironmentalSignalClassification",
+    "EnvironmentalSignalType",
+    "EnvironmentalThreshold",
+    "EnvironmentalThresholdPolicy",
+    "WaterAndDryingAnalysis",
+    "analyze_water_and_drying",
+]
+
+from .signals import (
+    SIGNAL_ALGORITHM_VERSION,
+    SIGNAL_CONFIDENCE_POLICY_VERSION,
+    EnvironmentalSignalAnalysis,
+    EnvironmentalSignalPolicy,
+    analyze_environmental_signals,
+)
+
+__all__ += [
+    "SIGNAL_ALGORITHM_VERSION",
+    "SIGNAL_CONFIDENCE_POLICY_VERSION",
+    "EnvironmentalSignalAnalysis",
+    "EnvironmentalSignalPolicy",
+    "analyze_environmental_signals",
+]
