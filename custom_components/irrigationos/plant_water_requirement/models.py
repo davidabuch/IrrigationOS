@@ -20,7 +20,7 @@ from ..plant_knowledge import (
     Season,
 )
 
-PLANT_WATER_REQUIREMENT_SCHEMA_VERSION = 1
+PLANT_WATER_REQUIREMENT_SCHEMA_VERSION = 2
 PLANT_WATER_REQUIREMENT_ALGORITHM_VERSION = "1.0.0"
 
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
@@ -152,6 +152,12 @@ def _validate_sorted_unique_text(name: str, values: tuple[str, ...]) -> None:
         raise ValueError(f"{name} must not contain duplicates")
     if normalized != tuple(sorted(normalized)):
         raise ValueError(f"{name} must use deterministic ordering")
+
+
+def _validate_sorted_unique_identifiers(name: str, values: tuple[str, ...]) -> None:
+    _validate_sorted_unique_text(name, values)
+    for value in values:
+        _validate_identifier(name, value)
 
 
 def _serialize(value: object) -> Any:
@@ -343,6 +349,7 @@ class PlantWaterRequirementAssessment(SerializablePlantWaterRequirementModel):
     confidence: PlantWaterRequirementConfidence
     claim_ids: tuple[str, ...]
     source_ids: tuple[str, ...]
+    claim_resolution_ids: tuple[str, ...]
     claim_traces: tuple[InheritedClaimTrace, ...]
     policy_id: str
     policy_version: str
@@ -381,6 +388,9 @@ class PlantWaterRequirementAssessment(SerializablePlantWaterRequirementModel):
             raise ValueError("confidence must use PlantWaterRequirementConfidence")
         _validate_sorted_unique_text("claim_ids", self.claim_ids)
         _validate_sorted_unique_text("source_ids", self.source_ids)
+        _validate_sorted_unique_identifiers(
+            "claim_resolution_ids", self.claim_resolution_ids
+        )
         if any(not isinstance(trace, InheritedClaimTrace) for trace in self.claim_traces):
             raise ValueError("claim_traces must contain InheritedClaimTrace values")
         _validate_identifier("policy_id", self.policy_id)

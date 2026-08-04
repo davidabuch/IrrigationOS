@@ -137,6 +137,7 @@ It contains:
 - applicable region and season;
 - confidence and completeness kept separate;
 - source and claim references;
+- typed conflict-resolution references in `claim_resolution_ids`;
 - inherited and overridden claim traces;
 - policy and algorithm versions;
 - machine-readable reason codes;
@@ -229,6 +230,19 @@ Adding another field path requires an explicit compatible policy and schema deci
 The engine does not infer missing plant factors from plant category, common name, taxonomy, visual
 appearance, functional-group membership, or external services unless a later ADR explicitly adds
 a reviewed deterministic fallback policy.
+
+The initial engine derives an assessment ID as
+`pwr.assessment.<sha256-of-UTF-8-request-id>`, preserves the request creation timestamp, and never
+uses a clock, random value, UUID, or hidden library lookup. Completeness uses two required inputs:
+one admissible plant-factor value and its applicability evaluation. A match, unrestricted scope,
+or explicit mismatch supplies the applicability input; partial or unavailable regional context
+does not. Non-success outcomes report zero known inputs, zero completeness, and zero confidence.
+
+Review-state admission is an explicit lifecycle threshold: approved evidence satisfies approved or
+reviewed thresholds, while reviewed evidence does not satisfy an approved threshold. Rejected and
+deprecated evidence is never admissible. Evidence grades use an explicit category table rather
+than enum order: expert consensus satisfies a moderate threshold but remains distinct from high,
+and provisional evidence satisfies only a provisional threshold.
 
 ### Separation from other domains
 
