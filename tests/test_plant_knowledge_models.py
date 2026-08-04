@@ -23,6 +23,7 @@ def test_models_are_frozen_slotted_and_deterministically_serializable() -> None:
 
 def test_stable_enum_values_and_public_field_contracts() -> None:
     """Stable API values and supported fields remain explicit."""
+    assert PK.PLANT_KNOWLEDGE_SCHEMA_VERSION == 2
     assert PK.SourceType.UNIVERSITY_EXTENSION.value == "university_extension"
     assert PK.EvidenceGrade.EXPERT_CONSENSUS.value == "expert_consensus"
     assert PK.ProfileResolutionLevel.UNKNOWN_FALLBACK.value == "unknown_fallback"
@@ -191,7 +192,7 @@ def test_profile_identity_alias_and_lifecycle_requirements() -> None:
         claim_ids=(),
         regional_applicability=REGION,
         intended_consumer_capabilities=(PK.ConsumerCapability.LEARNING,),
-        schema_version=1,
+        schema_version=PK.PLANT_KNOWLEDGE_SCHEMA_VERSION,
         profile_version=1,
         lifecycle_state=PK.LifecycleState.DRAFT,
         created_at=NOW,

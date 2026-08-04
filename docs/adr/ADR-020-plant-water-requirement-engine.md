@@ -93,6 +93,12 @@ The foundation defines an immutable `PlantWaterRequirementRequest` containing:
 The request must retain the selected knowledge profile ID and effective claim trace. It must not
 copy or mutate canonical Plant Knowledge.
 
+The contained effective claims are the complete immutable evidence snapshots defined by ADR-018.
+The engine consumes their values, units, claim-specific provenance, quality, confidence, regional
+applicability, consumer metadata, versions, inheritance state, and conflict-resolution metadata
+directly. It must not perform a hidden lookup against the originating curated or runtime
+`PlantKnowledgeLibrary`.
+
 The initial foundation may define context vocabulary without using every field in the first
 calculation algorithm. Unused fields must remain explicit and must not silently affect results.
 

@@ -59,7 +59,7 @@ _EXPECTED_IDENTITIES = {
     "pk.species.quercus_agrifolia": ("Quercus agrifolia", "Coast live oak"),
     "pk.species.rhaphiolepis_indica": ("Rhaphiolepis indica", "Indian hawthorn"),
 }
-_EXPECTED_CHECKSUM = "640fb7a1e4c2520f44ea2fb691fde23e0cd1c78c4f0708e83d25e4a7f5a22636"
+_EXPECTED_CHECKSUM = "954e2dc38f4a905764997981d84e569e1c921b29a1e41b3f951e9b49856ddeb9"
 _EXPECTED_WATER_PROFILE_IDS = {
     "pk.species.cynodon_dactylon",
     "pk.species.dymondia_margaretae",
@@ -69,11 +69,11 @@ _EXPECTED_WATER_PROFILE_IDS = {
 
 
 def test_curated_library_builds_with_published_identity_profiles() -> None:
-    """The curated boundary builds one fully validated v1.3.0 aggregate."""
+    """The curated boundary builds one fully validated v2.0.0 aggregate."""
     library = PK.build_curated_plant_knowledge_library()
 
-    assert library.manifest.library_version == "1.3.0"
-    assert library.manifest.previous_library_version == "1.2.0"
+    assert library.manifest.library_version == "2.0.0"
+    assert library.manifest.previous_library_version == "1.3.0"
     assert library.manifest.schema_version == PK.PLANT_KNOWLEDGE_SCHEMA_VERSION
     assert library.manifest.source_count == 5
     assert library.manifest.functional_group_count == 10
