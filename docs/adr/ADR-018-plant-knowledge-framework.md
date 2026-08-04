@@ -232,6 +232,15 @@ fallback levels, profile inheritance chain, effective claims with their originat
 inherited and overridden claim traces, confidence, ambiguity, and an optional verification action.
 When a conflict resolution supplies a range, the effective claim records both that range and the
 resolution ID while retaining a deterministic supporting claim as its provenance anchor.
+
+Effective claims are complete immutable evidence snapshots for downstream consumers. Each snapshot
+contains its resolved scalar, enum, or `KnowledgeRange` value; unit; claim-specific sources; review
+state; evidence grade; confidence; regional applicability; intended consumers; claim version;
+inheritance state; and complete conflict-resolution metadata when applicable. A consumer can
+interpret an effective claim after resolution without retaining or querying the originating
+`PlantKnowledgeLibrary`. This additive evidence changes the stable serialized resolution contract,
+so Plant Knowledge schema version 2 supersedes schema version 1.
+
 The explanation includes a stable reason code, short human summary, algorithm version, candidate
 references, evidence-source references, regional matches/unavailable attributes/mismatches, and
 inherited/overridden claim references.

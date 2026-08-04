@@ -121,7 +121,7 @@ def profile(
         claim_ids=claim_ids,
         regional_applicability=region,
         intended_consumer_capabilities=(PK.ConsumerCapability.VISUAL_IDENTIFICATION,),
-        schema_version=1,
+        schema_version=PK.PLANT_KNOWLEDGE_SCHEMA_VERSION,
         profile_version=1,
         lifecycle_state=state,
         created_at=NOW,
@@ -302,7 +302,7 @@ def build_library(**overrides: tuple[Any, ...]) -> Any:
         )
     )
     manifest = PK.PlantKnowledgeManifest(
-        schema_version=1,
+        schema_version=PK.PLANT_KNOWLEDGE_SCHEMA_VERSION,
         library_version="1.0.0",
         generated_at=NOW,
         supported_climate_regions=climate_regions,

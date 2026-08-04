@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Any
 
 import pytest
 
 from tests.plant_knowledge_fixtures import (
     PK,
     REGION,
+    approved_source,
     base_components,
     build_library,
     claim,
@@ -102,6 +104,20 @@ def test_user_confirmed_override_has_highest_precedence() -> None:
 
 def test_resolution_preserves_inheritance_origins_and_override_traces() -> None:
     """Child claims override by field while every inherited origin remains visible."""
+    inherited_result = PK.resolve_plant_knowledge(
+        build_library(),
+        request(scientific_name="Examplegenus ficticia"),
+    )
+    inherited_visual = next(
+        item
+        for item in inherited_result.effective_claims
+        if item.field_path == "visual.leaf_shape"
+    )
+    assert inherited_visual.value is PK.LeafShape.UNKNOWN
+    assert inherited_visual.originating_profile_id == "pk.category.synthetic_tree"
+    assert inherited_visual.inherited is True
+    assert inherited_visual.source_ids == ("pk.source.synthetic_approved",)
+
     result = PK.resolve_plant_knowledge(
         build_library(),
         request(scientific_name="Examplegenus ficticia", cultivar="Demo"),
@@ -116,6 +132,16 @@ def test_resolution_preserves_inheritance_origins_and_override_traces() -> None:
         item for item in result.effective_claims if item.field_path == "visual.leaf_shape"
     )
     assert visual.claim_id == "pk.claim.cultivar_visual"
+    assert visual.value is PK.LeafShape.COMPOUND
+    assert visual.source_ids == ("pk.source.synthetic_approved",)
+    assert visual.review_state is PK.ReviewState.APPROVED
+    assert visual.evidence_grade is PK.EvidenceGrade.MODERATE
+    assert visual.confidence == 0.9
+    assert visual.regional_applicability == REGION
+    assert visual.intended_consumer_capabilities == (
+        PK.ConsumerCapability.VISUAL_IDENTIFICATION,
+    )
+    assert visual.claim_version == 1
     assert visual.originating_profile_id == "pk.cultivar.example_plant.demo"
     assert visual.inherited is False
     category_trace = next(
@@ -125,6 +151,83 @@ def test_resolution_preserves_inheritance_origins_and_override_traces() -> None:
     assert category_trace.overridden_by_claim_id == "pk.claim.cultivar_visual"
     assert "pk.claim.category_visual" in result.explanation.overridden_claim_ids
     assert result.explanation.evidence_source_ids == ("pk.source.synthetic_approved",)
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        0.6,
+        PK.KnowledgeRange(0.1, 0.3, PK.KnowledgeUnit.RATIO),
+    ),
+)
+def test_effective_claim_is_a_self_contained_deterministic_snapshot(
+    value: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Scalar and range evidence survive resolution without a subsequent library lookup."""
+    components = base_components()
+    water_source = approved_source("pk.source.synthetic_water")
+    water_claim = replace(
+        claim(
+            "pk.claim.species_plant_factor",
+            "water.plant_factor",
+            value,
+            unit=PK.KnowledgeUnit.RATIO,
+            source_ids=(water_source.source_id,),
+            confidence=0.91,
+            evidence_grade=PK.EvidenceGrade.HIGH,
+        ),
+        intended_consumer_capabilities=(PK.ConsumerCapability.WATER_DEMAND,),
+        claim_version=2,
+    )
+    profiles = tuple(
+        replace(item, claim_ids=tuple(sorted((*item.claim_ids, water_claim.claim_id))))
+        if item.profile_id == "pk.species.example_plant"
+        else item
+        for item in components["profiles"]
+    )
+
+    def resolve_without_retaining_library() -> Any:
+        return PK.resolve_plant_knowledge(
+            build_library(
+                sources=(*components["sources"], water_source),
+                claims=(*components["claims"], water_claim),
+                profiles=profiles,
+            ),
+            request(scientific_name="Examplegenus ficticia"),
+        )
+
+    result = resolve_without_retaining_library()
+    repeated = resolve_without_retaining_library()
+    effective = next(
+        item for item in result.effective_claims if item.field_path == "water.plant_factor"
+    )
+    assert effective.value == value
+    assert effective.unit is PK.KnowledgeUnit.RATIO
+    assert effective.source_ids == (water_source.source_id,)
+    assert result.explanation.evidence_source_ids == (
+        "pk.source.synthetic_approved",
+        water_source.source_id,
+    )
+    assert effective.review_state is PK.ReviewState.APPROVED
+    assert effective.evidence_grade is PK.EvidenceGrade.HIGH
+    assert effective.confidence == 0.91
+    assert effective.regional_applicability == REGION
+    assert effective.intended_consumer_capabilities == (
+        PK.ConsumerCapability.WATER_DEMAND,
+    )
+    assert effective.claim_version == 2
+    assert effective.inherited is False
+    assert effective.conflict_unresolved is False
+    assert effective.claim_resolution is None
+    serialized = result.to_dict()
+    assert serialized == repeated.to_dict()
+
+    def reject_hidden_lookup(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("resolved evidence must not perform a library lookup")
+
+    monkeypatch.setattr(PK.PlantKnowledgeLibrary, "get_claim", reject_hidden_lookup)
+    assert result.to_dict() == serialized
 
 
 def test_explicit_claim_resolution_selects_one_conflict_without_deleting_evidence() -> None:
@@ -175,6 +278,19 @@ def test_explicit_claim_resolution_selects_one_conflict_without_deleting_evidenc
         item for item in result.effective_claims if item.field_path == "visual.leaf_shape"
     )
     assert effective.claim_id == second.claim_id
+    assert effective.value is PK.LeafShape.LINEAR
+    assert effective.source_ids == second.source_ids
+    assert effective.review_state is second.review_state
+    assert effective.evidence_grade is second.evidence_grade
+    assert effective.confidence == second.confidence
+    assert effective.regional_applicability == second.regional_applicability
+    assert effective.intended_consumer_capabilities == (
+        second.intended_consumer_capabilities
+    )
+    assert effective.claim_version == second.claim_version
+    assert effective.claim_resolution_id == resolution.resolution_id
+    assert effective.claim_resolution == resolution
+    assert effective.conflict_unresolved is False
     traces = {item.claim_id: item.disposition for item in result.claim_traces}
     assert traces[first.claim_id] is PK.ClaimTraceDisposition.CONFLICT_RETAINED
     assert traces[second.claim_id] is PK.ClaimTraceDisposition.EFFECTIVE
@@ -240,6 +356,19 @@ def test_resolved_range_is_exposed_with_its_resolution_and_provenance() -> None:
     )
     assert effective.claim_resolution_id == resolution.resolution_id
     assert effective.resolved_range == resolved_range
+    assert effective.value == resolved_range
+    assert effective.unit is PK.KnowledgeUnit.METERS
+    assert effective.claim_resolution == resolution
+    assert effective.source_ids == ("pk.source.synthetic_approved",)
+    assert effective.review_state is PK.ReviewState.APPROVED
+    assert effective.evidence_grade is PK.EvidenceGrade.MODERATE
+    assert effective.confidence == 0.8
+    assert effective.regional_applicability == REGION
+    assert effective.intended_consumer_capabilities == (
+        PK.ConsumerCapability.VISUAL_IDENTIFICATION,
+    )
+    assert effective.claim_version == 1
+    assert effective.conflict_unresolved is False
     assert result.unresolved_ambiguity is False
     assert result.explanation.evidence_source_ids == ("pk.source.synthetic_approved",)
 

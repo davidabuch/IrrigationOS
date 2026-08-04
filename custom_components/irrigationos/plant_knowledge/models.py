@@ -10,7 +10,7 @@ from math import isfinite
 from types import MappingProxyType
 from typing import Any
 
-PLANT_KNOWLEDGE_SCHEMA_VERSION = 1
+PLANT_KNOWLEDGE_SCHEMA_VERSION = 2
 PLANT_KNOWLEDGE_RESOLUTION_ALGORITHM_VERSION = "1.0.0"
 MAX_FUNCTIONAL_GROUP_DEPTH = 8
 MAX_PROFILE_INHERITANCE_DEPTH = 8
@@ -1316,26 +1316,80 @@ class PlantKnowledgeResolutionCandidate(SerializableKnowledgeModel):
 
 @dataclass(frozen=True, slots=True)
 class EffectivePlantKnowledgeClaim(SerializableKnowledgeModel):
-    """Effective claim with its originating profile and inheritance status."""
+    """Complete immutable evidence snapshot for one effective claim."""
 
     claim_id: str
     field_path: str
+    value: str | bool | int | float | StrEnum | KnowledgeRange
+    unit: KnowledgeUnit | None
     originating_profile_id: str
+    source_ids: tuple[str, ...]
+    review_state: ReviewState
+    evidence_grade: EvidenceGrade
+    confidence: float
+    regional_applicability: RegionalApplicability
+    intended_consumer_capabilities: tuple[ConsumerCapability, ...]
+    claim_version: int
     inherited: bool
+    conflict_unresolved: bool
     claim_resolution_id: str | None = None
     resolved_range: KnowledgeRange | None = None
+    claim_resolution: ClaimResolution | None = None
 
     def __post_init__(self) -> None:
         _validate_canonical_id("claim_id", self.claim_id)
         contract = get_field_contract(self.field_path)
+        _validate_claim_value(self.value, self.unit, contract)
         _validate_canonical_id("originating_profile_id", self.originating_profile_id)
+        _validate_id_tuple("source_ids", self.source_ids)
+        _validate_enum("review_state", self.review_state, ReviewState)
+        if (
+            self.review_state in {ReviewState.REVIEWED, ReviewState.APPROVED}
+            and not self.source_ids
+        ):
+            raise ValueError("reviewed and approved effective claims require source IDs")
+        _validate_enum("evidence_grade", self.evidence_grade, EvidenceGrade)
+        _validate_confidence(self.confidence)
+        if not isinstance(self.regional_applicability, RegionalApplicability):
+            raise ValueError("regional_applicability must be canonical")
+        _validate_sorted_unique_enums(
+            "intended_consumer_capabilities", self.intended_consumer_capabilities
+        )
+        if any(
+            not isinstance(capability, ConsumerCapability)
+            for capability in self.intended_consumer_capabilities
+        ):
+            raise ValueError("consumer capabilities must use canonical values")
+        _validate_positive_version("claim_version", self.claim_version)
         _validate_boolean("inherited", self.inherited)
+        _validate_boolean("conflict_unresolved", self.conflict_unresolved)
         if self.claim_resolution_id is not None:
             _validate_canonical_id("claim_resolution_id", self.claim_resolution_id)
         if self.resolved_range is not None:
             if self.claim_resolution_id is None:
                 raise ValueError("resolved effective ranges require a claim resolution ID")
             _validate_claim_value(self.resolved_range, self.resolved_range.unit, contract)
+        if self.claim_resolution is None:
+            if self.claim_resolution_id is not None or self.resolved_range is not None:
+                raise ValueError("resolution metadata requires a ClaimResolution snapshot")
+            return
+        if self.claim_resolution_id != self.claim_resolution.resolution_id:
+            raise ValueError("claim_resolution_id must match the resolution snapshot")
+        if self.field_path != self.claim_resolution.field_path:
+            raise ValueError("effective claim and resolution field paths must match")
+        if self.claim_id not in self.claim_resolution.competing_claim_ids:
+            raise ValueError("effective claim must be among the resolution competitors")
+        if (
+            self.claim_resolution.selected_claim_id is not None
+            and self.claim_id != self.claim_resolution.selected_claim_id
+        ):
+            raise ValueError("effective claim must match the selected resolution claim")
+        if self.resolved_range != self.claim_resolution.resolved_range:
+            raise ValueError("resolved_range must match the resolution snapshot")
+        if self.resolved_range is not None and (
+            self.value != self.resolved_range or self.unit is not self.resolved_range.unit
+        ):
+            raise ValueError("resolved evidence value must preserve the resolved range")
 
 
 @dataclass(frozen=True, slots=True)

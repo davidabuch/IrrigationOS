@@ -285,7 +285,7 @@ def _resolve_effective_claims(
 ]:
     effective: dict[
         str,
-        tuple[PlantKnowledgeClaim, str, ClaimResolution | None],
+        tuple[PlantKnowledgeClaim, str, ClaimResolution | None, bool],
     ] = {}
     traces: list[InheritedClaimTrace] = []
     unresolved = False
@@ -305,7 +305,7 @@ def _resolve_effective_claims(
             unresolved = unresolved or layer_unresolved
             previous = effective.get(field_path)
             if previous is not None:
-                previous_claim, _, _ = previous
+                previous_claim, _, _, _ = previous
                 for index, trace in enumerate(traces):
                     if (
                         trace.claim_id == previous_claim.claim_id
@@ -327,7 +327,12 @@ def _resolve_effective_claims(
                         disposition=ClaimTraceDisposition.CONFLICT_RETAINED,
                     )
                 )
-            effective[field_path] = selected, profile.profile_id, resolution
+            effective[field_path] = (
+                selected,
+                profile.profile_id,
+                resolution,
+                layer_unresolved,
+            )
             traces.append(
                 InheritedClaimTrace(
                     claim_id=selected.claim_id,
@@ -340,12 +345,33 @@ def _resolve_effective_claims(
         EffectivePlantKnowledgeClaim(
             claim_id=claim.claim_id,
             field_path=field_path,
+            value=(
+                resolution.resolved_range
+                if resolution is not None and resolution.resolved_range is not None
+                else claim.value
+            ),
+            unit=(
+                resolution.resolved_range.unit
+                if resolution is not None and resolution.resolved_range is not None
+                else claim.unit
+            ),
             originating_profile_id=origin,
+            source_ids=claim.source_ids,
+            review_state=claim.review_state,
+            evidence_grade=claim.evidence_grade,
+            confidence=claim.confidence,
+            regional_applicability=claim.regional_applicability,
+            intended_consumer_capabilities=claim.intended_consumer_capabilities,
+            claim_version=claim.claim_version,
             inherited=origin != selected_profile_id,
+            conflict_unresolved=layer_unresolved,
             claim_resolution_id=(resolution.resolution_id if resolution is not None else None),
             resolved_range=(resolution.resolved_range if resolution is not None else None),
+            claim_resolution=resolution,
         )
-        for field_path, (claim, origin, resolution) in sorted(effective.items())
+        for field_path, (claim, origin, resolution, layer_unresolved) in sorted(
+            effective.items()
+        )
     )
     return effective_models, tuple(traces), unresolved
 
