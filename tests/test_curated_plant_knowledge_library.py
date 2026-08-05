@@ -8,7 +8,9 @@ PK = load_integration_module("plant_knowledge")
 
 _EXPECTED_SOURCE_IDS = (
     "pk.source.calflora_database",
+    "pk.source.calscape",
     "pk.source.kew_powo",
+    "pk.source.nc_state_plant_toolbox",
     "pk.source.usda_plants",
     "pk.source.wucols_iv",
     "pk.source.wucols_v",
@@ -25,7 +27,12 @@ _EXPECTED_GROUP_IDS = (
     "pk.group.woody.shrub",
     "pk.group.woody.tree",
 )
-_EXPECTED_CLAIM_IDS = (
+_STRESS_FIELD_SUFFIXES = (
+    "heat_tolerance",
+    "minimum_temperature_celsius",
+    "water_stress_sensitivity",
+)
+_BASE_CLAIM_IDS = (
     "pk.claim.agave_attenuata.scientific_name",
     "pk.claim.cynodon_dactylon.plant_factor",
     "pk.claim.cynodon_dactylon.scientific_name",
@@ -39,6 +46,7 @@ _EXPECTED_CLAIM_IDS = (
     "pk.claim.rhaphiolepis_indica.plant_factor",
     "pk.claim.rhaphiolepis_indica.scientific_name",
 )
+
 _EXPECTED_PROFILE_IDS = (
     "pk.species.agave_attenuata",
     "pk.species.cynodon_dactylon",
@@ -59,7 +67,16 @@ _EXPECTED_IDENTITIES = {
     "pk.species.quercus_agrifolia": ("Quercus agrifolia", "Coast live oak"),
     "pk.species.rhaphiolepis_indica": ("Rhaphiolepis indica", "Indian hawthorn"),
 }
-_EXPECTED_CHECKSUM = "954e2dc38f4a905764997981d84e569e1c921b29a1e41b3f951e9b49856ddeb9"
+_EXPECTED_CLAIM_IDS = tuple(
+    sorted(
+        (*_BASE_CLAIM_IDS, *(
+            f"pk.claim.{profile_id.removeprefix('pk.species.')}.{suffix}"
+            for profile_id in _EXPECTED_PROFILE_IDS
+            for suffix in _STRESS_FIELD_SUFFIXES
+        ))
+    )
+)
+_EXPECTED_CHECKSUM = "d15be0f5d30b5fd0fea250d953551efa5333e3a51d19441ae67bbecfe1b62ab7"
 _EXPECTED_WATER_PROFILE_IDS = {
     "pk.species.cynodon_dactylon",
     "pk.species.dymondia_margaretae",
@@ -72,15 +89,15 @@ def test_curated_library_builds_with_published_identity_profiles() -> None:
     """The curated boundary builds one fully validated v2.0.0 aggregate."""
     library = PK.build_curated_plant_knowledge_library()
 
-    assert library.manifest.library_version == "2.0.0"
-    assert library.manifest.previous_library_version == "1.3.0"
+    assert library.manifest.library_version == "2.1.0"
+    assert library.manifest.previous_library_version == "2.0.0"
     assert library.manifest.schema_version == PK.PLANT_KNOWLEDGE_SCHEMA_VERSION
-    assert library.manifest.source_count == 5
+    assert library.manifest.source_count == 7
     assert library.manifest.functional_group_count == 10
     assert library.manifest.profile_count == 8
     assert library.manifest.species_count == 8
     assert library.manifest.published_profile_count == 8
-    assert library.manifest.claim_count == 12
+    assert library.manifest.claim_count == 36
     assert library.manifest.claim_resolution_count == 0
     assert tuple(source.source_id for source in library.sources) == _EXPECTED_SOURCE_IDS
     assert tuple(group.group_id for group in library.functional_groups) == _EXPECTED_GROUP_IDS
@@ -130,14 +147,14 @@ def test_curated_profiles_and_claims_satisfy_publication_requirements() -> None:
         assert set(identity_claim.intended_consumer_capabilities) & set(
             profile.intended_consumer_capabilities
         )
+        assert PK.ConsumerCapability.WATER_DEMAND in profile.intended_consumer_capabilities
+        assert PK.ConsumerCapability.PLANT_HEALTH in profile.intended_consumer_capabilities
         if profile.profile_id in _EXPECTED_WATER_PROFILE_IDS:
-            assert profile.profile_version == 2
-            assert PK.ConsumerCapability.WATER_DEMAND in profile.intended_consumer_capabilities
-            assert len(profile.claim_ids) == 2
+            assert profile.profile_version == 3
+            assert len(profile.claim_ids) == 5
         else:
-            assert profile.profile_version == 1
-            assert PK.ConsumerCapability.WATER_DEMAND not in profile.intended_consumer_capabilities
-            assert len(profile.claim_ids) == 1
+            assert profile.profile_version == 2
+            assert len(profile.claim_ids) == 4
 
 
 def test_curated_ids_and_collections_are_unique_and_canonically_ordered() -> None:
@@ -267,8 +284,8 @@ def test_curated_water_evidence_preserves_source_values_and_context() -> None:
         )
 
 
-def test_curated_coverage_is_explicit_and_does_not_force_water_evidence() -> None:
-    """Coverage reports identity and water evidence without manufacturing missing claims."""
+def test_curated_coverage_is_explicit_and_preserves_distinct_evidence_types() -> None:
+    """Coverage reports identity, plant-factor, and stress evidence independently."""
     library = PK.build_curated_plant_knowledge_library()
     claims = {claim.claim_id: claim for claim in library.claims}
     published = tuple(
@@ -308,9 +325,22 @@ def test_curated_coverage_is_explicit_and_does_not_force_water_evidence() -> Non
     assert sum(
         claim.field_path == "water.plant_factor" for claim in library.claims
     ) == 4
+    assert sum(
+        claim.field_path == "water.water_stress_sensitivity" for claim in library.claims
+    ) == 8
+    assert sum(
+        claim.field_path == "environment.heat_tolerance" for claim in library.claims
+    ) == 8
+    assert sum(
+        claim.field_path == "environment.minimum_temperature_celsius"
+        for claim in library.claims
+    ) == 8
     assert {claim.field_path for claim in library.claims} == {
         "identity.scientific_name",
         "water.plant_factor",
+        "water.water_stress_sensitivity",
+        "environment.heat_tolerance",
+        "environment.minimum_temperature_celsius",
     }
 
 
@@ -345,7 +375,11 @@ def test_curated_scientific_common_and_alias_resolution() -> None:
 
     assert scientific.selected_profile_id == "pk.species.quercus_agrifolia"
     assert scientific.selected_resolution_level is PK.ProfileResolutionLevel.SPECIES
-    assert scientific.explanation.evidence_source_ids == ("pk.source.kew_powo",)
+    assert scientific.explanation.evidence_source_ids == (
+        "pk.source.calscape",
+        "pk.source.kew_powo",
+        "pk.source.nc_state_plant_toolbox",
+    )
     assert common.selected_profile_id == "pk.species.heteromeles_arbutifolia"
     assert alias.selected_profile_id == "pk.species.lagerstroemia_indica"
     assert alias.matched_aliases == ("Crepe myrtle",)
@@ -366,10 +400,10 @@ def test_curated_manifest_counts_statistics_and_checksum_match_content() -> None
     assert manifest.genus_count == 0
     assert manifest.cultivar_count == 0
     assert manifest.confidence_statistics == PK.ClaimConfidenceStatistics(
-        claim_count=12,
-        minimum=0.85,
+        claim_count=36,
+        minimum=0.8,
         maximum=1.0,
-        mean=0.954167,
+        mean=0.863889,
     )
     assert manifest.validation_checksum == _EXPECTED_CHECKSUM
     assert manifest.validation_checksum == PK.calculate_library_checksum(
@@ -399,3 +433,27 @@ def test_curated_library_rebuild_is_identical_and_has_no_runtime_surface() -> No
         "update_remote",
     ):
         assert not hasattr(first, name)
+
+
+def test_curated_stress_tolerance_evidence_is_complete_and_typed() -> None:
+    """Every curated species has the three approved v0.8.0B evidence claims."""
+    library = PK.build_curated_plant_knowledge_library()
+    claims = {claim.claim_id: claim for claim in library.claims}
+    sources = {source.source_id for source in library.sources}
+
+    for profile in library.profiles:
+        species_key = profile.profile_id.removeprefix("pk.species.")
+        stress_claims = {
+            claims[f"pk.claim.{species_key}.{suffix}"]
+            for suffix in _STRESS_FIELD_SUFFIXES
+        }
+        assert len(stress_claims) == 3
+        assert all(claim.review_state is PK.ReviewState.APPROVED for claim in stress_claims)
+        assert all(set(claim.source_ids) <= sources for claim in stress_claims)
+        assert all(claim.regional_applicability.climate_zone_ids == (
+            "southern_california_mediterranean",
+        ) for claim in stress_claims)
+        values = {claim.field_path: claim.value for claim in stress_claims}
+        assert isinstance(values["water.water_stress_sensitivity"], PK.WaterStressSensitivity)
+        assert isinstance(values["environment.heat_tolerance"], PK.HeatTolerance)
+        assert isinstance(values["environment.minimum_temperature_celsius"], float)

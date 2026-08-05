@@ -16,16 +16,16 @@ from .functional_groups import curated_functional_groups
 from .profiles import curated_profiles
 from .sources import curated_sources
 
-CURATED_PLANT_KNOWLEDGE_LIBRARY_VERSION = "2.0.0"
-_CURATED_LIBRARY_GENERATED_AT = datetime(2026, 8, 4, 13, 0, tzinfo=UTC)
+CURATED_PLANT_KNOWLEDGE_LIBRARY_VERSION = "2.1.0"
+_CURATED_LIBRARY_GENERATED_AT = datetime(2026, 8, 5, 19, 0, tzinfo=UTC)
 _EMPTY_CHECKSUM = "0" * 64
 
 
 def build_curated_plant_knowledge_library() -> PlantKnowledgeLibrary:
     """Build the immutable, validated curated Plant Knowledge library.
 
-    Capability 7.0C1 advances the library to schema version 2 for self-contained effective-claim
-    snapshots without changing curated evidence or introducing assessment behavior.
+    v0.8.0B adds approved stress-tolerance evidence for the existing curated species without
+    adding assessment, recommendation, planning, or execution behavior.
     """
     sources = curated_sources()
     claims = curated_claims()
@@ -58,7 +58,7 @@ def build_curated_plant_knowledge_library() -> PlantKnowledgeLibrary:
             mean=round(sum(confidences) / len(confidences), 6),
         ),
         validation_checksum=_EMPTY_CHECKSUM,
-        previous_library_version="1.3.0",
+        previous_library_version="2.0.0",
     )
     manifest = replace(
         manifest,

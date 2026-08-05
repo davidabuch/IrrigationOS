@@ -50,8 +50,19 @@ def _published_species_profile(
     claim_id: str,
     water_claim_id: str | None = None,
 ) -> PlantKnowledgeProfile:
-    has_water_evidence = water_claim_id is not None
-    claim_ids = tuple(sorted((claim_id,) if water_claim_id is None else (claim_id, water_claim_id)))
+    species_key = profile_id.removeprefix("pk.species.")
+    stress_claim_ids = (
+        f"pk.claim.{species_key}.heat_tolerance",
+        f"pk.claim.{species_key}.minimum_temperature_celsius",
+        f"pk.claim.{species_key}.water_stress_sensitivity",
+    )
+    claim_ids = tuple(
+        sorted(
+            (claim_id, *stress_claim_ids)
+            if water_claim_id is None
+            else (claim_id, water_claim_id, *stress_claim_ids)
+        )
+    )
     return PlantKnowledgeProfile(
         profile_id=profile_id,
         preferred_common_name=preferred_common_name,
@@ -64,14 +75,20 @@ def _published_species_profile(
         functional_group_ids=functional_group_ids,
         claim_ids=claim_ids,
         regional_applicability=_SOUTHERN_CALIFORNIA_SCOPE,
-        intended_consumer_capabilities=(
-            _WATER_CONSUMERS if has_water_evidence else _IDENTITY_CONSUMERS
+        intended_consumer_capabilities=tuple(
+            sorted(
+                {
+                    *_WATER_CONSUMERS,
+                    ConsumerCapability.PLANT_HEALTH,
+                },
+                key=lambda capability: capability.value,
+            )
         ),
         schema_version=PLANT_KNOWLEDGE_SCHEMA_VERSION,
-        profile_version=2 if has_water_evidence else 1,
+        profile_version=3 if water_claim_id is not None else 2,
         lifecycle_state=LifecycleState.PUBLISHED,
         created_at=_CREATED_AT,
-        reviewed_at=_WATER_REVIEWED_AT if has_water_evidence else _REVIEWED_AT,
+        reviewed_at=datetime(2026, 8, 5, 18, 30, tzinfo=UTC),
     )
 
 
