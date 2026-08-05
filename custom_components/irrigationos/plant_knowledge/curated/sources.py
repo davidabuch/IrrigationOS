@@ -59,6 +59,28 @@ def curated_sources() -> tuple[PlantKnowledgeSource, ...]:
             notes="Intended for California native status, distribution, and identity support.",
         ),
         PlantKnowledgeSource(
+            source_id="pk.source.calscape",
+            organization="California Native Plant Society",
+            title="Calscape California Native Plant Gardening Guide",
+            authors=(),
+            publication_date=None,
+            accessed_date=date(2026, 8, 5),
+            citation="California Native Plant Society. Calscape.",
+            source_type=SourceType.PROFESSIONAL_SOCIETY,
+            geographic_scope=("California",),
+            review_state=ReviewState.APPROVED,
+            review_history=_approved_review_history(),
+            url="https://calscape.org/",
+            licensing_notes=(
+                "Use independently normalized horticultural facts with attribution; do not "
+                "copy photographs, descriptive text, or bulk database content."
+            ),
+            notes=(
+                "Intended for California-native drought adaptation, heat exposure, and "
+                "hardiness context used by curated stress-tolerance claims."
+            ),
+        ),
+        PlantKnowledgeSource(
             source_id="pk.source.kew_powo",
             organization="Royal Botanic Gardens, Kew",
             title="Plants of the World Online",
@@ -76,6 +98,30 @@ def curated_sources() -> tuple[PlantKnowledgeSource, ...]:
                 "descriptive text or image assets."
             ),
             notes="Intended for accepted scientific names, synonyms, and broad native range.",
+        ),
+        PlantKnowledgeSource(
+            source_id="pk.source.nc_state_plant_toolbox",
+            organization="North Carolina State University Extension",
+            title="Extension Gardener Plant Toolbox",
+            authors=(),
+            publication_date=None,
+            accessed_date=date(2026, 8, 5),
+            citation=(
+                "North Carolina State University Extension. Extension Gardener Plant Toolbox."
+            ),
+            source_type=SourceType.UNIVERSITY_EXTENSION,
+            geographic_scope=("United States",),
+            review_state=ReviewState.APPROVED,
+            review_history=_approved_review_history(),
+            url="https://plants.ces.ncsu.edu/",
+            licensing_notes=(
+                "Use independently normalized horticultural facts with attribution; do not "
+                "copy photographs or substantial descriptive text."
+            ),
+            notes=(
+                "Intended for drought and heat tolerance, USDA hardiness context, and explicit "
+                "temperature thresholds where published."
+            ),
         ),
         PlantKnowledgeSource(
             source_id="pk.source.usda_plants",
