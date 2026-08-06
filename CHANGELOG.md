@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.4 - Execution Engine
+
+- Added immutable simulation-only execution contracts.
+- Added deterministic controller start/stop command generation.
+- Added stable idempotency keys and IrrigationOS command attribution.
+- Added acknowledgement, retry, timeout, rejection, and safety-block modeling.
+- Preserved complete schedule provenance without hardware or Home Assistant writes.
+
 ## 0.4.2
 
 - Added a unique authenticated Home Assistant webhook per config entry.
