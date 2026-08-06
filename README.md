@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v0.4.2 — Real-Time Rachio Observation**
+**v1.0.1 — Home Assistant Pipeline Integration**
 
 The current release:
 
@@ -61,7 +61,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation mode is the default and only implemented operating mode in v0.4.2. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+Observation mode remains the default operating mode in v1.0.1; the deterministic pipeline is exposed through synchronized readiness snapshots and remains non-actuating. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
 
 ## Landscape Digital Twin
 

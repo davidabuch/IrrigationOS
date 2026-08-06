@@ -71,8 +71,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "0.4.2":
-        raise SystemExit("manifest.json version must be 0.4.2")
+    if manifest.get("version") != "1.0.1":
+        raise SystemExit("manifest.json version must be 1.0.1")
 
     hacs = load_json("hacs.json")
     if not isinstance(hacs, dict) or hacs.get("name") != "IrrigationOS":

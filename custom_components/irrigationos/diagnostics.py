@@ -53,6 +53,7 @@ async def async_get_config_entry_diagnostics(
     snapshot = asdict(entry.runtime_data.data)
     landscape = asdict(entry.runtime_data.landscape)
     realtime = entry.runtime_data.realtime
+    pipeline = entry.runtime_data.pipeline_evaluation
     return {
         "entry": redact_data(dict(entry.data), TO_REDACT),
         "coordinator": {
@@ -70,6 +71,11 @@ async def async_get_config_entry_diagnostics(
             ),
             "data": redact_data(snapshot, TO_REDACT),
             "landscape": redact_data(landscape, TO_REDACT),
+            "pipeline_evaluation": (
+                redact_data(asdict(pipeline), TO_REDACT)
+                if pipeline is not None
+                else None
+            ),
             "realtime": (
                 redact_data(realtime.diagnostics(), TO_REDACT)
                 if realtime is not None

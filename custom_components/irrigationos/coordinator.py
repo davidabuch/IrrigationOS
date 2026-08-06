@@ -31,6 +31,7 @@ from .controllers import (
     ControllerRegistrySnapshot,
 )
 from .landscape import LandscapeProfile, build_landscape_profile
+from .pipeline import PipelineEvaluation, build_pipeline_evaluation
 
 if TYPE_CHECKING:
     from .realtime import RealtimeObservationManager
@@ -57,6 +58,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.entry = entry
         self.landscape = LandscapeProfile(schema_version=1, areas=())
         self.last_successful_refresh: datetime | None = None
+        self.pipeline_evaluation: PipelineEvaluation | None = None
         self.refresh_count = 0
         self.realtime: RealtimeObservationManager | None = None
         self.identities = ControllerIdentityRegistry.from_dict(
@@ -91,6 +93,9 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             overrides = {}
         self.landscape = build_landscape_profile(snapshot, _string_key_mapping(overrides))
         self.last_successful_refresh = dt_util.utcnow()
+        self.pipeline_evaluation = build_pipeline_evaluation(
+            snapshot, self.landscape, evaluated_at=self.last_successful_refresh
+        )
         self.refresh_count += 1
         if self.realtime is not None:
             await self.realtime.async_reconcile_controllers(
