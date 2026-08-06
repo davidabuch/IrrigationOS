@@ -19,6 +19,7 @@ from .entity import (
     IrrigationOSEntity,
     IrrigationOSLandscapeAreaEntity,
 )
+from .pipeline import PIPELINE_ALGORITHM_VERSION
 from .reconciliation import EntityInventory, controller_first
 
 
@@ -38,6 +39,10 @@ async def async_setup_entry(
         IrrigationOSLandscapeStatusSensor(coordinator),
         IrrigationOSLastRefreshSensor(coordinator),
         IrrigationOSDiscoverySummarySensor(coordinator),
+        IrrigationOSPipelineStatusSensor(coordinator),
+        IrrigationOSPipelineStageSensor(coordinator),
+        IrrigationOSPipelineVersionSensor(coordinator),
+        IrrigationOSPipelineLastEvaluationSensor(coordinator),
     ]
     inventory = EntityInventory()
     entities.extend(_new_dynamic_entities(coordinator, inventory))
@@ -360,3 +365,85 @@ class IrrigationOSDiscoverySummarySensor(IrrigationOSEntity, SensorEntity):
             "source_quality": self.coordinator.data.observation.quality.value,
             "partial_failure_count": len(self.coordinator.data.observation.errors),
         }
+
+
+class IrrigationOSPipelineStatusSensor(IrrigationOSEntity, SensorEntity):
+    """Expose the synchronized pipeline evaluation status."""
+
+    _attr_name = "Pipeline status"
+    _attr_unique_id = "irrigationos_pipeline_status"
+    entity_id = "sensor.irrigationos_pipeline_status"
+    _attr_icon = "mdi:transit-connection-variant"
+
+    @property
+    def native_value(self) -> str:
+        evaluation = self.coordinator.pipeline_evaluation
+        return evaluation.status.value if evaluation is not None else "unavailable"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        evaluation = self.coordinator.pipeline_evaluation
+        if evaluation is None:
+            return {}
+        return {
+            "configured_area_count": evaluation.configured_area_count,
+            "complete_profile_count": evaluation.complete_profile_count,
+            "blocker_codes": list(evaluation.blocker_codes),
+        }
+
+
+class IrrigationOSPipelineStageSensor(IrrigationOSEntity, SensorEntity):
+    """Expose the first pipeline stage that is not ready."""
+
+    _attr_name = "Current pipeline stage"
+    _attr_unique_id = "irrigationos_pipeline_stage"
+    entity_id = "sensor.irrigationos_pipeline_stage"
+    _attr_icon = "mdi:timeline-clock-outline"
+
+    @property
+    def native_value(self) -> str:
+        evaluation = self.coordinator.pipeline_evaluation
+        return evaluation.current_stage.value if evaluation is not None else "unavailable"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        evaluation = self.coordinator.pipeline_evaluation
+        if evaluation is None:
+            return {}
+        return {
+            item.stage.value: {
+                "status": item.status.value,
+                "reason": item.reason,
+                "blocker_codes": list(item.blocker_codes),
+            }
+            for item in evaluation.stages
+        }
+
+
+class IrrigationOSPipelineVersionSensor(IrrigationOSEntity, SensorEntity):
+    """Expose the pipeline integration algorithm version."""
+
+    _attr_name = "Pipeline version"
+    _attr_unique_id = "irrigationos_pipeline_version"
+    entity_id = "sensor.irrigationos_pipeline_version"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:source-branch"
+
+    @property
+    def native_value(self) -> str:
+        return PIPELINE_ALGORITHM_VERSION
+
+
+class IrrigationOSPipelineLastEvaluationSensor(IrrigationOSEntity, SensorEntity):
+    """Expose the timestamp of the synchronized pipeline evaluation."""
+
+    _attr_name = "Last pipeline evaluation"
+    _attr_unique_id = "irrigationos_pipeline_last_evaluation"
+    entity_id = "sensor.irrigationos_pipeline_last_evaluation"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self) -> Any:
+        evaluation = self.coordinator.pipeline_evaluation
+        return evaluation.evaluated_at if evaluation is not None else None

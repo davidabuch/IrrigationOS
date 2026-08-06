@@ -39,7 +39,7 @@ model rename or package reorganization is justified before v1.0.
 
 ### Release metadata is stale
 
-The installable Home Assistant integration still reports v0.4.2 in `manifest.json`,
+The installable Home Assistant integration reported v0.4.2 at audit time in `manifest.json`,
 `const.py`, `pyproject.toml`, validation scripts, tests, README, and roadmap documents.
 This is accurate for the currently wired Home Assistant runtime, but it does not describe
 the completed v0.9.5 domain pipeline.

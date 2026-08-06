@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.1 - Home Assistant pipeline integration
+
+- Added one immutable `PipelineEvaluation` snapshot per coordinator refresh.
+- Added pipeline status, stage, version, and last-evaluation sensors.
+- Added pipeline readiness and blocker details to diagnostics.
+- Preserved observation-only behavior; no hardware commands are issued.
+
 ## v1.0 Architecture Freeze Audit
 
 - Audited the completed deterministic domain pipeline through Runtime Monitoring.
