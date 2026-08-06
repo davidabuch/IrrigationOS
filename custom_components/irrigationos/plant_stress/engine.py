@@ -992,3 +992,152 @@ def _freeze_dimension_id(request_id: str) -> str:
 
 def _freeze_aggregate_id(request_id: str) -> str:
     return f"plant-stress.assessment.freeze.{sha256(request_id.encode()).hexdigest()}"
+
+
+def aggregate_plant_stress(
+    request: PlantStressRiskRequest,
+    dimensions: tuple[PlantStressDimensionAssessment, ...],
+) -> PlantStressRiskAssessment:
+    """Aggregate independent stress dimensions without averaging or rescoring."""
+    if not isinstance(request, PlantStressRiskRequest):
+        raise TypeError("request must be a PlantStressRiskRequest")
+    if not isinstance(dimensions, tuple):
+        raise TypeError("dimensions must be an immutable tuple")
+    if any(not isinstance(item, PlantStressDimensionAssessment) for item in dimensions):
+        raise TypeError("dimensions must contain PlantStressDimensionAssessment values")
+
+    ordered = tuple(sorted(dimensions, key=lambda item: item.dimension.value))
+    dimension_values = tuple(item.dimension for item in ordered)
+    if len(dimension_values) != len(set(dimension_values)):
+        raise ValueError("dimensions must not contain duplicate stress dimensions")
+
+    expected = tuple(sorted(request.policy.enabled_dimensions, key=lambda item: item.value))
+    if dimension_values != expected:
+        raise ValueError("dimensions must exactly match policy-enabled dimensions")
+
+    for item in ordered:
+        if item.selected_profile_id != request.selected_profile_id:
+            raise ValueError("dimension selected profile must match request")
+        if item.policy_id != request.policy.policy_id:
+            raise ValueError("dimension policy_id must match request policy")
+        if item.policy_version != request.policy.policy_version:
+            raise ValueError("dimension policy_version must match request policy")
+        if item.environmental_report_id != request.environmental_report.report_id:
+            raise ValueError("dimension environmental report must match request")
+        if (
+            item.water_requirement_assessment_id is not None
+            and item.water_requirement_assessment_id
+            != request.water_requirement_assessment.assessment_id
+        ):
+            raise ValueError("dimension water requirement assessment must match request")
+
+    successful = tuple(
+        item
+        for item in ordered
+        if item.status in {PlantStressRiskStatus.AVAILABLE, PlantStressRiskStatus.PARTIAL}
+        and item.risk is not PlantStressRiskClassification.UNKNOWN
+    )
+    overall_status = _aggregate_status(ordered, successful)
+    overall_risk = _aggregate_risk(request, successful)
+    confidence = _aggregate_confidence(ordered)
+    driving = _driving_dimensions(successful, overall_risk)
+    issues = tuple(sorted({issue for item in ordered for issue in item.unresolved_issues}))
+
+    reason_codes = {"independent_dimensions_preserved"}
+    if overall_risk is None:
+        reason_codes.add("overall_risk_not_authorized")
+    else:
+        reason_codes.add("highest_available_risk_selected")
+        reason_codes.update(f"driven_by_{item.dimension.value}" for item in driving)
+
+    summary = "Independent plant stress dimensions were aggregated without averaging."
+    if overall_risk is not None:
+        driver_names = ", ".join(item.dimension.value for item in driving)
+        summary = f"Overall plant stress risk is {overall_risk.value}, driven by {driver_names}."
+
+    return PlantStressRiskAssessment(
+        assessment_id=_aggregate_assessment_id(request.request_id, ordered),
+        request_id=request.request_id,
+        selected_profile_id=request.selected_profile_id,
+        location_id=request.context.location_id,
+        analysis_window_id=request.context.analysis_window_id,
+        dimensions=ordered,
+        overall_status=overall_status,
+        overall_risk=overall_risk,
+        confidence=confidence,
+        knowledge_resolution_id=request.knowledge_resolution.request_id,
+        water_requirement_assessment_id=request.water_requirement_assessment.assessment_id,
+        environmental_report_id=request.environmental_report.report_id,
+        policy_id=request.policy.policy_id,
+        policy_version=request.policy.policy_version,
+        algorithm_version=PLANT_STRESS_RISK_ALGORITHM_VERSION,
+        explanation=PlantStressRiskExplanation(
+            reason_codes=tuple(sorted(reason_codes)),
+            summary=summary,
+        ),
+        unresolved_issues=issues,
+        created_at=request.created_at,
+    )
+
+
+def _aggregate_status(
+    dimensions: tuple[PlantStressDimensionAssessment, ...],
+    successful: tuple[PlantStressDimensionAssessment, ...],
+) -> PlantStressRiskStatus:
+    if dimensions and all(item.status is PlantStressRiskStatus.AVAILABLE for item in dimensions):
+        return PlantStressRiskStatus.AVAILABLE
+    if successful:
+        return PlantStressRiskStatus.PARTIAL
+    for status in (
+        PlantStressRiskStatus.CONFLICTING_EVIDENCE,
+        PlantStressRiskStatus.REGIONAL_MISMATCH,
+        PlantStressRiskStatus.INSUFFICIENT_PLANT_KNOWLEDGE,
+        PlantStressRiskStatus.INSUFFICIENT_ENVIRONMENTAL_EVIDENCE,
+        PlantStressRiskStatus.UNAVAILABLE,
+    ):
+        if any(item.status is status for item in dimensions):
+            return status
+    return PlantStressRiskStatus.UNAVAILABLE
+
+
+def _aggregate_risk(
+    request: PlantStressRiskRequest,
+    successful: tuple[PlantStressDimensionAssessment, ...],
+) -> PlantStressRiskClassification | None:
+    if request.policy.overall_risk_aggregation is not OverallRiskAggregation.HIGHEST_AVAILABLE:
+        return None
+    if not successful:
+        return None
+    return max(successful, key=lambda item: _RISK_ORDER.index(item.risk)).risk
+
+
+def _aggregate_confidence(
+    dimensions: tuple[PlantStressDimensionAssessment, ...],
+) -> PlantStressRiskConfidence:
+    required = sum(item.confidence.required_input_count for item in dimensions)
+    known = sum(item.confidence.known_required_input_count for item in dimensions)
+    confidence = min((item.confidence.confidence for item in dimensions), default=0.0)
+    completeness = 0.0 if required == 0 else known / required
+    return PlantStressRiskConfidence(
+        confidence=confidence,
+        completeness=completeness,
+        known_required_input_count=known,
+        required_input_count=required,
+    )
+
+
+def _driving_dimensions(
+    successful: tuple[PlantStressDimensionAssessment, ...],
+    overall_risk: PlantStressRiskClassification | None,
+) -> tuple[PlantStressDimensionAssessment, ...]:
+    if overall_risk is None:
+        return ()
+    return tuple(item for item in successful if item.risk is overall_risk)
+
+
+def _aggregate_assessment_id(
+    request_id: str,
+    dimensions: tuple[PlantStressDimensionAssessment, ...],
+) -> str:
+    material = "|".join((request_id, *(item.assessment_id for item in dimensions)))
+    return f"plant-stress.assessment.aggregate.{sha256(material.encode()).hexdigest()}"
