@@ -74,10 +74,12 @@ All notable changes to IrrigationOS will be documented here.
 
 ## [Unreleased]
 
-### Planned
+### Added
 
-- Observation Flight Recorder and restart-state reconciliation.
-- Weather and soil data foundations.
+- Added the deterministic v0.9.3 Scheduling Engine.
+- Added immutable scheduling windows, policies, requests, actions, and schedules.
+- Added permitted-window placement, cycle-and-soak timing, external blocking constraints, and typed unschedulable outcomes.
+- Preserved the no-hardware-control boundary and complete Planning provenance.
 
 ## [0.0.1] - 2026-08-01
 
