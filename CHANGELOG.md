@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.2 - Scientific Input Integration
+
+- Normalize the single available Home Assistant weather entity into canonical units.
+- Resolve landscape plant identities against the curated Plant Knowledge library.
+- Expose scientific-input readiness and weather-source sensors.
+- Preserve explicit blockers for ambiguous weather sources and unresolved plant identity.
+- Keep Water Requirement and all downstream stages non-actuating and blocked until their remaining context is configured.
+
 ## 1.0.1 - Home Assistant pipeline integration
 
 - Added one immutable `PipelineEvaluation` snapshot per coordinator refresh.

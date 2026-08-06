@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.1 — Home Assistant Pipeline Integration**
+**v1.0.2 — Scientific Input Integration**
 
 The current release:
 
@@ -18,10 +18,12 @@ The current release:
 - assigns persisted provider-neutral controller identities and permanent numbered slots;
 - exposes timestamps, freshness, source quality, and safe partial-failure metadata;
 - distinguishes confirmed idle from unavailable watering status;
+- normalizes the single available Home Assistant weather entity into canonical units;
+- resolves landscape plant identities against the curated Plant Knowledge library;
 - exports redacted diagnostics;
 - does not start, stop, enable, disable, or reschedule irrigation.
 
-See [`V0_4_2_RELEASE_NOTES.md`](V0_4_2_RELEASE_NOTES.md) and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+See [`docs/V1_0_2_SCIENTIFIC_INPUT_INTEGRATION.md`](docs/V1_0_2_SCIENTIFIC_INPUT_INTEGRATION.md) and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
 
 Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can reach. Home Assistant Cloud is optional. If no suitable URL is configured, IrrigationOS reports a repair warning and continues observing through polling.
 
@@ -61,7 +63,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation mode remains the default operating mode in v1.0.1; the deterministic pipeline is exposed through synchronized readiness snapshots and remains non-actuating. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+Observation mode remains the default operating mode in v1.0.2; the deterministic pipeline is exposed through synchronized readiness snapshots and remains non-actuating. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
 
 ## Landscape Digital Twin
 

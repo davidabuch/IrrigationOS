@@ -10,6 +10,7 @@ from tests.helpers import load_integration_module
 controllers = load_integration_module("controllers")
 landscape = load_integration_module("landscape")
 pipeline = load_integration_module("pipeline")
+scientific_inputs = load_integration_module("scientific_inputs")
 
 
 def snapshot(*, configured: bool = True) -> Any:
@@ -95,10 +96,50 @@ def profile(*, complete: bool = True) -> Any:
     )
 
 
+
+def inputs_snapshot(*, ready: bool = True, area_count: int = 1) -> Any:
+    weather = (
+        scientific_inputs.WeatherInputSnapshot(
+            entity_id="weather.forecast_home",
+            observed_at=datetime(2026, 8, 6, 6, 5, tzinfo=UTC),
+            condition="sunny",
+            temperature_celsius=25.0,
+            relative_humidity_percent=40.0,
+            pressure_hpa=None,
+            wind_speed_meters_per_second=None,
+            wind_bearing_degrees=None,
+            attribution=None,
+            known_fact_count=3,
+        )
+        if ready
+        else None
+    )
+    area_knowledge = tuple(
+        scientific_inputs.AreaKnowledgeInput(
+            area_id=f"area-{index + 1}",
+            requested_identity="Bermudagrass",
+            selected_profile_id="pk.species.cynodon_dactylon" if ready else None,
+            resolution_confidence=1.0 if ready else 0.0,
+            blocker_codes=() if ready else ("plant_knowledge_profile_unresolved",),
+        )
+        for index in range(area_count)
+    )
+    return scientific_inputs.ScientificInputSnapshot(
+        evaluated_at=datetime(2026, 8, 6, 6, 5, tzinfo=UTC),
+        status=(
+            scientific_inputs.ScientificInputStatus.READY
+            if ready
+            else scientific_inputs.ScientificInputStatus.BLOCKED
+        ),
+        weather=weather,
+        area_knowledge=area_knowledge,
+        blocker_codes=() if ready else ("weather_entity_unavailable",),
+    )
+
 def test_pipeline_snapshot_is_immutable_and_synchronized() -> None:
     evaluated_at = datetime(2026, 8, 6, 6, 5, tzinfo=UTC)
     result = pipeline.build_pipeline_evaluation(
-        snapshot(), profile(), evaluated_at=evaluated_at
+        snapshot(), profile(), inputs_snapshot(), evaluated_at=evaluated_at
     )
 
     assert result.evaluated_at == evaluated_at
@@ -108,26 +149,28 @@ def test_pipeline_snapshot_is_immutable_and_synchronized() -> None:
     assert result.stage(pipeline.PipelineStage.OBSERVATIONS).status is (
         pipeline.PipelineStageStatus.READY
     )
-    assert "scientific_inputs_not_integrated" in result.blocker_codes
+    assert "plant_water_context_not_configured" in result.blocker_codes
 
 
 def test_incomplete_landscape_is_reported_without_inventing_science() -> None:
     result = pipeline.build_pipeline_evaluation(
         snapshot(),
         profile(complete=False),
+        inputs_snapshot(ready=False),
         evaluated_at=datetime(2026, 8, 6, 6, 5, tzinfo=UTC),
     )
 
     knowledge = result.stage(pipeline.PipelineStage.KNOWLEDGE)
     assert result.status is pipeline.PipelineEvaluationStatus.PARTIAL
     assert knowledge.status is pipeline.PipelineStageStatus.PARTIAL
-    assert knowledge.blocker_codes == ("incomplete_landscape_profiles",)
+    assert "incomplete_landscape_profiles" in knowledge.blocker_codes
 
 
 def test_no_configured_areas_blocks_pipeline() -> None:
     result = pipeline.build_pipeline_evaluation(
         snapshot(configured=False),
         landscape.LandscapeProfile(schema_version=1, areas=()),
+        inputs_snapshot(ready=False, area_count=0),
         evaluated_at=datetime(2026, 8, 6, 6, 5, tzinfo=UTC),
     )
 
