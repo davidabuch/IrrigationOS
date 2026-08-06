@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0 Architecture Freeze Audit
+
+- Audited the completed deterministic domain pipeline through Runtime Monitoring.
+- Confirmed that no release-blocking engine redesign is required.
+- Documented stale release metadata and incomplete Home Assistant pipeline wiring.
+- Added explicit public-API compatibility contracts for the frozen v1.0 domain layers.
+- Updated the roadmap to distinguish the v0.4.2 installable runtime from the v0.9.5 domain baseline.
+
 ## v0.9.4 - Execution Engine
 
 - Added immutable simulation-only execution contracts.

@@ -2,10 +2,11 @@
 
 ## Current status
 
-- **Current release:** v0.4.2
-- **Current operating boundary:** Observation only
-- **Current epic:** Epic 2 — Rachio Integration
-- **Next milestone:** v0.5.0 — Observation history, ownership signals, and restart reconciliation
+- **Installable Home Assistant release:** v0.4.2
+- **Completed domain milestone:** v0.9.5 Runtime Monitoring
+- **Current operating boundary:** Observation and simulation only
+- **Current epic:** v1.0 architecture freeze and Home Assistant product integration
+- **Next milestone:** v1.0 Home Assistant pipeline integration
 
 ## Delivery model
 
@@ -35,6 +36,33 @@ Delivered:
 - `v0.4.0` — First live Home Assistant installation
 - `v0.4.1` — Canonical controller model and observation reliability
 - `v0.4.2` — Real-time Rachio observation
+
+## v1.0 Release Completion
+
+**Status: In progress**
+
+Completed domain layers:
+
+- Plant Water Requirement
+- Plant Stress
+- Plant Health
+- Recommendations
+- Planning
+- Scheduling
+- Execution simulation
+- Runtime Monitoring
+
+Remaining release work:
+
+- freeze public domain APIs and compatibility tests
+- reconcile architecture and release documentation
+- wire the complete domain pipeline into Home Assistant
+- expose stable observation and simulation entities and diagnostics
+- validate startup, reload, persistence, migration, and entity lifecycle
+- complete v1.0.0 release metadata and release notes
+- deploy with live execution disabled by default
+
+See `docs/V1_0_ARCHITECTURE_AUDIT.md`.
 
 ## Epic 2 — Rachio Integration
 
