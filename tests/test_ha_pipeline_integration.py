@@ -1,4 +1,4 @@
-"""Repository-level contracts for v1.0.1 HA pipeline integration."""
+"""Repository-level contracts for v1.0.2 HA scientific-input integration."""
 
 from __future__ import annotations
 
@@ -20,6 +20,8 @@ def test_pipeline_entities_only_read_cached_evaluation() -> None:
     assert "IrrigationOSPipelineStageSensor" in source
     assert "IrrigationOSPipelineVersionSensor" in source
     assert "IrrigationOSPipelineLastEvaluationSensor" in source
+    assert "IrrigationOSScientificInputStatusSensor" in source
+    assert "IrrigationOSWeatherSourceSensor" in source
     assert "build_pipeline_evaluation" not in source
 
 
@@ -32,7 +34,8 @@ def test_diagnostics_include_pipeline_snapshot() -> None:
 def test_pipeline_integration_remains_non_actuating() -> None:
     source = "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (INTEGRATION / "pipeline").rglob("*.py")
+        for directory in ("pipeline", "scientific_inputs")
+        for path in (INTEGRATION / directory).rglob("*.py")
     )
     for forbidden in ("async_call", "start_area", "stop_area", "/zone/start"):
         assert forbidden not in source

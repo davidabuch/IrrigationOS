@@ -43,6 +43,8 @@ async def async_setup_entry(
         IrrigationOSPipelineStageSensor(coordinator),
         IrrigationOSPipelineVersionSensor(coordinator),
         IrrigationOSPipelineLastEvaluationSensor(coordinator),
+        IrrigationOSScientificInputStatusSensor(coordinator),
+        IrrigationOSWeatherSourceSensor(coordinator),
     ]
     inventory = EntityInventory()
     entities.extend(_new_dynamic_entities(coordinator, inventory))
@@ -447,3 +449,64 @@ class IrrigationOSPipelineLastEvaluationSensor(IrrigationOSEntity, SensorEntity)
     def native_value(self) -> Any:
         evaluation = self.coordinator.pipeline_evaluation
         return evaluation.evaluated_at if evaluation is not None else None
+
+
+class IrrigationOSScientificInputStatusSensor(IrrigationOSEntity, SensorEntity):
+    """Expose normalized scientific-input readiness."""
+
+    _attr_name = "Scientific input status"
+    _attr_unique_id = "irrigationos_scientific_input_status"
+    entity_id = "sensor.irrigationos_scientific_input_status"
+    _attr_icon = "mdi:flask-outline"
+
+    @property
+    def native_value(self) -> str:
+        evaluation = self.coordinator.pipeline_evaluation
+        if evaluation is None:
+            return "unavailable"
+        return evaluation.scientific_inputs.status.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        evaluation = self.coordinator.pipeline_evaluation
+        if evaluation is None:
+            return {}
+        inputs = evaluation.scientific_inputs
+        return {
+            "resolved_area_count": inputs.resolved_area_count,
+            "area_count": len(inputs.area_knowledge),
+            "blocker_codes": list(inputs.blocker_codes),
+        }
+
+
+class IrrigationOSWeatherSourceSensor(IrrigationOSEntity, SensorEntity):
+    """Expose the selected Home Assistant weather source."""
+
+    _attr_name = "Weather source"
+    _attr_unique_id = "irrigationos_weather_source"
+    entity_id = "sensor.irrigationos_weather_source"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:weather-partly-cloudy"
+
+    @property
+    def native_value(self) -> str:
+        evaluation = self.coordinator.pipeline_evaluation
+        if evaluation is None or evaluation.scientific_inputs.weather is None:
+            return "unavailable"
+        return evaluation.scientific_inputs.weather.entity_id
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        evaluation = self.coordinator.pipeline_evaluation
+        if evaluation is None or evaluation.scientific_inputs.weather is None:
+            return {}
+        weather = evaluation.scientific_inputs.weather
+        return {
+            "condition": weather.condition,
+            "temperature_celsius": weather.temperature_celsius,
+            "relative_humidity_percent": weather.relative_humidity_percent,
+            "pressure_hpa": weather.pressure_hpa,
+            "wind_speed_meters_per_second": weather.wind_speed_meters_per_second,
+            "wind_bearing_degrees": weather.wind_bearing_degrees,
+            "known_fact_count": weather.known_fact_count,
+        }

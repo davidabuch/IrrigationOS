@@ -8,9 +8,10 @@ from enum import StrEnum
 
 from ..controllers import ControllerRegistrySnapshot
 from ..landscape import LandscapeProfile
+from ..scientific_inputs import ScientificInputSnapshot
 
 PIPELINE_SCHEMA_VERSION = "1.0"
-PIPELINE_ALGORITHM_VERSION = "1.0.1"
+PIPELINE_ALGORITHM_VERSION = "1.0.2"
 
 
 class PipelineStage(StrEnum):
@@ -66,6 +67,7 @@ class PipelineEvaluation:
     current_stage: PipelineStage
     observation_snapshot: ControllerRegistrySnapshot
     landscape_profile: LandscapeProfile
+    scientific_inputs: ScientificInputSnapshot
     stages: tuple[PipelineStageEvaluation, ...]
     configured_area_count: int
     complete_profile_count: int

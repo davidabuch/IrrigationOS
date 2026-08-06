@@ -43,6 +43,9 @@ REQUIRED_FILES = (
     "docs/adr/ADR-011-realtime-rachio-observation.md",
     "custom_components/irrigationos/landscape/models.py",
     "custom_components/irrigationos/landscape/builder.py",
+    "custom_components/irrigationos/scientific_inputs/engine.py",
+    "custom_components/irrigationos/scientific_inputs/models.py",
+    "docs/V1_0_2_SCIENTIFIC_INPUT_INTEGRATION.md",
     "hacs.json",
     "pyproject.toml",
     "requirements-dev.txt",
@@ -71,8 +74,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.1":
-        raise SystemExit("manifest.json version must be 1.0.1")
+    if manifest.get("version") != "1.0.2":
+        raise SystemExit("manifest.json version must be 1.0.2")
 
     hacs = load_json("hacs.json")
     if not isinstance(hacs, dict) or hacs.get("name") != "IrrigationOS":

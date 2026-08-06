@@ -32,6 +32,7 @@ from .controllers import (
 )
 from .landscape import LandscapeProfile, build_landscape_profile
 from .pipeline import PipelineEvaluation, build_pipeline_evaluation
+from .scientific_inputs import build_scientific_input_snapshot
 
 if TYPE_CHECKING:
     from .realtime import RealtimeObservationManager
@@ -93,8 +94,21 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             overrides = {}
         self.landscape = build_landscape_profile(snapshot, _string_key_mapping(overrides))
         self.last_successful_refresh = dt_util.utcnow()
+        weather_entities = tuple(
+            (entity_id, state.state, state.attributes)
+            for entity_id in self.hass.states.async_entity_ids("weather")
+            if (state := self.hass.states.get(entity_id)) is not None
+        )
+        scientific_inputs = build_scientific_input_snapshot(
+            landscape=self.landscape,
+            weather_entities=weather_entities,
+            evaluated_at=self.last_successful_refresh,
+        )
         self.pipeline_evaluation = build_pipeline_evaluation(
-            snapshot, self.landscape, evaluated_at=self.last_successful_refresh
+            snapshot,
+            self.landscape,
+            scientific_inputs,
+            evaluated_at=self.last_successful_refresh,
         )
         self.refresh_count += 1
         if self.realtime is not None:
