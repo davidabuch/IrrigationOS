@@ -11,6 +11,7 @@ from ..environment import (
 )
 from ..plant_knowledge import (
     EffectivePlantKnowledgeClaim,
+    HeatTolerance,
     KnowledgeRange,
     WaterStressSensitivity,
 )
@@ -32,6 +33,40 @@ from .models import (
 
 _WATER_STRESS_PATH = "water.water_stress_sensitivity"
 _REQUIRED_INPUT_COUNT = 3
+
+_HEAT_TOLERANCE_PATH = "environment.heat_tolerance"
+_HEAT_REQUIRED_INPUT_COUNT = 2
+
+_HEAT_BASE_RISK: dict[
+    EnvironmentalSignalClassification,
+    dict[HeatTolerance, PlantStressRiskClassification],
+] = {
+    EnvironmentalSignalClassification.NONE: {
+        HeatTolerance.LOW: PlantStressRiskClassification.NONE,
+        HeatTolerance.MODERATE: PlantStressRiskClassification.NONE,
+        HeatTolerance.HIGH: PlantStressRiskClassification.NONE,
+    },
+    EnvironmentalSignalClassification.LOW: {
+        HeatTolerance.LOW: PlantStressRiskClassification.LOW,
+        HeatTolerance.MODERATE: PlantStressRiskClassification.NONE,
+        HeatTolerance.HIGH: PlantStressRiskClassification.NONE,
+    },
+    EnvironmentalSignalClassification.MODERATE: {
+        HeatTolerance.LOW: PlantStressRiskClassification.MODERATE,
+        HeatTolerance.MODERATE: PlantStressRiskClassification.LOW,
+        HeatTolerance.HIGH: PlantStressRiskClassification.LOW,
+    },
+    EnvironmentalSignalClassification.HIGH: {
+        HeatTolerance.LOW: PlantStressRiskClassification.HIGH,
+        HeatTolerance.MODERATE: PlantStressRiskClassification.MODERATE,
+        HeatTolerance.HIGH: PlantStressRiskClassification.LOW,
+    },
+    EnvironmentalSignalClassification.EXTREME: {
+        HeatTolerance.LOW: PlantStressRiskClassification.VERY_HIGH,
+        HeatTolerance.MODERATE: PlantStressRiskClassification.HIGH,
+        HeatTolerance.HIGH: PlantStressRiskClassification.MODERATE,
+    },
+}
 
 _BASE_RISK: dict[
     EnvironmentalSignalClassification,
@@ -379,3 +414,258 @@ def _dimension_id(request_id: str) -> str:
 
 def _aggregate_id(request_id: str) -> str:
     return f"plant-stress.assessment.{sha256(request_id.encode()).hexdigest()}"
+
+
+def assess_heat_stress(request: PlantStressRiskRequest) -> PlantStressRiskAssessment:
+    """Assess heat-stress risk from immutable plant tolerance and heat exposure."""
+    if not isinstance(request, PlantStressRiskRequest):
+        raise TypeError("request must be a PlantStressRiskRequest")
+    if PlantStressDimension.HEAT not in request.policy.enabled_dimensions:
+        return _heat_aggregate(
+            request,
+            _heat_non_success(
+                request,
+                PlantStressRiskStatus.UNAVAILABLE,
+                "heat_dimension_disabled",
+                "Heat-stress assessment is disabled by policy.",
+                "policy does not enable heat",
+            ),
+        )
+    if request.selected_profile_id is None:
+        return _heat_aggregate(
+            request,
+            _heat_non_success(
+                request,
+                PlantStressRiskStatus.INSUFFICIENT_PLANT_KNOWLEDGE,
+                "plant_profile_unresolved",
+                "Plant profile resolution is unavailable.",
+                "plant profile was not resolved",
+            ),
+        )
+
+    tolerance_claim = _heat_tolerance_claim(request)
+    if tolerance_claim is None or not isinstance(tolerance_claim.value, HeatTolerance) or (
+        tolerance_claim.value is HeatTolerance.UNKNOWN
+    ):
+        return _heat_aggregate(
+            request,
+            _heat_non_success(
+                request,
+                PlantStressRiskStatus.INSUFFICIENT_PLANT_KNOWLEDGE,
+                "heat_tolerance_unavailable",
+                "Heat-tolerance evidence is unavailable.",
+                "approved environment.heat_tolerance evidence was not resolved",
+            ),
+        )
+    if tolerance_claim.conflict_unresolved:
+        return _heat_aggregate(
+            request,
+            _heat_non_success(
+                request,
+                PlantStressRiskStatus.CONFLICTING_EVIDENCE,
+                "heat_tolerance_conflicting",
+                "Heat-tolerance evidence remains conflicting.",
+                "environment.heat_tolerance evidence has an unresolved conflict",
+                claim=tolerance_claim,
+            ),
+        )
+
+    heat_signal = _heat_signal(request)
+    if heat_signal is None or heat_signal.classification not in _HEAT_BASE_RISK:
+        return _heat_aggregate(
+            request,
+            _heat_non_success(
+                request,
+                PlantStressRiskStatus.INSUFFICIENT_ENVIRONMENTAL_EVIDENCE,
+                "heat_signal_unavailable",
+                "Environmental heat-exposure evidence is unavailable.",
+                "environmental report lacks a usable heat-exposure signal",
+                claim=tolerance_claim,
+            ),
+        )
+
+    risk = _HEAT_BASE_RISK[heat_signal.classification][tolerance_claim.value]
+    confidence_value = min(
+        tolerance_claim.confidence,
+        heat_signal.confidence.average_confidence,
+    )
+    incomplete = heat_signal.confidence.completeness < 1.0
+    below_confidence = confidence_value < request.policy.minimum_confidence
+    partial = incomplete or below_confidence
+    if (
+        partial
+        and request.policy.partial_evidence_behavior
+        is PartialEvidenceBehavior.REQUIRE_COMPLETE
+    ):
+        return _heat_aggregate(
+            request,
+            _heat_non_success(
+                request,
+                PlantStressRiskStatus.UNAVAILABLE,
+                "complete_evidence_required",
+                "Complete heat-stress evidence is required by policy.",
+                "one or more required inputs are incomplete or below confidence policy",
+                claim=tolerance_claim,
+                signal=heat_signal,
+            ),
+        )
+
+    issues: list[str] = []
+    if incomplete:
+        issues.append("environmental heat evidence is incomplete")
+    if below_confidence:
+        issues.append("combined evidence confidence is below policy")
+    status = PlantStressRiskStatus.PARTIAL if partial else PlantStressRiskStatus.AVAILABLE
+    dimension = PlantStressDimensionAssessment(
+        assessment_id=_heat_dimension_id(request.request_id),
+        dimension=PlantStressDimension.HEAT,
+        status=status,
+        risk=risk,
+        confidence=PlantStressRiskConfidence(
+            confidence=confidence_value,
+            completeness=1.0,
+            known_required_input_count=_HEAT_REQUIRED_INPUT_COUNT,
+            required_input_count=_HEAT_REQUIRED_INPUT_COUNT,
+        ),
+        selected_profile_id=request.selected_profile_id,
+        plant_knowledge_claim_ids=(tolerance_claim.claim_id,),
+        plant_knowledge_source_ids=tuple(sorted(tolerance_claim.source_ids)),
+        water_requirement_assessment_id=None,
+        environmental_report_id=request.environmental_report.report_id,
+        environmental_signal_ids=(heat_signal.signal_id,),
+        regional_applicability=tolerance_claim.regional_applicability,
+        policy_id=request.policy.policy_id,
+        policy_version=request.policy.policy_version,
+        algorithm_version=PLANT_STRESS_RISK_ALGORITHM_VERSION,
+        explanation=PlantStressRiskExplanation(
+            reason_codes=tuple(
+                sorted(
+                    {
+                        f"heat_exposure_{heat_signal.classification.value}",
+                        f"heat_tolerance_{tolerance_claim.value.value}",
+                    }
+                )
+            ),
+            summary=(
+                f"Heat-stress risk is {risk.value} from "
+                f"{heat_signal.classification.value} heat exposure and "
+                f"{tolerance_claim.value.value} plant heat tolerance."
+            ),
+        ),
+        unresolved_issues=tuple(sorted(issues)),
+    )
+    return _heat_aggregate(request, dimension)
+
+
+def _heat_tolerance_claim(
+    request: PlantStressRiskRequest,
+) -> EffectivePlantKnowledgeClaim | None:
+    return next(
+        (
+            claim
+            for claim in request.knowledge_resolution.effective_claims
+            if claim.field_path == _HEAT_TOLERANCE_PATH
+        ),
+        None,
+    )
+
+
+def _heat_signal(request: PlantStressRiskRequest) -> EnvironmentalSignal | None:
+    signals = tuple(
+        signal
+        for signal in request.environmental_report.signals
+        if signal.signal_type is EnvironmentalSignalType.HEAT_EXPOSURE
+    )
+    if not signals:
+        return None
+    return sorted(signals, key=lambda signal: signal.signal_id)[0]
+
+
+def _heat_non_success(
+    request: PlantStressRiskRequest,
+    status: PlantStressRiskStatus,
+    reason: str,
+    summary: str,
+    issue: str,
+    *,
+    claim: EffectivePlantKnowledgeClaim | None = None,
+    signal: EnvironmentalSignal | None = None,
+) -> PlantStressDimensionAssessment:
+    if request.policy.missing_evidence_behavior is MissingEvidenceBehavior.RETURN_UNAVAILABLE:
+        status = PlantStressRiskStatus.UNAVAILABLE
+    known = int(claim is not None) + int(signal is not None)
+    confidence_values = [
+        value
+        for value in (
+            claim.confidence if claim is not None else None,
+            signal.confidence.average_confidence if signal is not None else None,
+        )
+        if value is not None
+    ]
+    return PlantStressDimensionAssessment(
+        assessment_id=_heat_dimension_id(request.request_id),
+        dimension=PlantStressDimension.HEAT,
+        status=status,
+        risk=PlantStressRiskClassification.UNKNOWN,
+        confidence=PlantStressRiskConfidence(
+            confidence=min(confidence_values) if confidence_values else 0.0,
+            completeness=known / _HEAT_REQUIRED_INPUT_COUNT,
+            known_required_input_count=known,
+            required_input_count=_HEAT_REQUIRED_INPUT_COUNT,
+        ),
+        selected_profile_id=request.selected_profile_id,
+        plant_knowledge_claim_ids=(claim.claim_id,) if claim is not None else (),
+        plant_knowledge_source_ids=tuple(sorted(claim.source_ids)) if claim is not None else (),
+        water_requirement_assessment_id=None,
+        environmental_report_id=request.environmental_report.report_id,
+        environmental_signal_ids=(signal.signal_id,) if signal is not None else (),
+        regional_applicability=request.context.regional_applicability,
+        policy_id=request.policy.policy_id,
+        policy_version=request.policy.policy_version,
+        algorithm_version=PLANT_STRESS_RISK_ALGORITHM_VERSION,
+        explanation=PlantStressRiskExplanation(reason_codes=(reason,), summary=summary),
+        unresolved_issues=(issue,),
+    )
+
+
+def _heat_aggregate(
+    request: PlantStressRiskRequest,
+    dimension: PlantStressDimensionAssessment,
+) -> PlantStressRiskAssessment:
+    overall_risk = (
+        dimension.risk
+        if request.policy.overall_risk_aggregation is OverallRiskAggregation.HIGHEST_AVAILABLE
+        and dimension.risk is not PlantStressRiskClassification.UNKNOWN
+        else None
+    )
+    return PlantStressRiskAssessment(
+        assessment_id=_heat_aggregate_id(request.request_id),
+        request_id=request.request_id,
+        selected_profile_id=request.selected_profile_id,
+        location_id=request.context.location_id,
+        analysis_window_id=request.context.analysis_window_id,
+        dimensions=(dimension,),
+        overall_status=dimension.status,
+        overall_risk=overall_risk,
+        confidence=dimension.confidence,
+        knowledge_resolution_id=request.knowledge_resolution.request_id,
+        water_requirement_assessment_id=request.water_requirement_assessment.assessment_id,
+        environmental_report_id=request.environmental_report.report_id,
+        policy_id=request.policy.policy_id,
+        policy_version=request.policy.policy_version,
+        algorithm_version=PLANT_STRESS_RISK_ALGORITHM_VERSION,
+        explanation=PlantStressRiskExplanation(
+            reason_codes=("heat_dimension_assessed",),
+            summary="Heat plant stress risk assessment completed.",
+        ),
+        unresolved_issues=dimension.unresolved_issues,
+        created_at=request.created_at,
+    )
+
+
+def _heat_dimension_id(request_id: str) -> str:
+    return f"plant-stress.heat.{sha256(request_id.encode()).hexdigest()}"
+
+
+def _heat_aggregate_id(request_id: str) -> str:
+    return f"plant-stress.heat-assessment.{sha256(request_id.encode()).hexdigest()}"
