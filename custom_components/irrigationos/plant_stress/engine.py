@@ -37,6 +37,45 @@ _REQUIRED_INPUT_COUNT = 3
 _HEAT_TOLERANCE_PATH = "environment.heat_tolerance"
 _HEAT_REQUIRED_INPUT_COUNT = 2
 
+_MINIMUM_TEMPERATURE_PATH = "environment.minimum_temperature_celsius"
+_FREEZE_REQUIRED_INPUT_COUNT = 2
+
+_FREEZE_BASE_RISK: dict[
+    EnvironmentalSignalClassification,
+    dict[str, PlantStressRiskClassification],
+] = {
+    EnvironmentalSignalClassification.NONE: {
+        "tender": PlantStressRiskClassification.NONE,
+        "sensitive": PlantStressRiskClassification.NONE,
+        "moderate": PlantStressRiskClassification.NONE,
+        "hardy": PlantStressRiskClassification.NONE,
+    },
+    EnvironmentalSignalClassification.LOW: {
+        "tender": PlantStressRiskClassification.LOW,
+        "sensitive": PlantStressRiskClassification.LOW,
+        "moderate": PlantStressRiskClassification.NONE,
+        "hardy": PlantStressRiskClassification.NONE,
+    },
+    EnvironmentalSignalClassification.MODERATE: {
+        "tender": PlantStressRiskClassification.HIGH,
+        "sensitive": PlantStressRiskClassification.MODERATE,
+        "moderate": PlantStressRiskClassification.LOW,
+        "hardy": PlantStressRiskClassification.NONE,
+    },
+    EnvironmentalSignalClassification.HIGH: {
+        "tender": PlantStressRiskClassification.VERY_HIGH,
+        "sensitive": PlantStressRiskClassification.HIGH,
+        "moderate": PlantStressRiskClassification.MODERATE,
+        "hardy": PlantStressRiskClassification.LOW,
+    },
+    EnvironmentalSignalClassification.EXTREME: {
+        "tender": PlantStressRiskClassification.VERY_HIGH,
+        "sensitive": PlantStressRiskClassification.VERY_HIGH,
+        "moderate": PlantStressRiskClassification.HIGH,
+        "hardy": PlantStressRiskClassification.MODERATE,
+    },
+}
+
 _HEAT_BASE_RISK: dict[
     EnvironmentalSignalClassification,
     dict[HeatTolerance, PlantStressRiskClassification],
@@ -669,3 +708,287 @@ def _heat_dimension_id(request_id: str) -> str:
 
 def _heat_aggregate_id(request_id: str) -> str:
     return f"plant-stress.heat-assessment.{sha256(request_id.encode()).hexdigest()}"
+
+def assess_freeze_stress(request: PlantStressRiskRequest) -> PlantStressRiskAssessment:
+    """Assess freeze-stress risk from plant minimum temperature and freeze potential."""
+    if not isinstance(request, PlantStressRiskRequest):
+        raise TypeError("request must be a PlantStressRiskRequest")
+    if PlantStressDimension.FREEZE not in request.policy.enabled_dimensions:
+        return _freeze_aggregate(
+            request,
+            _freeze_non_success(
+                request,
+                PlantStressRiskStatus.UNAVAILABLE,
+                "freeze_dimension_disabled",
+                "Freeze-stress assessment is disabled by policy.",
+                "policy does not enable freeze",
+            ),
+        )
+    if request.selected_profile_id is None:
+        return _freeze_aggregate(
+            request,
+            _freeze_non_success(
+                request,
+                PlantStressRiskStatus.INSUFFICIENT_PLANT_KNOWLEDGE,
+                "plant_profile_unresolved",
+                "Plant profile resolution is unavailable.",
+                "plant profile was not resolved",
+            ),
+        )
+
+    minimum_claim = _minimum_temperature_claim(request)
+    if minimum_claim is None or not _valid_temperature(minimum_claim.value):
+        return _freeze_aggregate(
+            request,
+            _freeze_non_success(
+                request,
+                PlantStressRiskStatus.INSUFFICIENT_PLANT_KNOWLEDGE,
+                "minimum_temperature_unavailable",
+                "Minimum-temperature evidence is unavailable.",
+                "approved environment.minimum_temperature_celsius evidence was not resolved",
+            ),
+        )
+    if minimum_claim.conflict_unresolved:
+        return _freeze_aggregate(
+            request,
+            _freeze_non_success(
+                request,
+                PlantStressRiskStatus.CONFLICTING_EVIDENCE,
+                "minimum_temperature_conflicting",
+                "Minimum-temperature evidence remains conflicting.",
+                "environment.minimum_temperature_celsius evidence has an unresolved conflict",
+                claim=minimum_claim,
+            ),
+        )
+
+    freeze_signal = _freeze_signal(request)
+    if freeze_signal is None or freeze_signal.classification not in _FREEZE_BASE_RISK:
+        return _freeze_aggregate(
+            request,
+            _freeze_non_success(
+                request,
+                PlantStressRiskStatus.INSUFFICIENT_ENVIRONMENTAL_EVIDENCE,
+                "freeze_signal_unavailable",
+                "Environmental freeze-potential evidence is unavailable.",
+                "environmental report lacks a usable freeze-potential signal",
+                claim=minimum_claim,
+            ),
+        )
+
+    minimum_temperature_value = minimum_claim.value
+    if isinstance(minimum_temperature_value, bool) or not isinstance(
+        minimum_temperature_value, (int, float)
+    ):
+        return _freeze_aggregate(
+            request,
+            _freeze_non_success(
+                request,
+                PlantStressRiskStatus.INSUFFICIENT_PLANT_KNOWLEDGE,
+                "minimum_temperature_invalid",
+                "Minimum-temperature evidence is not numeric.",
+                "environment.minimum_temperature_celsius must contain a numeric value",
+                claim=minimum_claim,
+            ),
+        )
+
+    minimum_temperature = float(minimum_temperature_value)
+    hardiness = _hardiness_class(minimum_temperature)
+    risk = _FREEZE_BASE_RISK[freeze_signal.classification][hardiness]
+    confidence_value = min(
+        minimum_claim.confidence,
+        freeze_signal.confidence.average_confidence,
+    )
+    incomplete = freeze_signal.confidence.completeness < 1.0
+    below_confidence = confidence_value < request.policy.minimum_confidence
+    partial = incomplete or below_confidence
+    if (
+        partial
+        and request.policy.partial_evidence_behavior
+        is PartialEvidenceBehavior.REQUIRE_COMPLETE
+    ):
+        return _freeze_aggregate(
+            request,
+            _freeze_non_success(
+                request,
+                PlantStressRiskStatus.UNAVAILABLE,
+                "complete_evidence_required",
+                "Complete freeze-stress evidence is required by policy.",
+                "one or more required inputs are incomplete or below confidence policy",
+                claim=minimum_claim,
+                signal=freeze_signal,
+            ),
+        )
+
+    issues: list[str] = []
+    if incomplete:
+        issues.append("environmental freeze evidence is incomplete")
+    if below_confidence:
+        issues.append("combined evidence confidence is below policy")
+    status = PlantStressRiskStatus.PARTIAL if partial else PlantStressRiskStatus.AVAILABLE
+    dimension = PlantStressDimensionAssessment(
+        assessment_id=_freeze_dimension_id(request.request_id),
+        dimension=PlantStressDimension.FREEZE,
+        status=status,
+        risk=risk,
+        confidence=PlantStressRiskConfidence(
+            confidence=confidence_value,
+            completeness=1.0,
+            known_required_input_count=_FREEZE_REQUIRED_INPUT_COUNT,
+            required_input_count=_FREEZE_REQUIRED_INPUT_COUNT,
+        ),
+        selected_profile_id=request.selected_profile_id,
+        plant_knowledge_claim_ids=(minimum_claim.claim_id,),
+        plant_knowledge_source_ids=tuple(sorted(minimum_claim.source_ids)),
+        water_requirement_assessment_id=None,
+        environmental_report_id=request.environmental_report.report_id,
+        environmental_signal_ids=(freeze_signal.signal_id,),
+        regional_applicability=minimum_claim.regional_applicability,
+        policy_id=request.policy.policy_id,
+        policy_version=request.policy.policy_version,
+        algorithm_version=PLANT_STRESS_RISK_ALGORITHM_VERSION,
+        explanation=PlantStressRiskExplanation(
+            reason_codes=tuple(
+                sorted(
+                    {
+                        f"freeze_potential_{freeze_signal.classification.value}",
+                        f"plant_hardiness_{hardiness}",
+                    }
+                )
+            ),
+            summary=(
+                f"Freeze-stress risk is {risk.value} from "
+                f"{freeze_signal.classification.value} freeze potential and "
+                f"a {minimum_temperature:.1f} C plant minimum temperature."
+            ),
+        ),
+        unresolved_issues=tuple(sorted(issues)),
+    )
+    return _freeze_aggregate(request, dimension)
+
+
+def _minimum_temperature_claim(
+    request: PlantStressRiskRequest,
+) -> EffectivePlantKnowledgeClaim | None:
+    return next(
+        (
+            claim
+            for claim in request.knowledge_resolution.effective_claims
+            if claim.field_path == _MINIMUM_TEMPERATURE_PATH
+        ),
+        None,
+    )
+
+
+def _valid_temperature(value: object) -> bool:
+    return isinstance(value, int | float) and not isinstance(value, bool)
+
+
+def _hardiness_class(minimum_temperature_celsius: float) -> str:
+    if minimum_temperature_celsius >= 5.0:
+        return "tender"
+    if minimum_temperature_celsius >= 0.0:
+        return "sensitive"
+    if minimum_temperature_celsius >= -7.0:
+        return "moderate"
+    return "hardy"
+
+
+def _freeze_signal(request: PlantStressRiskRequest) -> EnvironmentalSignal | None:
+    signals = tuple(
+        signal
+        for signal in request.environmental_report.signals
+        if signal.signal_type is EnvironmentalSignalType.FREEZE_POTENTIAL
+    )
+    if not signals:
+        return None
+    return sorted(signals, key=lambda signal: signal.signal_id)[0]
+
+
+def _freeze_non_success(
+    request: PlantStressRiskRequest,
+    status: PlantStressRiskStatus,
+    reason: str,
+    summary: str,
+    issue: str,
+    *,
+    claim: EffectivePlantKnowledgeClaim | None = None,
+    signal: EnvironmentalSignal | None = None,
+) -> PlantStressDimensionAssessment:
+    if request.policy.missing_evidence_behavior is MissingEvidenceBehavior.RETURN_UNAVAILABLE:
+        status = PlantStressRiskStatus.UNAVAILABLE
+    known = int(claim is not None) + int(signal is not None)
+    confidence_values = [
+        value
+        for value in (
+            claim.confidence if claim is not None else None,
+            signal.confidence.average_confidence if signal is not None else None,
+        )
+        if value is not None
+    ]
+    return PlantStressDimensionAssessment(
+        assessment_id=_freeze_dimension_id(request.request_id),
+        dimension=PlantStressDimension.FREEZE,
+        status=status,
+        risk=PlantStressRiskClassification.UNKNOWN,
+        confidence=PlantStressRiskConfidence(
+            confidence=min(confidence_values) if confidence_values else 0.0,
+            completeness=known / _FREEZE_REQUIRED_INPUT_COUNT,
+            known_required_input_count=known,
+            required_input_count=_FREEZE_REQUIRED_INPUT_COUNT,
+        ),
+        selected_profile_id=request.selected_profile_id,
+        plant_knowledge_claim_ids=(claim.claim_id,) if claim is not None else (),
+        plant_knowledge_source_ids=tuple(sorted(claim.source_ids)) if claim is not None else (),
+        water_requirement_assessment_id=None,
+        environmental_report_id=request.environmental_report.report_id,
+        environmental_signal_ids=(signal.signal_id,) if signal is not None else (),
+        regional_applicability=request.context.regional_applicability,
+        policy_id=request.policy.policy_id,
+        policy_version=request.policy.policy_version,
+        algorithm_version=PLANT_STRESS_RISK_ALGORITHM_VERSION,
+        explanation=PlantStressRiskExplanation(reason_codes=(reason,), summary=summary),
+        unresolved_issues=(issue,),
+    )
+
+
+def _freeze_aggregate(
+    request: PlantStressRiskRequest,
+    dimension: PlantStressDimensionAssessment,
+) -> PlantStressRiskAssessment:
+    overall_risk = (
+        dimension.risk
+        if request.policy.overall_risk_aggregation is OverallRiskAggregation.HIGHEST_AVAILABLE
+        and dimension.risk is not PlantStressRiskClassification.UNKNOWN
+        else None
+    )
+    return PlantStressRiskAssessment(
+        assessment_id=_freeze_aggregate_id(request.request_id),
+        request_id=request.request_id,
+        selected_profile_id=request.selected_profile_id,
+        location_id=request.context.location_id,
+        analysis_window_id=request.context.analysis_window_id,
+        dimensions=(dimension,),
+        overall_status=dimension.status,
+        overall_risk=overall_risk,
+        confidence=dimension.confidence,
+        knowledge_resolution_id=request.knowledge_resolution.request_id,
+        water_requirement_assessment_id=request.water_requirement_assessment.assessment_id,
+        environmental_report_id=request.environmental_report.report_id,
+        policy_id=request.policy.policy_id,
+        policy_version=request.policy.policy_version,
+        algorithm_version=PLANT_STRESS_RISK_ALGORITHM_VERSION,
+        explanation=PlantStressRiskExplanation(
+            reason_codes=("freeze_dimension_assessed",),
+            summary="Freeze plant stress risk assessment completed.",
+        ),
+        unresolved_issues=dimension.unresolved_issues,
+        created_at=request.created_at,
+    )
+
+
+def _freeze_dimension_id(request_id: str) -> str:
+    return f"plant-stress.freeze.{sha256(request_id.encode()).hexdigest()}"
+
+
+def _freeze_aggregate_id(request_id: str) -> str:
+    return f"plant-stress.assessment.freeze.{sha256(request_id.encode()).hexdigest()}"
