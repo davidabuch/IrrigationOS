@@ -6,11 +6,14 @@ from datetime import datetime
 
 from ..controllers import ControllerRegistrySnapshot
 from ..landscape import LandscapeProfile
+from ..plant_stress import PlantStressRiskStatus
 from ..plant_water_requirement import PlantWaterRequirementStatus
 from ..scientific_inputs import ScientificInputSnapshot, ScientificInputStatus
+from .environmental_intelligence import build_environmental_report
 from .models import (
     PIPELINE_ALGORITHM_VERSION,
     PIPELINE_SCHEMA_VERSION,
+    AreaPlantStressEvaluation,
     AreaWaterRequirementEvaluation,
     PipelineEvaluation,
     PipelineEvaluationStatus,
@@ -18,6 +21,7 @@ from .models import (
     PipelineStageEvaluation,
     PipelineStageStatus,
 )
+from .stress import build_area_plant_stress
 from .water_requirement import build_area_water_requirements
 
 
@@ -54,8 +58,19 @@ def build_pipeline_evaluation(
     )
     stages.append(water_stage)
 
+    environmental_report = build_environmental_report(
+        scientific_inputs, evaluated_at=evaluated_at
+    )
+    plant_stress = build_area_plant_stress(
+        scientific_inputs,
+        water_requirements,
+        environmental_report,
+        evaluated_at=evaluated_at,
+    )
+    stress_stage = _stress_stage(configured, water_stage, plant_stress)
+    stages.append(stress_stage)
+
     downstream = (
-        PipelineStage.STRESS,
         PipelineStage.HEALTH,
         PipelineStage.RECOMMENDATIONS,
         PipelineStage.PLANNING,
@@ -95,6 +110,8 @@ def build_pipeline_evaluation(
         configured_area_count=configured,
         complete_profile_count=complete,
         water_requirements=water_requirements,
+        environmental_report=environmental_report,
+        plant_stress=plant_stress,
     )
 
 
@@ -196,5 +213,56 @@ def _water_requirement_stage(
         reason="Plant Water Requirement could not produce an evidence-backed assessment.",
         blocker_codes=tuple(
             dict.fromkeys((*blocker_codes, *inherited, "plant_water_requirement_unavailable"))
+        ),
+    )
+
+
+def _stress_stage(
+    configured: int,
+    water_stage: PipelineStageEvaluation,
+    plant_stress: tuple[AreaPlantStressEvaluation, ...],
+) -> PipelineStageEvaluation:
+    if configured == 0:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.STRESS,
+            status=PipelineStageStatus.BLOCKED,
+            reason="No configured irrigation areas are available.",
+            blocker_codes=("no_configured_areas",),
+        )
+
+    blockers = tuple(
+        dict.fromkeys(code for item in plant_stress for code in item.blocker_codes)
+    )
+    assessments = tuple(item.assessment for item in plant_stress if item.assessment is not None)
+    fully_available = tuple(
+        assessment
+        for assessment in assessments
+        if assessment.overall_status is PlantStressRiskStatus.AVAILABLE
+    )
+    usable = tuple(
+        assessment
+        for assessment in assessments
+        if assessment.overall_status
+        in {PlantStressRiskStatus.AVAILABLE, PlantStressRiskStatus.PARTIAL}
+    )
+    if len(fully_available) == configured:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.STRESS,
+            status=PipelineStageStatus.READY,
+            reason="Plant Stress was assessed for every configured area.",
+        )
+    if usable:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.STRESS,
+            status=PipelineStageStatus.PARTIAL,
+            reason="Plant Stress is available with incomplete environmental or plant evidence.",
+            blocker_codes=blockers,
+        )
+    return PipelineStageEvaluation(
+        stage=PipelineStage.STRESS,
+        status=PipelineStageStatus.BLOCKED,
+        reason="Plant Stress could not produce an evidence-backed assessment.",
+        blocker_codes=tuple(
+            dict.fromkeys((*blockers, *water_stage.blocker_codes, "plant_stress_unavailable"))
         ),
     )

@@ -219,3 +219,41 @@ def test_water_requirement_executes_with_configured_context() -> None:
     assert assessment.value == 0.6
     assert result.water_requirements[0].season.value == "summer"
     assert result.current_stage is pipeline.PipelineStage.WATER_REQUIREMENT
+
+
+def test_plant_stress_executes_from_current_environmental_context() -> None:
+    evaluated_at = datetime(2026, 8, 6, 6, 5, tzinfo=UTC)
+    configured_profile = profile(configured_context=True)
+    normalized = scientific_inputs.build_scientific_input_snapshot(
+        landscape=configured_profile,
+        weather_entities=((
+            "weather.home",
+            "sunny",
+            {"temperature": 38, "humidity": 40, "wind_speed": 8, "wind_speed_unit": "m/s"},
+        ),),
+        evaluated_at=evaluated_at,
+        country_code="US",
+        latitude=34.0,
+        elevation_meters=100.0,
+    )
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(), configured_profile, normalized, evaluated_at=evaluated_at
+    )
+
+    assert result.environmental_report is not None
+    signal_types = {signal.signal_type.value for signal in result.environmental_report.signals}
+    assert {"heat_exposure", "freeze_potential", "wind_exposure"} <= signal_types
+    assert len(result.plant_stress) == 1
+    stress = result.plant_stress[0].assessment
+    assert stress is not None
+    assert {item.dimension.value for item in stress.dimensions} == {
+        "freeze", "heat", "water_deficit"
+    }
+    assert result.stage(pipeline.PipelineStage.STRESS).status in {
+        pipeline.PipelineStageStatus.PARTIAL,
+        pipeline.PipelineStageStatus.BLOCKED,
+    }
+    assert any(
+        code.startswith("stress_water_deficit_")
+        for code in result.plant_stress[0].blocker_codes
+    )
