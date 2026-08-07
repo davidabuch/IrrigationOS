@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.2
+- **Installable Home Assistant release:** v1.0.3
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** configure Water Requirement context and execute scientific stages
+- **Next milestone:** integrate Plant Stress with live pipeline inputs
 
 ## Delivery model
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.3 - Water Requirement Pipeline Integration
+
+- Add per-area plant establishment stage to the Landscape Digital Twin.
+- Derive season from Home Assistant location hemisphere without persisting coordinates.
+- Carry resolved Plant Knowledge forward without recomputing upstream science.
+- Execute evidence-backed Plant Water Requirement assessments in the HA pipeline.
+- Preserve explicit partial/blocking results when context or evidence is incomplete.
+- Update GitHub Actions to Node 24-compatible action generations.
+
 ## 1.0.2 - Scientific Input Integration
 
 - Normalize the single available Home Assistant weather entity into canonical units.

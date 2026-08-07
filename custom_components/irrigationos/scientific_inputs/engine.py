@@ -16,6 +16,8 @@ from ..plant_knowledge import (
 )
 from .models import (
     AreaKnowledgeInput,
+    Hemisphere,
+    RegionalContextInput,
     ScientificInputSnapshot,
     ScientificInputStatus,
     WeatherInputSnapshot,
@@ -27,14 +29,22 @@ def build_scientific_input_snapshot(
     landscape: LandscapeProfile,
     weather_entities: Sequence[tuple[str, str, Mapping[str, Any]]],
     evaluated_at: datetime,
+    country_code: str | None = None,
+    latitude: float | None = None,
+    elevation_meters: float | None = None,
 ) -> ScientificInputSnapshot:
     """Build deterministic weather and plant-knowledge inputs for one refresh."""
     weather, weather_blockers = _resolve_weather(weather_entities, evaluated_at)
-    area_knowledge = _resolve_area_knowledge(landscape)
+    area_knowledge = _resolve_area_knowledge(landscape, country_code)
     knowledge_blockers = tuple(
         dict.fromkeys(code for item in area_knowledge for code in item.blocker_codes)
     )
     blockers = tuple(dict.fromkeys((*weather_blockers, *knowledge_blockers)))
+    regional_context = RegionalContextInput(
+        country_code=_country_code(country_code),
+        hemisphere=_hemisphere(latitude),
+        elevation_meters=_finite_number(elevation_meters),
+    )
 
     if weather is None or not area_knowledge:
         status = ScientificInputStatus.BLOCKED
@@ -49,6 +59,7 @@ def build_scientific_input_snapshot(
         weather=weather,
         area_knowledge=area_knowledge,
         blocker_codes=blockers,
+        regional_context=regional_context,
     )
 
 
@@ -105,7 +116,9 @@ def _resolve_weather(
     )
 
 
-def _resolve_area_knowledge(landscape: LandscapeProfile) -> tuple[AreaKnowledgeInput, ...]:
+def _resolve_area_knowledge(
+    landscape: LandscapeProfile, country_code: str | None
+) -> tuple[AreaKnowledgeInput, ...]:
     library = build_curated_plant_knowledge_library()
     results: list[AreaKnowledgeInput] = []
     for profile in landscape.areas:
@@ -122,7 +135,7 @@ def _resolve_area_knowledge(landscape: LandscapeProfile) -> tuple[AreaKnowledgeI
                 request_id=f"pk.request.{safe_area_id}",
                 common_name=requested_identity,
                 broad_category=_plant_category(profile.plant_type.value),
-                country="US",
+                country=_country_code(country_code),
             ),
         )
         blockers = (
@@ -137,6 +150,7 @@ def _resolve_area_knowledge(landscape: LandscapeProfile) -> tuple[AreaKnowledgeI
                 selected_profile_id=resolution.selected_profile_id,
                 resolution_confidence=resolution.resolution_confidence,
                 blocker_codes=blockers,
+                knowledge_resolution=resolution,
             )
         )
     return tuple(results)
@@ -225,3 +239,17 @@ def _wind_speed_mps(value: object, unit: object) -> float | None:
 
 def _optional_text(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _country_code(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().upper()
+    return normalized if len(normalized) == 2 and normalized.isalpha() else None
+
+
+def _hemisphere(latitude: object) -> Hemisphere:
+    number = _finite_number(latitude)
+    if number is None or not -90 <= number <= 90:
+        return Hemisphere.UNKNOWN
+    return Hemisphere.NORTHERN if number >= 0 else Hemisphere.SOUTHERN

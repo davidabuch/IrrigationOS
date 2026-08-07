@@ -67,6 +67,9 @@ def test_single_weather_entity_and_curated_knowledge_are_normalized() -> None:
             ),
         ),
         evaluated_at=evaluated_at,
+        country_code="US",
+        latitude=34.0,
+        elevation_meters=100.0,
     )
 
     assert result.status is inputs.ScientificInputStatus.READY
@@ -74,6 +77,10 @@ def test_single_weather_entity_and_curated_knowledge_are_normalized() -> None:
     assert round(result.weather.temperature_celsius, 2) == 30.0
     assert round(result.weather.wind_speed_meters_per_second, 3) == 4.47
     assert result.area_knowledge[0].selected_profile_id == "pk.species.cynodon_dactylon"
+    assert result.area_knowledge[0].knowledge_resolution is not None
+    assert result.regional_context.country_code == "US"
+    assert result.regional_context.hemisphere is inputs.Hemisphere.NORTHERN
+    assert result.regional_context.elevation_meters == 100.0
 
 
 def test_multiple_weather_entities_are_not_guessed() -> None:

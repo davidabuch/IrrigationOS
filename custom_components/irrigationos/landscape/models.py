@@ -17,6 +17,15 @@ class ProfileValueSource(StrEnum):
     UNKNOWN = "unknown"
 
 
+class EstablishmentStage(StrEnum):
+    """Canonical establishment stage for a landscape planting."""
+
+    NEWLY_PLANTED = "newly_planted"
+    ESTABLISHING = "establishing"
+    ESTABLISHED = "established"
+    UNKNOWN = "unknown"
+
+
 class PlantType(StrEnum):
     """Canonical plant categories used by IrrigationOS."""
 
@@ -100,6 +109,9 @@ class IrrigationAreaProfile:
     root_depth_inches: ProfileValue[float | None]
     application_rate_inches_per_hour: ProfileValue[float | None]
     distribution_efficiency: ProfileValue[float | None]
+    establishment_stage: ProfileValue[EstablishmentStage] = ProfileValue(
+        EstablishmentStage.UNKNOWN, ProfileValueSource.UNKNOWN, 0
+    )
 
     @property
     def is_complete(self) -> bool:

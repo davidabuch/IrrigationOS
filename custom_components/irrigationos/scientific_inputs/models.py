@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from ..plant_knowledge import PlantKnowledgeResolution
+
 
 class ScientificInputStatus(StrEnum):
     """Overall readiness of normalized scientific inputs."""
@@ -13,6 +15,23 @@ class ScientificInputStatus(StrEnum):
     READY = "ready"
     PARTIAL = "partial"
     BLOCKED = "blocked"
+
+
+class Hemisphere(StrEnum):
+    """Hemisphere derived from Home Assistant location without retaining coordinates."""
+
+    NORTHERN = "northern"
+    SOUTHERN = "southern"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class RegionalContextInput:
+    """Privacy-preserving location context for scientific applicability."""
+
+    country_code: str | None
+    hemisphere: Hemisphere
+    elevation_meters: float | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +59,7 @@ class AreaKnowledgeInput:
     selected_profile_id: str | None
     resolution_confidence: float
     blocker_codes: tuple[str, ...] = ()
+    knowledge_resolution: PlantKnowledgeResolution | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +71,11 @@ class ScientificInputSnapshot:
     weather: WeatherInputSnapshot | None
     area_knowledge: tuple[AreaKnowledgeInput, ...]
     blocker_codes: tuple[str, ...]
+    regional_context: RegionalContextInput = RegionalContextInput(
+        country_code=None,
+        hemisphere=Hemisphere.UNKNOWN,
+        elevation_meters=None,
+    )
 
     @property
     def resolved_area_count(self) -> int:

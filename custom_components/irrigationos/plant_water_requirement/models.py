@@ -9,6 +9,7 @@ from enum import StrEnum
 from math import isfinite
 from typing import Any
 
+from ..landscape import EstablishmentStage
 from ..plant_knowledge import (
     EvidenceGrade,
     InheritedClaimTrace,
@@ -27,15 +28,6 @@ _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _REASON_CODE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 _FIELD_PATH_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$")
-
-
-class EstablishmentStage(StrEnum):
-    """Stable establishment stages used only as declared context."""
-
-    NEWLY_PLANTED = "newly_planted"
-    ESTABLISHING = "establishing"
-    ESTABLISHED = "established"
-    UNKNOWN = "unknown"
 
 
 class ExposureClassification(StrEnum):

@@ -7,11 +7,13 @@ from datetime import datetime
 from enum import StrEnum
 
 from ..controllers import ControllerRegistrySnapshot
-from ..landscape import LandscapeProfile
+from ..landscape import EstablishmentStage, LandscapeProfile
+from ..plant_knowledge import Season
+from ..plant_water_requirement import PlantWaterRequirementAssessment
 from ..scientific_inputs import ScientificInputSnapshot
 
 PIPELINE_SCHEMA_VERSION = "1.0"
-PIPELINE_ALGORITHM_VERSION = "1.0.2"
+PIPELINE_ALGORITHM_VERSION = "1.0.3"
 
 
 class PipelineStage(StrEnum):
@@ -57,6 +59,17 @@ class PipelineStageEvaluation:
 
 
 @dataclass(frozen=True, slots=True)
+class AreaWaterRequirementEvaluation:
+    """Water-requirement result and context for one irrigation area."""
+
+    area_id: str
+    establishment_stage: EstablishmentStage
+    season: Season | None
+    assessment: PlantWaterRequirementAssessment | None
+    blocker_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class PipelineEvaluation:
     """Canonical immutable output cached by the HA coordinator."""
 
@@ -71,6 +84,7 @@ class PipelineEvaluation:
     stages: tuple[PipelineStageEvaluation, ...]
     configured_area_count: int
     complete_profile_count: int
+    water_requirements: tuple[AreaWaterRequirementEvaluation, ...] = ()
 
     def stage(self, stage: PipelineStage) -> PipelineStageEvaluation:
         """Return one stage evaluation."""

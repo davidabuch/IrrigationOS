@@ -23,6 +23,7 @@ ProfileValue = MODULE.ProfileValue
 ProfileValueSource = MODULE.ProfileValueSource
 SoilTexture = MODULE.SoilTexture
 SunExposure = MODULE.SunExposure
+EstablishmentStage = MODULE.EstablishmentStage
 
 
 def _profile(**overrides: object) -> Any:
@@ -84,3 +85,9 @@ def test_landscape_boundary_is_wired_into_builder_options_and_entities() -> None
     assert "ProfileValueSource.USER" in builder
     assert "IrrigationOSOptionsFlow" in options
     assert "IrrigationOSLandscapeProfileSensor" in sensor
+
+
+def test_establishment_stage_defaults_unknown_without_guessing() -> None:
+    profile = _profile()
+    assert profile.establishment_stage.value is EstablishmentStage.UNKNOWN
+    assert profile.establishment_stage.source is ProfileValueSource.UNKNOWN

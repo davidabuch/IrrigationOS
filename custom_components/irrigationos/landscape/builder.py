@@ -8,6 +8,7 @@ from typing import Any
 
 from ..controllers import ControllerRegistrySnapshot, IrrigationArea
 from .models import (
+    EstablishmentStage,
     IrrigationAreaProfile,
     IrrigationMethod,
     LandscapeProfile,
@@ -123,6 +124,12 @@ def build_area_profile(
             fallback_confidence=85 if area.nozzle_inches_per_hour is not None else 0,
             minimum=0.01,
             maximum=20,
+        ),
+        establishment_stage=_user_enum(
+            user, "establishment_stage", EstablishmentStage
+        )
+        or ProfileValue(
+            EstablishmentStage.UNKNOWN, ProfileValueSource.UNKNOWN, 0
         ),
         distribution_efficiency=_numeric_value(
             user,

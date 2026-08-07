@@ -31,11 +31,18 @@ from .controllers import (
     ControllerProviderError,
     ControllerRateLimitError,
 )
-from .landscape import IrrigationMethod, PlantType, SoilTexture, SunExposure
+from .landscape import (
+    EstablishmentStage,
+    IrrigationMethod,
+    PlantType,
+    SoilTexture,
+    SunExposure,
+)
 
 CONF_DISPLAY_NAME = "display_name"
 CONF_PLANT_TYPE = "plant_type"
 CONF_PLANT_DESCRIPTION = "plant_description"
+CONF_ESTABLISHMENT_STAGE = "establishment_stage"
 CONF_IRRIGATION_METHOD = "irrigation_method"
 CONF_SUN_EXPOSURE = "sun_exposure"
 CONF_SLOPE_PERCENT = "slope_percent"
@@ -255,8 +262,16 @@ def _area_schema(existing: dict[str, Any], profile: Any) -> vol.Schema:
             ): vol.In([item.value for item in PlantType]),
             vol.Optional(
                 CONF_PLANT_DESCRIPTION,
+        CONF_ESTABLISHMENT_STAGE,
                 default=existing.get(CONF_PLANT_DESCRIPTION, profile.plant_description.value or ""),
             ): str,
+            vol.Required(
+                CONF_ESTABLISHMENT_STAGE,
+                default=existing.get(
+                    CONF_ESTABLISHMENT_STAGE,
+                    profile.establishment_stage.value.value,
+                ),
+            ): vol.In([item.value for item in EstablishmentStage]),
             vol.Required(
                 CONF_IRRIGATION_METHOD,
                 default=existing.get(CONF_IRRIGATION_METHOD, profile.irrigation_method.value.value),
@@ -323,6 +338,7 @@ def _normalize_profile_input(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_DISPLAY_NAME,
         CONF_PLANT_TYPE,
         CONF_PLANT_DESCRIPTION,
+        CONF_ESTABLISHMENT_STAGE,
         CONF_IRRIGATION_METHOD,
         CONF_SUN_EXPOSURE,
         CONF_SLOPE_PERCENT,
