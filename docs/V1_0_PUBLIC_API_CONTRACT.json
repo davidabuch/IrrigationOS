@@ -1,0 +1,1551 @@
+{
+  "contract_version": "1.0",
+  "frozen_release": "1.0.13",
+  "modules": {
+    "execution": {
+      "dataclasses": {
+        "CommandResult": [
+          "command_id",
+          "idempotency_key",
+          "outcome",
+          "attempt_number",
+          "observed_at",
+          "reason"
+        ],
+        "ControllerCommand": [
+          "command_id",
+          "idempotency_key",
+          "scheduled_action_id",
+          "target_id",
+          "command_type",
+          "disposition",
+          "planned_at",
+          "cycle_number",
+          "runtime_seconds",
+          "acknowledgement_timeout_seconds",
+          "maximum_attempts",
+          "retry_delay_seconds",
+          "attribution_source",
+          "source_action"
+        ],
+        "ExecutionPlan": [
+          "execution_plan_id",
+          "request_id",
+          "schedule_id",
+          "status",
+          "commands",
+          "unresolved_issues",
+          "policy_id",
+          "policy_version",
+          "algorithm_version",
+          "created_at",
+          "source_schedule",
+          "schema_version"
+        ],
+        "ExecutionPolicy": [
+          "policy_id",
+          "policy_version",
+          "acknowledgement_timeout_seconds",
+          "maximum_attempts",
+          "retry_delay_seconds"
+        ],
+        "ExecutionRequest": [
+          "request_id",
+          "schedule",
+          "policy",
+          "created_at",
+          "safety_blocks",
+          "completed_idempotency_keys",
+          "schema_version",
+          "algorithm_version"
+        ]
+      },
+      "enums": {
+        "CommandOutcome": [
+          {
+            "name": "ACKNOWLEDGED",
+            "value": "acknowledged"
+          },
+          {
+            "name": "RETRY_REQUIRED",
+            "value": "retry_required"
+          },
+          {
+            "name": "TIMED_OUT",
+            "value": "timed_out"
+          },
+          {
+            "name": "REJECTED",
+            "value": "rejected"
+          }
+        ],
+        "ControllerCommandDisposition": [
+          {
+            "name": "READY",
+            "value": "ready"
+          },
+          {
+            "name": "SKIPPED_IDEMPOTENT",
+            "value": "skipped_idempotent"
+          }
+        ],
+        "ControllerCommandType": [
+          {
+            "name": "START_ZONE",
+            "value": "start_zone"
+          },
+          {
+            "name": "STOP_ZONE",
+            "value": "stop_zone"
+          }
+        ],
+        "ExecutionPlanStatus": [
+          {
+            "name": "READY",
+            "value": "ready"
+          },
+          {
+            "name": "PARTIAL",
+            "value": "partial"
+          },
+          {
+            "name": "BLOCKED",
+            "value": "blocked"
+          },
+          {
+            "name": "NO_COMMANDS",
+            "value": "no_commands"
+          }
+        ]
+      },
+      "exports": [
+        "EXECUTION_ALGORITHM_VERSION",
+        "EXECUTION_SCHEMA_VERSION",
+        "CommandOutcome",
+        "CommandResult",
+        "ControllerCommand",
+        "ControllerCommandDisposition",
+        "ControllerCommandType",
+        "ExecutionPlan",
+        "ExecutionPlanStatus",
+        "ExecutionPolicy",
+        "ExecutionRequest",
+        "build_execution_plan",
+        "evaluate_command_outcome"
+      ],
+      "versions": {
+        "EXECUTION_ALGORITHM_VERSION": "1.0.0",
+        "EXECUTION_SCHEMA_VERSION": 1
+      }
+    },
+    "pipeline": {
+      "dataclasses": {
+        "AreaExecutionEvaluation": [
+          "area_id",
+          "execution_plan",
+          "blocker_codes"
+        ],
+        "AreaPlanningEvaluation": [
+          "area_id",
+          "plan",
+          "blocker_codes"
+        ],
+        "AreaPlantHealthEvaluation": [
+          "area_id",
+          "assessment",
+          "blocker_codes"
+        ],
+        "AreaPlantStressEvaluation": [
+          "area_id",
+          "assessment",
+          "blocker_codes"
+        ],
+        "AreaRecommendationEvaluation": [
+          "area_id",
+          "assessment",
+          "blocker_codes"
+        ],
+        "AreaRuntimeMonitoringEvaluation": [
+          "area_id",
+          "report",
+          "blocker_codes"
+        ],
+        "AreaSchedulingEvaluation": [
+          "area_id",
+          "schedule",
+          "blocker_codes"
+        ],
+        "AreaWaterRequirementEvaluation": [
+          "area_id",
+          "establishment_stage",
+          "season",
+          "assessment",
+          "blocker_codes"
+        ],
+        "PipelineEvaluation": [
+          "schema_version",
+          "algorithm_version",
+          "evaluated_at",
+          "status",
+          "current_stage",
+          "observation_snapshot",
+          "landscape_profile",
+          "scientific_inputs",
+          "stages",
+          "configured_area_count",
+          "complete_profile_count",
+          "water_requirements",
+          "environmental_report",
+          "plant_stress",
+          "plant_health",
+          "recommendations",
+          "planning",
+          "scheduling",
+          "execution",
+          "runtime_monitoring"
+        ],
+        "PipelineStageEvaluation": [
+          "stage",
+          "status",
+          "reason",
+          "blocker_codes"
+        ]
+      },
+      "enums": {
+        "PipelineEvaluationStatus": [
+          {
+            "name": "READY",
+            "value": "ready"
+          },
+          {
+            "name": "PARTIAL",
+            "value": "partial"
+          },
+          {
+            "name": "BLOCKED",
+            "value": "blocked"
+          }
+        ],
+        "PipelineStage": [
+          {
+            "name": "OBSERVATIONS",
+            "value": "observations"
+          },
+          {
+            "name": "KNOWLEDGE",
+            "value": "knowledge"
+          },
+          {
+            "name": "WATER_REQUIREMENT",
+            "value": "water_requirement"
+          },
+          {
+            "name": "STRESS",
+            "value": "stress"
+          },
+          {
+            "name": "HEALTH",
+            "value": "health"
+          },
+          {
+            "name": "RECOMMENDATIONS",
+            "value": "recommendations"
+          },
+          {
+            "name": "PLANNING",
+            "value": "planning"
+          },
+          {
+            "name": "SCHEDULING",
+            "value": "scheduling"
+          },
+          {
+            "name": "EXECUTION",
+            "value": "execution"
+          },
+          {
+            "name": "RUNTIME_MONITORING",
+            "value": "runtime_monitoring"
+          }
+        ],
+        "PipelineStageStatus": [
+          {
+            "name": "READY",
+            "value": "ready"
+          },
+          {
+            "name": "PARTIAL",
+            "value": "partial"
+          },
+          {
+            "name": "BLOCKED",
+            "value": "blocked"
+          },
+          {
+            "name": "UNAVAILABLE",
+            "value": "unavailable"
+          }
+        ]
+      },
+      "exports": [
+        "PIPELINE_ALGORITHM_VERSION",
+        "PIPELINE_SCHEMA_VERSION",
+        "AreaExecutionEvaluation",
+        "AreaPlanningEvaluation",
+        "AreaPlantHealthEvaluation",
+        "AreaPlantStressEvaluation",
+        "AreaRecommendationEvaluation",
+        "AreaRuntimeMonitoringEvaluation",
+        "AreaSchedulingEvaluation",
+        "AreaWaterRequirementEvaluation",
+        "PipelineEvaluation",
+        "PipelineEvaluationStatus",
+        "PipelineStage",
+        "PipelineStageEvaluation",
+        "PipelineStageStatus",
+        "build_pipeline_evaluation"
+      ],
+      "versions": {
+        "PIPELINE_ALGORITHM_VERSION": "1.0.10",
+        "PIPELINE_SCHEMA_VERSION": "1.0"
+      }
+    },
+    "planning": {
+      "dataclasses": {
+        "IrrigationPlan": [
+          "plan_id",
+          "request_id",
+          "recommendation_assessment_id",
+          "status",
+          "actions",
+          "unresolved_issues",
+          "policy_id",
+          "policy_version",
+          "algorithm_version",
+          "created_at",
+          "schema_version"
+        ],
+        "PlanAction": [
+          "action_id",
+          "recommendation_id",
+          "action_type",
+          "disposition",
+          "target_id",
+          "quantity",
+          "quantity_unit",
+          "runtime_seconds",
+          "cycle_count",
+          "soak_seconds",
+          "preconditions",
+          "safety_constraints",
+          "blocking_reasons",
+          "supporting_assessment_ids"
+        ],
+        "PlanningDirective": [
+          "recommendation_id",
+          "target_id",
+          "quantity",
+          "quantity_unit",
+          "runtime_seconds",
+          "cycle_count",
+          "soak_seconds"
+        ],
+        "PlanningPolicy": [
+          "policy_id",
+          "policy_version",
+          "require_runtime_for_automatic_execution"
+        ],
+        "PlanningRequest": [
+          "request_id",
+          "recommendations",
+          "directives",
+          "policy",
+          "created_at",
+          "schema_version",
+          "algorithm_version"
+        ]
+      },
+      "enums": {
+        "PlanActionType": [
+          {
+            "name": "IRRIGATE",
+            "value": "irrigate"
+          },
+          {
+            "name": "INSPECT",
+            "value": "inspect"
+          },
+          {
+            "name": "MONITOR",
+            "value": "monitor"
+          },
+          {
+            "name": "NO_ACTION",
+            "value": "no_action"
+          },
+          {
+            "name": "PROTECT_FROM_FREEZE",
+            "value": "protect_from_freeze"
+          },
+          {
+            "name": "PROTECT_FROM_HEAT",
+            "value": "protect_from_heat"
+          },
+          {
+            "name": "SEEK_EXPERT_REVIEW",
+            "value": "seek_expert_review"
+          }
+        ],
+        "PlanExecutionDisposition": [
+          {
+            "name": "READY",
+            "value": "ready"
+          },
+          {
+            "name": "MANUAL_ONLY",
+            "value": "manual_only"
+          },
+          {
+            "name": "BLOCKED",
+            "value": "blocked"
+          }
+        ],
+        "PlanQuantityUnit": [
+          {
+            "name": "MILLIMETERS",
+            "value": "millimeters"
+          },
+          {
+            "name": "INCHES",
+            "value": "inches"
+          },
+          {
+            "name": "LITERS",
+            "value": "liters"
+          },
+          {
+            "name": "GALLONS",
+            "value": "gallons"
+          }
+        ],
+        "PlanStatus": [
+          {
+            "name": "READY",
+            "value": "ready"
+          },
+          {
+            "name": "PARTIAL",
+            "value": "partial"
+          },
+          {
+            "name": "NOT_EXECUTABLE",
+            "value": "not_executable"
+          }
+        ]
+      },
+      "exports": [
+        "PLANNING_ALGORITHM_VERSION",
+        "PLANNING_SCHEMA_VERSION",
+        "IrrigationPlan",
+        "PlanAction",
+        "PlanActionType",
+        "PlanExecutionDisposition",
+        "PlanQuantityUnit",
+        "PlanStatus",
+        "PlanningDirective",
+        "PlanningPolicy",
+        "PlanningRequest",
+        "build_irrigation_plan"
+      ],
+      "versions": {
+        "PLANNING_ALGORITHM_VERSION": "1.0.0",
+        "PLANNING_SCHEMA_VERSION": 1
+      }
+    },
+    "plant_health": {
+      "dataclasses": {
+        "PlantHealthAssessment": [
+          "assessment_id",
+          "request_id",
+          "plant_instance_id",
+          "selected_profile_id",
+          "status",
+          "classification",
+          "confidence",
+          "evidence_ids",
+          "source_ids",
+          "aggregate_stress_assessment_id",
+          "policy_id",
+          "policy_version",
+          "algorithm_version",
+          "explanation",
+          "unresolved_issues",
+          "created_at",
+          "schema_version"
+        ],
+        "PlantHealthConfidence": [
+          "confidence",
+          "completeness",
+          "admitted_evidence_count",
+          "required_evidence_count"
+        ],
+        "PlantHealthEvidence": [
+          "evidence_id",
+          "kind",
+          "indicator",
+          "severity",
+          "confidence",
+          "observed_at",
+          "source_id",
+          "notes"
+        ],
+        "PlantHealthExplanation": [
+          "reason_codes",
+          "summary",
+          "detail"
+        ],
+        "PlantHealthPolicy": [
+          "policy_id",
+          "policy_version",
+          "minimum_direct_evidence_count",
+          "minimum_confidence"
+        ],
+        "PlantHealthRequest": [
+          "request_id",
+          "plant_instance_id",
+          "selected_profile_id",
+          "direct_evidence",
+          "aggregate_stress",
+          "policy",
+          "created_at",
+          "schema_version",
+          "algorithm_version"
+        ]
+      },
+      "enums": {
+        "PlantHealthClassification": [
+          {
+            "name": "EXCELLENT",
+            "value": "excellent"
+          },
+          {
+            "name": "GOOD",
+            "value": "good"
+          },
+          {
+            "name": "FAIR",
+            "value": "fair"
+          },
+          {
+            "name": "POOR",
+            "value": "poor"
+          },
+          {
+            "name": "CRITICAL",
+            "value": "critical"
+          },
+          {
+            "name": "UNKNOWN",
+            "value": "unknown"
+          }
+        ],
+        "PlantHealthEvidenceKind": [
+          {
+            "name": "MANUAL_OBSERVATION",
+            "value": "manual_observation"
+          },
+          {
+            "name": "SENSOR_OBSERVATION",
+            "value": "sensor_observation"
+          },
+          {
+            "name": "VISUAL_OBSERVATION",
+            "value": "visual_observation"
+          }
+        ],
+        "PlantHealthIndicator": [
+          {
+            "name": "VIGOR",
+            "value": "vigor"
+          },
+          {
+            "name": "WILTING",
+            "value": "wilting"
+          },
+          {
+            "name": "DISCOLORATION",
+            "value": "discoloration"
+          },
+          {
+            "name": "DEFOLIATION",
+            "value": "defoliation"
+          },
+          {
+            "name": "TISSUE_DAMAGE",
+            "value": "tissue_damage"
+          },
+          {
+            "name": "DISEASE_SIGNS",
+            "value": "disease_signs"
+          },
+          {
+            "name": "PEST_SIGNS",
+            "value": "pest_signs"
+          },
+          {
+            "name": "NUTRIENT_DEFICIENCY_SIGNS",
+            "value": "nutrient_deficiency_signs"
+          },
+          {
+            "name": "RECOVERY",
+            "value": "recovery"
+          }
+        ],
+        "PlantHealthSeverity": [
+          {
+            "name": "NONE",
+            "value": "none"
+          },
+          {
+            "name": "MILD",
+            "value": "mild"
+          },
+          {
+            "name": "MODERATE",
+            "value": "moderate"
+          },
+          {
+            "name": "SEVERE",
+            "value": "severe"
+          },
+          {
+            "name": "CRITICAL",
+            "value": "critical"
+          }
+        ],
+        "PlantHealthStatus": [
+          {
+            "name": "AVAILABLE",
+            "value": "available"
+          },
+          {
+            "name": "PARTIAL",
+            "value": "partial"
+          },
+          {
+            "name": "INSUFFICIENT_DIRECT_EVIDENCE",
+            "value": "insufficient_direct_evidence"
+          },
+          {
+            "name": "CONFLICTING_DIRECT_EVIDENCE",
+            "value": "conflicting_direct_evidence"
+          },
+          {
+            "name": "UNAVAILABLE",
+            "value": "unavailable"
+          }
+        ]
+      },
+      "exports": [
+        "PLANT_HEALTH_ALGORITHM_VERSION",
+        "PLANT_HEALTH_SCHEMA_VERSION",
+        "PlantHealthAssessment",
+        "PlantHealthClassification",
+        "PlantHealthConfidence",
+        "PlantHealthEvidence",
+        "PlantHealthEvidenceKind",
+        "PlantHealthExplanation",
+        "PlantHealthIndicator",
+        "PlantHealthPolicy",
+        "PlantHealthRequest",
+        "PlantHealthSeverity",
+        "PlantHealthStatus",
+        "assess_plant_health"
+      ],
+      "versions": {
+        "PLANT_HEALTH_ALGORITHM_VERSION": "1.0.0",
+        "PLANT_HEALTH_SCHEMA_VERSION": 1
+      }
+    },
+    "plant_stress": {
+      "dataclasses": {
+        "PlantStressDimensionAssessment": [
+          "assessment_id",
+          "dimension",
+          "status",
+          "risk",
+          "confidence",
+          "selected_profile_id",
+          "plant_knowledge_claim_ids",
+          "plant_knowledge_source_ids",
+          "water_requirement_assessment_id",
+          "environmental_report_id",
+          "environmental_signal_ids",
+          "regional_applicability",
+          "policy_id",
+          "policy_version",
+          "algorithm_version",
+          "explanation",
+          "unresolved_issues"
+        ],
+        "PlantStressRiskAssessment": [
+          "assessment_id",
+          "request_id",
+          "selected_profile_id",
+          "location_id",
+          "analysis_window_id",
+          "dimensions",
+          "overall_status",
+          "overall_risk",
+          "confidence",
+          "knowledge_resolution_id",
+          "water_requirement_assessment_id",
+          "environmental_report_id",
+          "policy_id",
+          "policy_version",
+          "algorithm_version",
+          "explanation",
+          "unresolved_issues",
+          "created_at",
+          "schema_version"
+        ],
+        "PlantStressRiskConfidence": [
+          "confidence",
+          "completeness",
+          "known_required_input_count",
+          "required_input_count"
+        ],
+        "PlantStressRiskContext": [
+          "location_id",
+          "analysis_window_id",
+          "regional_applicability",
+          "season"
+        ],
+        "PlantStressRiskExplanation": [
+          "reason_codes",
+          "summary",
+          "detail"
+        ],
+        "PlantStressRiskPolicy": [
+          "policy_id",
+          "policy_version",
+          "enabled_dimensions",
+          "minimum_confidence",
+          "partial_evidence_behavior",
+          "missing_evidence_behavior",
+          "overall_risk_aggregation"
+        ],
+        "PlantStressRiskRequest": [
+          "request_id",
+          "knowledge_resolution",
+          "water_requirement_assessment",
+          "environmental_report",
+          "context",
+          "policy",
+          "created_at",
+          "schema_version",
+          "algorithm_version"
+        ]
+      },
+      "enums": {
+        "MissingEvidenceBehavior": [
+          {
+            "name": "RETURN_UNAVAILABLE",
+            "value": "return_unavailable"
+          },
+          {
+            "name": "RETURN_SPECIFIC_STATUS",
+            "value": "return_specific_status"
+          }
+        ],
+        "OverallRiskAggregation": [
+          {
+            "name": "NONE",
+            "value": "none"
+          },
+          {
+            "name": "HIGHEST_AVAILABLE",
+            "value": "highest_available"
+          }
+        ],
+        "PartialEvidenceBehavior": [
+          {
+            "name": "RETURN_PARTIAL",
+            "value": "return_partial"
+          },
+          {
+            "name": "REQUIRE_COMPLETE",
+            "value": "require_complete"
+          }
+        ],
+        "PlantStressDimension": [
+          {
+            "name": "WATER_DEFICIT",
+            "value": "water_deficit"
+          },
+          {
+            "name": "HEAT",
+            "value": "heat"
+          },
+          {
+            "name": "FREEZE",
+            "value": "freeze"
+          }
+        ],
+        "PlantStressRiskClassification": [
+          {
+            "name": "NONE",
+            "value": "none"
+          },
+          {
+            "name": "LOW",
+            "value": "low"
+          },
+          {
+            "name": "MODERATE",
+            "value": "moderate"
+          },
+          {
+            "name": "HIGH",
+            "value": "high"
+          },
+          {
+            "name": "VERY_HIGH",
+            "value": "very_high"
+          },
+          {
+            "name": "UNKNOWN",
+            "value": "unknown"
+          }
+        ],
+        "PlantStressRiskStatus": [
+          {
+            "name": "AVAILABLE",
+            "value": "available"
+          },
+          {
+            "name": "PARTIAL",
+            "value": "partial"
+          },
+          {
+            "name": "UNAVAILABLE",
+            "value": "unavailable"
+          },
+          {
+            "name": "INSUFFICIENT_PLANT_KNOWLEDGE",
+            "value": "insufficient_plant_knowledge"
+          },
+          {
+            "name": "INSUFFICIENT_ENVIRONMENTAL_EVIDENCE",
+            "value": "insufficient_environmental_evidence"
+          },
+          {
+            "name": "REGIONAL_MISMATCH",
+            "value": "regional_mismatch"
+          },
+          {
+            "name": "CONFLICTING_EVIDENCE",
+            "value": "conflicting_evidence"
+          }
+        ]
+      },
+      "exports": [
+        "PLANT_STRESS_RISK_ALGORITHM_VERSION",
+        "PLANT_STRESS_RISK_SCHEMA_VERSION",
+        "MissingEvidenceBehavior",
+        "OverallRiskAggregation",
+        "PartialEvidenceBehavior",
+        "PlantStressDimension",
+        "PlantStressDimensionAssessment",
+        "PlantStressRiskAssessment",
+        "PlantStressRiskClassification",
+        "PlantStressRiskConfidence",
+        "PlantStressRiskContext",
+        "PlantStressRiskExplanation",
+        "PlantStressRiskPolicy",
+        "PlantStressRiskRequest",
+        "PlantStressRiskStatus",
+        "aggregate_plant_stress",
+        "assess_freeze_stress",
+        "assess_heat_stress",
+        "assess_water_deficit_stress"
+      ],
+      "versions": {
+        "PLANT_STRESS_RISK_ALGORITHM_VERSION": "1.0.0",
+        "PLANT_STRESS_RISK_SCHEMA_VERSION": 1
+      }
+    },
+    "plant_water_requirement": {
+      "dataclasses": {
+        "PlantWaterRequirementAssessment": [
+          "assessment_id",
+          "request_id",
+          "selected_profile_id",
+          "status",
+          "value",
+          "unit",
+          "regional_result",
+          "applicable_region",
+          "applicable_season",
+          "confidence",
+          "claim_ids",
+          "source_ids",
+          "claim_resolution_ids",
+          "claim_traces",
+          "policy_id",
+          "policy_version",
+          "algorithm_version",
+          "explanation",
+          "unresolved_issues",
+          "created_at",
+          "schema_version"
+        ],
+        "PlantWaterRequirementConfidence": [
+          "confidence",
+          "completeness",
+          "known_required_input_count",
+          "required_input_count"
+        ],
+        "PlantWaterRequirementContext": [
+          "regional_applicability",
+          "season",
+          "establishment_stage",
+          "exposure",
+          "microclimate"
+        ],
+        "PlantWaterRequirementExplanation": [
+          "reason_codes",
+          "summary",
+          "detail"
+        ],
+        "PlantWaterRequirementPolicy": [
+          "policy_id",
+          "policy_version",
+          "accepted_claim_paths",
+          "minimum_review_state",
+          "minimum_evidence_grade",
+          "minimum_confidence",
+          "require_regional_match",
+          "range_handling",
+          "missing_data_behavior",
+          "conflict_behavior"
+        ],
+        "PlantWaterRequirementRequest": [
+          "request_id",
+          "knowledge_resolution",
+          "context",
+          "policy",
+          "created_at",
+          "schema_version",
+          "algorithm_version"
+        ]
+      },
+      "enums": {
+        "ConflictBehavior": [
+          {
+            "name": "RETURN_CONFLICT",
+            "value": "return_conflict"
+          },
+          {
+            "name": "REQUIRE_RESOLUTION",
+            "value": "require_resolution"
+          }
+        ],
+        "EstablishmentStage": [
+          {
+            "name": "NEWLY_PLANTED",
+            "value": "newly_planted"
+          },
+          {
+            "name": "ESTABLISHING",
+            "value": "establishing"
+          },
+          {
+            "name": "ESTABLISHED",
+            "value": "established"
+          },
+          {
+            "name": "UNKNOWN",
+            "value": "unknown"
+          }
+        ],
+        "ExposureClassification": [
+          {
+            "name": "SHELTERED",
+            "value": "sheltered"
+          },
+          {
+            "name": "TYPICAL",
+            "value": "typical"
+          },
+          {
+            "name": "EXPOSED",
+            "value": "exposed"
+          },
+          {
+            "name": "UNKNOWN",
+            "value": "unknown"
+          }
+        ],
+        "MicroclimateClassification": [
+          {
+            "name": "COOL",
+            "value": "cool"
+          },
+          {
+            "name": "TYPICAL",
+            "value": "typical"
+          },
+          {
+            "name": "WARM",
+            "value": "warm"
+          },
+          {
+            "name": "UNKNOWN",
+            "value": "unknown"
+          }
+        ],
+        "MissingDataBehavior": [
+          {
+            "name": "RETURN_UNAVAILABLE",
+            "value": "return_unavailable"
+          },
+          {
+            "name": "RETURN_PARTIAL",
+            "value": "return_partial"
+          }
+        ],
+        "PlantWaterRequirementReasonCode": [
+          {
+            "name": "REQUIREMENT_AVAILABLE",
+            "value": "requirement_available"
+          },
+          {
+            "name": "REQUIREMENT_PARTIAL",
+            "value": "requirement_partial"
+          },
+          {
+            "name": "MISSING_WATER_EVIDENCE",
+            "value": "missing_water_evidence"
+          },
+          {
+            "name": "CONFLICTING_WATER_EVIDENCE",
+            "value": "conflicting_water_evidence"
+          },
+          {
+            "name": "REGIONAL_SCOPE_MISMATCH",
+            "value": "regional_scope_mismatch"
+          },
+          {
+            "name": "EVIDENCE_BELOW_POLICY",
+            "value": "evidence_below_policy"
+          },
+          {
+            "name": "PROFILE_NOT_RESOLVED",
+            "value": "profile_not_resolved"
+          },
+          {
+            "name": "RANGE_PRESERVED",
+            "value": "range_preserved"
+          }
+        ],
+        "PlantWaterRequirementStatus": [
+          {
+            "name": "AVAILABLE",
+            "value": "available"
+          },
+          {
+            "name": "PARTIAL",
+            "value": "partial"
+          },
+          {
+            "name": "UNAVAILABLE",
+            "value": "unavailable"
+          },
+          {
+            "name": "CONFLICTING_EVIDENCE",
+            "value": "conflicting_evidence"
+          },
+          {
+            "name": "REGIONAL_MISMATCH",
+            "value": "regional_mismatch"
+          },
+          {
+            "name": "INSUFFICIENT_QUALITY",
+            "value": "insufficient_quality"
+          }
+        ],
+        "RangeHandling": [
+          {
+            "name": "PRESERVE",
+            "value": "preserve"
+          },
+          {
+            "name": "USE_TYPICAL_IF_PRESENT",
+            "value": "use_typical_if_present"
+          }
+        ],
+        "RegionalApplicabilityResult": [
+          {
+            "name": "MATCH",
+            "value": "match"
+          },
+          {
+            "name": "PARTIAL_MATCH",
+            "value": "partial_match"
+          },
+          {
+            "name": "UNAVAILABLE_CONTEXT",
+            "value": "unavailable_context"
+          },
+          {
+            "name": "MISMATCH",
+            "value": "mismatch"
+          },
+          {
+            "name": "UNRESTRICTED",
+            "value": "unrestricted"
+          },
+          {
+            "name": "NOT_EVALUATED",
+            "value": "not_evaluated"
+          }
+        ]
+      },
+      "exports": [
+        "PLANT_WATER_REQUIREMENT_ALGORITHM_VERSION",
+        "PLANT_WATER_REQUIREMENT_SCHEMA_VERSION",
+        "ConflictBehavior",
+        "EstablishmentStage",
+        "ExposureClassification",
+        "MicroclimateClassification",
+        "MissingDataBehavior",
+        "PlantWaterRequirementAssessment",
+        "PlantWaterRequirementConfidence",
+        "PlantWaterRequirementContext",
+        "PlantWaterRequirementExplanation",
+        "PlantWaterRequirementPolicy",
+        "PlantWaterRequirementReasonCode",
+        "PlantWaterRequirementRequest",
+        "PlantWaterRequirementStatus",
+        "RangeHandling",
+        "RegionalApplicabilityResult",
+        "assess_plant_water_requirement"
+      ],
+      "versions": {
+        "PLANT_WATER_REQUIREMENT_ALGORITHM_VERSION": "1.0.0",
+        "PLANT_WATER_REQUIREMENT_SCHEMA_VERSION": 2
+      }
+    },
+    "recommendations": {
+      "dataclasses": {
+        "Recommendation": [
+          "recommendation_id",
+          "category",
+          "priority",
+          "confidence",
+          "supporting_assessment_ids",
+          "preconditions",
+          "safety_flags",
+          "explanation"
+        ],
+        "RecommendationAssessment": [
+          "assessment_id",
+          "request_id",
+          "status",
+          "recommendations",
+          "plant_health_assessment_id",
+          "aggregate_stress_assessment_id",
+          "water_requirement_assessment_id",
+          "policy_id",
+          "policy_version",
+          "algorithm_version",
+          "unresolved_issues",
+          "created_at",
+          "schema_version"
+        ],
+        "RecommendationExplanation": [
+          "reason_codes",
+          "summary"
+        ],
+        "RecommendationPolicy": [
+          "policy_id",
+          "policy_version",
+          "minimum_confidence"
+        ],
+        "RecommendationRequest": [
+          "request_id",
+          "plant_health",
+          "aggregate_stress",
+          "water_requirement",
+          "policy",
+          "created_at",
+          "schema_version",
+          "algorithm_version"
+        ]
+      },
+      "enums": {
+        "RecommendationCategory": [
+          {
+            "name": "ADJUST_IRRIGATION",
+            "value": "adjust_irrigation"
+          },
+          {
+            "name": "INSPECT",
+            "value": "inspect"
+          },
+          {
+            "name": "MONITOR",
+            "value": "monitor"
+          },
+          {
+            "name": "NO_ACTION",
+            "value": "no_action"
+          },
+          {
+            "name": "PROTECT_FROM_FREEZE",
+            "value": "protect_from_freeze"
+          },
+          {
+            "name": "PROTECT_FROM_HEAT",
+            "value": "protect_from_heat"
+          },
+          {
+            "name": "SEEK_EXPERT_REVIEW",
+            "value": "seek_expert_review"
+          }
+        ],
+        "RecommendationPriority": [
+          {
+            "name": "LOW",
+            "value": "low"
+          },
+          {
+            "name": "MODERATE",
+            "value": "moderate"
+          },
+          {
+            "name": "HIGH",
+            "value": "high"
+          },
+          {
+            "name": "URGENT",
+            "value": "urgent"
+          }
+        ],
+        "RecommendationSafetyFlag": [
+          {
+            "name": "ADVISORY_ONLY",
+            "value": "advisory_only"
+          },
+          {
+            "name": "EXPERT_REVIEW_RECOMMENDED",
+            "value": "expert_review_recommended"
+          },
+          {
+            "name": "NO_AUTOMATIC_EXECUTION",
+            "value": "no_automatic_execution"
+          },
+          {
+            "name": "VERIFY_SITE_CONDITIONS",
+            "value": "verify_site_conditions"
+          }
+        ],
+        "RecommendationStatus": [
+          {
+            "name": "AVAILABLE",
+            "value": "available"
+          },
+          {
+            "name": "PARTIAL",
+            "value": "partial"
+          },
+          {
+            "name": "INSUFFICIENT_EVIDENCE",
+            "value": "insufficient_evidence"
+          }
+        ]
+      },
+      "exports": [
+        "RECOMMENDATION_ALGORITHM_VERSION",
+        "RECOMMENDATION_SCHEMA_VERSION",
+        "Recommendation",
+        "RecommendationAssessment",
+        "RecommendationCategory",
+        "RecommendationExplanation",
+        "RecommendationPolicy",
+        "RecommendationPriority",
+        "RecommendationRequest",
+        "RecommendationSafetyFlag",
+        "RecommendationStatus",
+        "assess_recommendations"
+      ],
+      "versions": {
+        "RECOMMENDATION_ALGORITHM_VERSION": "1.0.0",
+        "RECOMMENDATION_SCHEMA_VERSION": 1
+      }
+    },
+    "runtime_monitoring": {
+      "dataclasses": {
+        "RecoveryRecommendation": [
+          "recommendation_id",
+          "action_type",
+          "command_ids",
+          "reason"
+        ],
+        "RuntimeIssue": [
+          "issue_id",
+          "issue_type",
+          "command_id",
+          "detail"
+        ],
+        "RuntimeMonitoringRequest": [
+          "request_id",
+          "execution_plan",
+          "command_results",
+          "observation",
+          "policy",
+          "created_at",
+          "schema_version",
+          "algorithm_version"
+        ],
+        "RuntimeObservation": [
+          "observation_id",
+          "observed_at",
+          "controller_online",
+          "interrupted",
+          "interruption_reason",
+          "active_target_ids"
+        ],
+        "RuntimePolicy": [
+          "policy_id",
+          "policy_version",
+          "missing_result_grace_seconds"
+        ],
+        "RuntimeReport": [
+          "report_id",
+          "request_id",
+          "execution_plan_id",
+          "status",
+          "expected_command_count",
+          "acknowledged_command_count",
+          "unresolved_command_count",
+          "issues",
+          "recovery_recommendations",
+          "policy_id",
+          "policy_version",
+          "algorithm_version",
+          "created_at",
+          "source_execution_plan",
+          "schema_version"
+        ]
+      },
+      "enums": {
+        "RecoveryActionType": [
+          {
+            "name": "NONE",
+            "value": "none"
+          },
+          {
+            "name": "RETRY_COMMAND",
+            "value": "retry_command"
+          },
+          {
+            "name": "RESCHEDULE_REMAINDER",
+            "value": "reschedule_remainder"
+          },
+          {
+            "name": "INSPECT_CONTROLLER",
+            "value": "inspect_controller"
+          },
+          {
+            "name": "MANUAL_REVIEW",
+            "value": "manual_review"
+          }
+        ],
+        "RuntimeIssueType": [
+          {
+            "name": "MISSING_RESULT",
+            "value": "missing_result"
+          },
+          {
+            "name": "RETRY_REQUIRED",
+            "value": "retry_required"
+          },
+          {
+            "name": "COMMAND_TIMED_OUT",
+            "value": "command_timed_out"
+          },
+          {
+            "name": "COMMAND_REJECTED",
+            "value": "command_rejected"
+          },
+          {
+            "name": "TARGET_STATE_MISMATCH",
+            "value": "target_state_mismatch"
+          },
+          {
+            "name": "CONTROLLER_OFFLINE",
+            "value": "controller_offline"
+          },
+          {
+            "name": "EXTERNAL_INTERRUPTION",
+            "value": "external_interruption"
+          }
+        ],
+        "RuntimeStatus": [
+          {
+            "name": "PENDING",
+            "value": "pending"
+          },
+          {
+            "name": "IN_PROGRESS",
+            "value": "in_progress"
+          },
+          {
+            "name": "COMPLETED",
+            "value": "completed"
+          },
+          {
+            "name": "PARTIAL",
+            "value": "partial"
+          },
+          {
+            "name": "MISSED",
+            "value": "missed"
+          },
+          {
+            "name": "INTERRUPTED",
+            "value": "interrupted"
+          },
+          {
+            "name": "FAILED",
+            "value": "failed"
+          },
+          {
+            "name": "BLOCKED",
+            "value": "blocked"
+          },
+          {
+            "name": "NO_EXECUTION",
+            "value": "no_execution"
+          }
+        ]
+      },
+      "exports": [
+        "RUNTIME_MONITORING_ALGORITHM_VERSION",
+        "RUNTIME_MONITORING_SCHEMA_VERSION",
+        "RecoveryActionType",
+        "RecoveryRecommendation",
+        "RuntimeIssue",
+        "RuntimeIssueType",
+        "RuntimeMonitoringRequest",
+        "RuntimeObservation",
+        "RuntimePolicy",
+        "RuntimeReport",
+        "RuntimeStatus",
+        "build_runtime_report"
+      ],
+      "versions": {
+        "RUNTIME_MONITORING_ALGORITHM_VERSION": "1.0.0",
+        "RUNTIME_MONITORING_SCHEMA_VERSION": 1
+      }
+    },
+    "scheduling": {
+      "dataclasses": {
+        "IrrigationSchedule": [
+          "schedule_id",
+          "request_id",
+          "plan_id",
+          "status",
+          "actions",
+          "unresolved_issues",
+          "policy_id",
+          "policy_version",
+          "algorithm_version",
+          "created_at",
+          "schema_version"
+        ],
+        "ScheduledAction": [
+          "scheduled_action_id",
+          "plan_action_id",
+          "disposition",
+          "target_id",
+          "starts_at",
+          "ends_at",
+          "cycle_starts_at",
+          "cycle_runtime_seconds",
+          "window_id",
+          "blocking_reasons",
+          "source_action"
+        ],
+        "SchedulingPolicy": [
+          "policy_id",
+          "policy_version",
+          "minimum_inter_action_seconds"
+        ],
+        "SchedulingRequest": [
+          "request_id",
+          "plan",
+          "windows",
+          "policy",
+          "created_at",
+          "blocking_constraints",
+          "schema_version",
+          "algorithm_version"
+        ],
+        "SchedulingWindow": [
+          "window_id",
+          "starts_at",
+          "ends_at"
+        ]
+      },
+      "enums": {
+        "ScheduleStatus": [
+          {
+            "name": "READY",
+            "value": "ready"
+          },
+          {
+            "name": "PARTIAL",
+            "value": "partial"
+          },
+          {
+            "name": "NOT_SCHEDULABLE",
+            "value": "not_schedulable"
+          }
+        ],
+        "ScheduledActionDisposition": [
+          {
+            "name": "SCHEDULED",
+            "value": "scheduled"
+          },
+          {
+            "name": "MANUAL_ONLY",
+            "value": "manual_only"
+          },
+          {
+            "name": "BLOCKED",
+            "value": "blocked"
+          }
+        ]
+      },
+      "exports": [
+        "SCHEDULING_ALGORITHM_VERSION",
+        "SCHEDULING_SCHEMA_VERSION",
+        "IrrigationSchedule",
+        "ScheduleStatus",
+        "ScheduledAction",
+        "ScheduledActionDisposition",
+        "SchedulingPolicy",
+        "SchedulingRequest",
+        "SchedulingWindow",
+        "build_irrigation_schedule"
+      ],
+      "versions": {
+        "SCHEDULING_ALGORITHM_VERSION": "1.0.0",
+        "SCHEDULING_SCHEMA_VERSION": 1
+      }
+    }
+  }
+}
