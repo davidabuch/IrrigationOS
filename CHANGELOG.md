@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.11 - Pipeline Entities and Diagnostics
+
+- Add one stable diagnostic sensor for every synchronized pipeline stage.
+- Add one compact per-zone pipeline-output sensor exposing Water Requirement, Plant Stress, Plant Health, Recommendations, Planning, Scheduling, Execution simulation, and Runtime Monitoring statuses without recomputation.
+- Preserve canonical provenance identifiers and blocker codes as read-only entity attributes.
+- Add a compact pipeline diagnostics summary alongside the fully redacted immutable pipeline snapshot.
+- Preserve the Observation-and-simulation-only boundary; no controller, Rachio, Home Assistant service, valve, switch, retry, or recovery command path is introduced.
+
 ## 1.0.10 - Runtime Monitoring Pipeline Integration
 
 - Adapt the existing deterministic Runtime Monitoring engine into the synchronized Home Assistant pipeline.
