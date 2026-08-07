@@ -9,13 +9,14 @@ from enum import StrEnum
 from ..controllers import ControllerRegistrySnapshot
 from ..environment import EnvironmentalIntelligenceReport
 from ..landscape import EstablishmentStage, LandscapeProfile
+from ..plant_health import PlantHealthAssessment
 from ..plant_knowledge import Season
 from ..plant_stress import PlantStressRiskAssessment
 from ..plant_water_requirement import PlantWaterRequirementAssessment
 from ..scientific_inputs import ScientificInputSnapshot
 
 PIPELINE_SCHEMA_VERSION = "1.0"
-PIPELINE_ALGORITHM_VERSION = "1.0.4"
+PIPELINE_ALGORITHM_VERSION = "1.0.5"
 
 
 class PipelineStage(StrEnum):
@@ -81,6 +82,15 @@ class AreaPlantStressEvaluation:
 
 
 @dataclass(frozen=True, slots=True)
+class AreaPlantHealthEvaluation:
+    """Plant-health result for one irrigation area."""
+
+    area_id: str
+    assessment: PlantHealthAssessment | None
+    blocker_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class PipelineEvaluation:
     """Canonical immutable output cached by the HA coordinator."""
 
@@ -98,6 +108,7 @@ class PipelineEvaluation:
     water_requirements: tuple[AreaWaterRequirementEvaluation, ...] = ()
     environmental_report: EnvironmentalIntelligenceReport | None = None
     plant_stress: tuple[AreaPlantStressEvaluation, ...] = ()
+    plant_health: tuple[AreaPlantHealthEvaluation, ...] = ()
 
     def stage(self, stage: PipelineStage) -> PipelineStageEvaluation:
         """Return one stage evaluation."""
