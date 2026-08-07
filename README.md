@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.4 — Plant Stress Pipeline Integration**
+**v1.0.5 — Plant Health Pipeline Integration**
 
 The current release:
 
@@ -24,7 +24,7 @@ The current release:
 - exports redacted diagnostics;
 - does not start, stop, enable, disable, or reschedule irrigation.
 
-See [`docs/V1_0_4_PLANT_STRESS_PIPELINE.md`](docs/V1_0_4_PLANT_STRESS_PIPELINE.md) and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+See [`docs/V1_0_5_PLANT_HEALTH_PIPELINE.md`](docs/V1_0_5_PLANT_HEALTH_PIPELINE.md) and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
 
 Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can reach. Home Assistant Cloud is optional. If no suitable URL is configured, IrrigationOS reports a repair warning and continues observing through polling.
 
@@ -64,7 +64,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation mode remains the default operating mode in v1.0.4; the deterministic pipeline is exposed through synchronized readiness snapshots and remains non-actuating. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+Observation mode remains the default operating mode in v1.0.5; the deterministic pipeline is exposed through synchronized readiness snapshots and remains non-actuating. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
 
 ## Landscape Digital Twin
 

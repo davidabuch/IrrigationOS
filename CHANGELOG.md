@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.5 - Plant Health Pipeline Integration
+
+- Execute the canonical Plant Health engine for every area with aggregate Plant Stress context.
+- Preserve the direct-evidence boundary: stress is context and is never treated as a health diagnosis.
+- Return explicit insufficient-direct-evidence assessments until manual, sensor, or visual observations exist.
+- Store immutable per-area Plant Health results in the synchronized Home Assistant pipeline.
+- Keep Recommendations and downstream stages blocked until their dedicated integration milestones.
+
 ## 1.0.4 - Plant Stress Pipeline Integration
 
 - Build conservative Environmental Intelligence from normalized current Home Assistant weather.

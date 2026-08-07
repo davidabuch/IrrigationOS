@@ -257,3 +257,36 @@ def test_plant_stress_executes_from_current_environmental_context() -> None:
         code.startswith("stress_water_deficit_")
         for code in result.plant_stress[0].blocker_codes
     )
+
+
+def test_plant_health_preserves_direct_evidence_boundary() -> None:
+    evaluated_at = datetime(2026, 8, 6, 6, 5, tzinfo=UTC)
+    configured_profile = profile(configured_context=True)
+    normalized = scientific_inputs.build_scientific_input_snapshot(
+        landscape=configured_profile,
+        weather_entities=((
+            "weather.home",
+            "sunny",
+            {"temperature": 38, "humidity": 40, "wind_speed": 8, "wind_speed_unit": "m/s"},
+        ),),
+        evaluated_at=evaluated_at,
+        country_code="US",
+        latitude=34.0,
+        elevation_meters=100.0,
+    )
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(), configured_profile, normalized, evaluated_at=evaluated_at
+    )
+
+    assert len(result.plant_health) == 1
+    health = result.plant_health[0].assessment
+    assert health is not None
+    assert health.status.value == "insufficient_direct_evidence"
+    assert health.classification.value == "unknown"
+    assert health.aggregate_stress_assessment_id == result.plant_stress[0].assessment.assessment_id
+    assert result.stage(pipeline.PipelineStage.HEALTH).status is (
+        pipeline.PipelineStageStatus.BLOCKED
+    )
+    assert "plant_health_direct_evidence_required" in result.stage(
+        pipeline.PipelineStage.HEALTH
+    ).blocker_codes

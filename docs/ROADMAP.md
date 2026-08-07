@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.4
+- **Installable Home Assistant release:** v1.0.5
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** integrate Plant Health from aggregate Plant Stress
+- **Next milestone:** integrate Recommendations from Plant Health and upstream science
 
 ## Delivery model
 
