@@ -6,6 +6,7 @@ from datetime import datetime
 
 from ..controllers import ControllerRegistrySnapshot
 from ..landscape import LandscapeProfile
+from ..planning import PlanStatus
 from ..plant_health import PlantHealthStatus
 from ..plant_stress import PlantStressRiskStatus
 from ..plant_water_requirement import PlantWaterRequirementStatus
@@ -16,6 +17,7 @@ from .health import build_area_plant_health
 from .models import (
     PIPELINE_ALGORITHM_VERSION,
     PIPELINE_SCHEMA_VERSION,
+    AreaPlanningEvaluation,
     AreaPlantHealthEvaluation,
     AreaPlantStressEvaluation,
     AreaRecommendationEvaluation,
@@ -26,6 +28,7 @@ from .models import (
     PipelineStageEvaluation,
     PipelineStageStatus,
 )
+from .planning import build_area_plans
 from .recommendation import build_area_recommendations
 from .stress import build_area_plant_stress
 from .water_requirement import build_area_water_requirements
@@ -93,8 +96,11 @@ def build_pipeline_evaluation(
     )
     stages.append(recommendation_stage)
 
+    planning = build_area_plans(recommendations, evaluated_at=evaluated_at)
+    planning_stage = _planning_stage(configured, recommendation_stage, planning)
+    stages.append(planning_stage)
+
     downstream = (
-        PipelineStage.PLANNING,
         PipelineStage.SCHEDULING,
         PipelineStage.EXECUTION,
         PipelineStage.RUNTIME_MONITORING,
@@ -135,6 +141,7 @@ def build_pipeline_evaluation(
         plant_stress=plant_stress,
         plant_health=plant_health,
         recommendations=recommendations,
+        planning=planning,
     )
 
 
@@ -389,5 +396,54 @@ def _recommendation_stage(
         reason="Recommendations could not be generated from the available upstream assessments.",
         blocker_codes=tuple(
             dict.fromkeys((*blockers, *health_stage.blocker_codes, "recommendations_unavailable"))
+        ),
+    )
+
+
+def _planning_stage(
+    configured: int,
+    recommendation_stage: PipelineStageEvaluation,
+    planning: tuple[AreaPlanningEvaluation, ...],
+) -> PipelineStageEvaluation:
+    if configured == 0:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.PLANNING,
+            status=PipelineStageStatus.BLOCKED,
+            reason="No configured irrigation areas are available.",
+            blocker_codes=("no_configured_areas",),
+        )
+
+    blockers = tuple(
+        dict.fromkeys(code for item in planning for code in item.blocker_codes)
+    )
+    plans = tuple(item.plan for item in planning if item.plan is not None)
+    ready = tuple(plan for plan in plans if plan.status is PlanStatus.READY)
+    usable = tuple(
+        plan for plan in plans if plan.status in {PlanStatus.READY, PlanStatus.PARTIAL}
+    )
+    if len(ready) == configured:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.PLANNING,
+            status=PipelineStageStatus.READY,
+            reason="Machine-readable irrigation plans were generated for every configured area.",
+        )
+    if usable:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.PLANNING,
+            status=PipelineStageStatus.PARTIAL,
+            reason=(
+                "Machine-readable plans are available with manual-only actions or "
+                "unresolved planning inputs."
+            ),
+            blocker_codes=blockers,
+        )
+    return PipelineStageEvaluation(
+        stage=PipelineStage.PLANNING,
+        status=PipelineStageStatus.BLOCKED,
+        reason="Planning could not produce a usable plan from the available recommendations.",
+        blocker_codes=tuple(
+            dict.fromkeys(
+                (*blockers, *recommendation_stage.blocker_codes, "planning_unavailable")
+            )
         ),
     )

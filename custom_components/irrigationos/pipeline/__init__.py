@@ -4,6 +4,7 @@ from .engine import build_pipeline_evaluation
 from .models import (
     PIPELINE_ALGORITHM_VERSION,
     PIPELINE_SCHEMA_VERSION,
+    AreaPlanningEvaluation,
     AreaPlantHealthEvaluation,
     AreaPlantStressEvaluation,
     AreaRecommendationEvaluation,
@@ -18,6 +19,7 @@ from .models import (
 __all__ = (
     "PIPELINE_ALGORITHM_VERSION",
     "PIPELINE_SCHEMA_VERSION",
+    "AreaPlanningEvaluation",
     "AreaPlantHealthEvaluation",
     "AreaPlantStressEvaluation",
     "AreaRecommendationEvaluation",

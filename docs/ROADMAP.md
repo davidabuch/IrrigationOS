@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.6
+- **Installable Home Assistant release:** v1.0.7
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** integrate Planning from advisory Recommendations and upstream evidence
+- **Next milestone:** integrate Scheduling from machine-readable Planning and upstream evidence
 
 ## Delivery model
 

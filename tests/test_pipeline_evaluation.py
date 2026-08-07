@@ -336,7 +336,7 @@ def test_recommendations_adapt_existing_engine_and_preserve_provenance() -> None
     assert "plant_health_direct_evidence_required" in recommendation_stage.blocker_codes
     assert "recommendation_evidence_partial" in recommendation_stage.blocker_codes
     assert result.stage(pipeline.PipelineStage.PLANNING).status is (
-        pipeline.PipelineStageStatus.BLOCKED
+        pipeline.PipelineStageStatus.PARTIAL
     )
 
 
@@ -356,3 +356,59 @@ def test_recommendations_do_not_invent_missing_upstream_assessments() -> None:
     assert "recommendations_unavailable" in result.stage(
         pipeline.PipelineStage.RECOMMENDATIONS
     ).blocker_codes
+
+
+def test_planning_adapts_existing_engine_without_inventing_directives() -> None:
+    evaluated_at = datetime(2026, 8, 6, 6, 5, tzinfo=UTC)
+    configured_profile = profile(configured_context=True)
+    normalized = scientific_inputs.build_scientific_input_snapshot(
+        landscape=configured_profile,
+        weather_entities=((
+            "weather.home",
+            "sunny",
+            {"temperature": 38, "humidity": 40, "wind_speed": 8, "wind_speed_unit": "m/s"},
+        ),),
+        evaluated_at=evaluated_at,
+        country_code="US",
+        latitude=34.0,
+        elevation_meters=100.0,
+    )
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(), configured_profile, normalized, evaluated_at=evaluated_at
+    )
+
+    assert len(result.planning) == 1
+    plan = result.planning[0].plan
+    recommendation = result.recommendations[0].assessment
+    assert plan is not None
+    assert recommendation is not None
+    assert plan.recommendation_assessment_id == recommendation.assessment_id
+    by_recommendation = {action.recommendation_id: action for action in plan.actions}
+    for item in recommendation.recommendations:
+        action = by_recommendation[item.recommendation_id]
+        assert action.supporting_assessment_ids == item.supporting_assessment_ids
+        assert action.target_id is None
+        assert action.quantity is None
+        assert action.runtime_seconds is None
+        assert "no_automatic_execution" in action.safety_constraints
+        assert action.disposition.value in {"manual_only", "blocked"}
+    planning_stage = result.stage(pipeline.PipelineStage.PLANNING)
+    assert planning_stage.status is pipeline.PipelineStageStatus.PARTIAL
+    assert result.stage(pipeline.PipelineStage.SCHEDULING).status is (
+        pipeline.PipelineStageStatus.BLOCKED
+    )
+
+
+def test_planning_does_not_invent_missing_recommendation_assessment() -> None:
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(),
+        profile(complete=False),
+        inputs_snapshot(ready=False),
+        evaluated_at=datetime(2026, 8, 6, 6, 5, tzinfo=UTC),
+    )
+
+    assert len(result.planning) == 1
+    assert result.planning[0].plan is None
+    planning_stage = result.stage(pipeline.PipelineStage.PLANNING)
+    assert planning_stage.status is pipeline.PipelineStageStatus.BLOCKED
+    assert "planning_unavailable" in planning_stage.blocker_codes
