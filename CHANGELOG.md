@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.13 - Public API and Compatibility Freeze
+
+- Freeze exact public exports for all completed v1.0 domain layers and the synchronized Home Assistant pipeline.
+- Add a machine-readable v1.0 API contract covering schema and algorithm versions, enum names/values, and dataclass field ordering.
+- Convert compatibility tests from minimum-symbol checks to exact contract checks so silent breaking changes fail CI.
+- Document public-versus-internal compatibility expectations for future refactors and schema evolution.
+- Preserve the Observation-and-simulation-only boundary; no runtime behavior or controller command path changes are introduced.
+
 ## 1.0.12 - Home Assistant Lifecycle Validation
 
 - Validate cold startup of the completed Home Assistant pipeline from persisted config-entry data and options.
