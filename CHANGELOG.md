@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.6 - Recommendation Pipeline Integration
+
+- Adapt the existing deterministic Recommendation engine into the synchronized Home Assistant pipeline.
+- Consume accepted Water Requirement, Plant Stress, and Plant Health assessments without recomputing upstream science.
+- Preserve assessment provenance, unresolved evidence, and advisory-only/no-automatic-execution safety flags.
+- Allow conservative inspection guidance when direct Plant Health evidence is insufficient.
+- Keep Planning, Scheduling, Execution, and Runtime Monitoring blocked until their dedicated integration milestones.
+
 ## 1.0.5 - Plant Health Pipeline Integration
 
 - Execute the canonical Plant Health engine for every area with aggregate Plant Stress context.

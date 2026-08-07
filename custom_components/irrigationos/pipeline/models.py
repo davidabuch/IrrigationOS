@@ -13,10 +13,11 @@ from ..plant_health import PlantHealthAssessment
 from ..plant_knowledge import Season
 from ..plant_stress import PlantStressRiskAssessment
 from ..plant_water_requirement import PlantWaterRequirementAssessment
+from ..recommendations import RecommendationAssessment
 from ..scientific_inputs import ScientificInputSnapshot
 
 PIPELINE_SCHEMA_VERSION = "1.0"
-PIPELINE_ALGORITHM_VERSION = "1.0.5"
+PIPELINE_ALGORITHM_VERSION = "1.0.6"
 
 
 class PipelineStage(StrEnum):
@@ -91,6 +92,15 @@ class AreaPlantHealthEvaluation:
 
 
 @dataclass(frozen=True, slots=True)
+class AreaRecommendationEvaluation:
+    """Advisory recommendation result for one irrigation area."""
+
+    area_id: str
+    assessment: RecommendationAssessment | None
+    blocker_codes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class PipelineEvaluation:
     """Canonical immutable output cached by the HA coordinator."""
 
@@ -109,6 +119,7 @@ class PipelineEvaluation:
     environmental_report: EnvironmentalIntelligenceReport | None = None
     plant_stress: tuple[AreaPlantStressEvaluation, ...] = ()
     plant_health: tuple[AreaPlantHealthEvaluation, ...] = ()
+    recommendations: tuple[AreaRecommendationEvaluation, ...] = ()
 
     def stage(self, stage: PipelineStage) -> PipelineStageEvaluation:
         """Return one stage evaluation."""
