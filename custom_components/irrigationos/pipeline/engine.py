@@ -11,6 +11,7 @@ from ..plant_health import PlantHealthStatus
 from ..plant_stress import PlantStressRiskStatus
 from ..plant_water_requirement import PlantWaterRequirementStatus
 from ..recommendations import RecommendationStatus
+from ..scheduling import ScheduleStatus
 from ..scientific_inputs import ScientificInputSnapshot, ScientificInputStatus
 from .environmental_intelligence import build_environmental_report
 from .health import build_area_plant_health
@@ -21,6 +22,7 @@ from .models import (
     AreaPlantHealthEvaluation,
     AreaPlantStressEvaluation,
     AreaRecommendationEvaluation,
+    AreaSchedulingEvaluation,
     AreaWaterRequirementEvaluation,
     PipelineEvaluation,
     PipelineEvaluationStatus,
@@ -30,6 +32,7 @@ from .models import (
 )
 from .planning import build_area_plans
 from .recommendation import build_area_recommendations
+from .scheduling import build_area_schedules
 from .stress import build_area_plant_stress
 from .water_requirement import build_area_water_requirements
 
@@ -100,8 +103,11 @@ def build_pipeline_evaluation(
     planning_stage = _planning_stage(configured, recommendation_stage, planning)
     stages.append(planning_stage)
 
+    scheduling = build_area_schedules(planning, evaluated_at=evaluated_at)
+    scheduling_stage = _scheduling_stage(configured, planning_stage, scheduling)
+    stages.append(scheduling_stage)
+
     downstream = (
-        PipelineStage.SCHEDULING,
         PipelineStage.EXECUTION,
         PipelineStage.RUNTIME_MONITORING,
     )
@@ -142,6 +148,7 @@ def build_pipeline_evaluation(
         plant_health=plant_health,
         recommendations=recommendations,
         planning=planning,
+        scheduling=scheduling,
     )
 
 
@@ -444,6 +451,59 @@ def _planning_stage(
         blocker_codes=tuple(
             dict.fromkeys(
                 (*blockers, *recommendation_stage.blocker_codes, "planning_unavailable")
+            )
+        ),
+    )
+
+
+def _scheduling_stage(
+    configured: int,
+    planning_stage: PipelineStageEvaluation,
+    scheduling: tuple[AreaSchedulingEvaluation, ...],
+) -> PipelineStageEvaluation:
+    if configured == 0:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.SCHEDULING,
+            status=PipelineStageStatus.BLOCKED,
+            reason="No configured irrigation areas are available.",
+            blocker_codes=("no_configured_areas",),
+        )
+
+    blockers = tuple(
+        dict.fromkeys(code for item in scheduling for code in item.blocker_codes)
+    )
+    schedules = tuple(item.schedule for item in scheduling if item.schedule is not None)
+    ready = tuple(
+        schedule for schedule in schedules if schedule.status is ScheduleStatus.READY
+    )
+    usable = tuple(
+        schedule
+        for schedule in schedules
+        if schedule.status in {ScheduleStatus.READY, ScheduleStatus.PARTIAL}
+    )
+    if len(ready) == configured:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.SCHEDULING,
+            status=PipelineStageStatus.READY,
+            reason="Proposed irrigation schedules were generated for every configured area.",
+        )
+    if usable:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.SCHEDULING,
+            status=PipelineStageStatus.PARTIAL,
+            reason=(
+                "Proposed schedules preserve manual-only actions and remain conservative "
+                "where permitted watering windows are not configured."
+            ),
+            blocker_codes=blockers,
+        )
+    return PipelineStageEvaluation(
+        stage=PipelineStage.SCHEDULING,
+        status=PipelineStageStatus.BLOCKED,
+        reason="Scheduling could not produce a usable schedule from the available plans.",
+        blocker_codes=tuple(
+            dict.fromkeys(
+                (*blockers, *planning_stage.blocker_codes, "scheduling_unavailable")
             )
         ),
     )

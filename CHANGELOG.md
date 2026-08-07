@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.8 - Scheduling Pipeline Integration
+
+- Adapt the existing deterministic Scheduling engine into the synchronized Home Assistant pipeline.
+- Consume canonical machine-readable Planning outputs without recomputing planning or upstream scientific logic.
+- Preserve plan-to-schedule provenance and manual-only dispositions.
+- Do not fabricate permitted watering windows; runnable actions remain unscheduled until an explicit window source is configured.
+- Keep Execution and Runtime Monitoring blocked until their dedicated integration milestones.
+
 ## 1.0.7 - Planning Pipeline Integration
 
 - Adapt the existing deterministic Planning engine into the synchronized Home Assistant pipeline.
