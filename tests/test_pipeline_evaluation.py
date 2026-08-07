@@ -290,3 +290,69 @@ def test_plant_health_preserves_direct_evidence_boundary() -> None:
     assert "plant_health_direct_evidence_required" in result.stage(
         pipeline.PipelineStage.HEALTH
     ).blocker_codes
+
+
+def test_recommendations_adapt_existing_engine_and_preserve_provenance() -> None:
+    evaluated_at = datetime(2026, 8, 6, 6, 5, tzinfo=UTC)
+    configured_profile = profile(configured_context=True)
+    normalized = scientific_inputs.build_scientific_input_snapshot(
+        landscape=configured_profile,
+        weather_entities=((
+            "weather.home",
+            "sunny",
+            {"temperature": 38, "humidity": 40, "wind_speed": 8, "wind_speed_unit": "m/s"},
+        ),),
+        evaluated_at=evaluated_at,
+        country_code="US",
+        latitude=34.0,
+        elevation_meters=100.0,
+    )
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(), configured_profile, normalized, evaluated_at=evaluated_at
+    )
+
+    assert len(result.recommendations) == 1
+    recommendation_result = result.recommendations[0]
+    assessment = recommendation_result.assessment
+    assert assessment is not None
+    assert assessment.status.value == "partial"
+    health_assessment = result.plant_health[0].assessment
+    stress_assessment = result.plant_stress[0].assessment
+    water_assessment = result.water_requirements[0].assessment
+    assert health_assessment is not None
+    assert stress_assessment is not None
+    assert water_assessment is not None
+    assert assessment.plant_health_assessment_id == health_assessment.assessment_id
+    assert assessment.aggregate_stress_assessment_id == stress_assessment.assessment_id
+    assert assessment.water_requirement_assessment_id == water_assessment.assessment_id
+    categories = {item.category.value for item in assessment.recommendations}
+    assert "inspect" in categories
+    for recommendation in assessment.recommendations:
+        flags = {item.value for item in recommendation.safety_flags}
+        assert "advisory_only" in flags
+        assert "no_automatic_execution" in flags
+    recommendation_stage = result.stage(pipeline.PipelineStage.RECOMMENDATIONS)
+    assert recommendation_stage.status is pipeline.PipelineStageStatus.PARTIAL
+    assert "plant_health_direct_evidence_required" in recommendation_stage.blocker_codes
+    assert "recommendation_evidence_partial" in recommendation_stage.blocker_codes
+    assert result.stage(pipeline.PipelineStage.PLANNING).status is (
+        pipeline.PipelineStageStatus.BLOCKED
+    )
+
+
+def test_recommendations_do_not_invent_missing_upstream_assessments() -> None:
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(),
+        profile(complete=False),
+        inputs_snapshot(ready=False),
+        evaluated_at=datetime(2026, 8, 6, 6, 5, tzinfo=UTC),
+    )
+
+    assert len(result.recommendations) == 1
+    assert result.recommendations[0].assessment is None
+    assert result.stage(pipeline.PipelineStage.RECOMMENDATIONS).status is (
+        pipeline.PipelineStageStatus.BLOCKED
+    )
+    assert "recommendations_unavailable" in result.stage(
+        pipeline.PipelineStage.RECOMMENDATIONS
+    ).blocker_codes

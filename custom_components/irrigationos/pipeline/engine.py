@@ -9,6 +9,7 @@ from ..landscape import LandscapeProfile
 from ..plant_health import PlantHealthStatus
 from ..plant_stress import PlantStressRiskStatus
 from ..plant_water_requirement import PlantWaterRequirementStatus
+from ..recommendations import RecommendationStatus
 from ..scientific_inputs import ScientificInputSnapshot, ScientificInputStatus
 from .environmental_intelligence import build_environmental_report
 from .health import build_area_plant_health
@@ -17,6 +18,7 @@ from .models import (
     PIPELINE_SCHEMA_VERSION,
     AreaPlantHealthEvaluation,
     AreaPlantStressEvaluation,
+    AreaRecommendationEvaluation,
     AreaWaterRequirementEvaluation,
     PipelineEvaluation,
     PipelineEvaluationStatus,
@@ -24,6 +26,7 @@ from .models import (
     PipelineStageEvaluation,
     PipelineStageStatus,
 )
+from .recommendation import build_area_recommendations
 from .stress import build_area_plant_stress
 from .water_requirement import build_area_water_requirements
 
@@ -79,8 +82,18 @@ def build_pipeline_evaluation(
     health_stage = _health_stage(configured, stress_stage, plant_health)
     stages.append(health_stage)
 
+    recommendations = build_area_recommendations(
+        water_requirements,
+        plant_stress,
+        plant_health,
+        evaluated_at=evaluated_at,
+    )
+    recommendation_stage = _recommendation_stage(
+        configured, health_stage, recommendations
+    )
+    stages.append(recommendation_stage)
+
     downstream = (
-        PipelineStage.RECOMMENDATIONS,
         PipelineStage.PLANNING,
         PipelineStage.SCHEDULING,
         PipelineStage.EXECUTION,
@@ -121,6 +134,7 @@ def build_pipeline_evaluation(
         environmental_report=environmental_report,
         plant_stress=plant_stress,
         plant_health=plant_health,
+        recommendations=recommendations,
     )
 
 
@@ -323,5 +337,57 @@ def _health_stage(
         reason="Plant Health requires direct manual, sensor, or visual evidence.",
         blocker_codes=tuple(
             dict.fromkeys((*blockers, *stress_stage.blocker_codes, "plant_health_unavailable"))
+        ),
+    )
+
+
+def _recommendation_stage(
+    configured: int,
+    health_stage: PipelineStageEvaluation,
+    recommendations: tuple[AreaRecommendationEvaluation, ...],
+) -> PipelineStageEvaluation:
+    if configured == 0:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.RECOMMENDATIONS,
+            status=PipelineStageStatus.BLOCKED,
+            reason="No configured irrigation areas are available.",
+            blocker_codes=("no_configured_areas",),
+        )
+
+    blockers = tuple(
+        dict.fromkeys(code for item in recommendations for code in item.blocker_codes)
+    )
+    assessments = tuple(
+        item.assessment for item in recommendations if item.assessment is not None
+    )
+    fully_available = tuple(
+        assessment
+        for assessment in assessments
+        if assessment.status is RecommendationStatus.AVAILABLE
+    )
+    usable = tuple(
+        assessment
+        for assessment in assessments
+        if assessment.status in {RecommendationStatus.AVAILABLE, RecommendationStatus.PARTIAL}
+    )
+    if len(fully_available) == configured:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.RECOMMENDATIONS,
+            status=PipelineStageStatus.READY,
+            reason="Advisory recommendations were generated for every configured area.",
+        )
+    if usable:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.RECOMMENDATIONS,
+            status=PipelineStageStatus.PARTIAL,
+            reason="Advisory recommendations are available with unresolved evidence gaps.",
+            blocker_codes=blockers,
+        )
+    return PipelineStageEvaluation(
+        stage=PipelineStage.RECOMMENDATIONS,
+        status=PipelineStageStatus.BLOCKED,
+        reason="Recommendations could not be generated from the available upstream assessments.",
+        blocker_codes=tuple(
+            dict.fromkeys((*blockers, *health_stage.blocker_codes, "recommendations_unavailable"))
         ),
     )
