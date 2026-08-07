@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.9
+- **Installable Home Assistant release:** v1.0.10
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** integrate Runtime Monitoring from simulated Execution and upstream evidence
+- **Next milestone:** expose stable observation and simulation entities and diagnostics for the completed Home Assistant pipeline
 
 ## Delivery model
 
@@ -56,7 +56,6 @@ Remaining release work:
 
 - freeze public domain APIs and compatibility tests
 - reconcile architecture and release documentation
-- wire the complete domain pipeline into Home Assistant (current weather and plant knowledge integrated)
 - expose stable observation and simulation entities and diagnostics
 - validate startup, reload, persistence, migration, and entity lifecycle
 - complete v1.0.0 release metadata and release notes

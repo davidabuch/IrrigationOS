@@ -6,10 +6,13 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from tests.helpers import load_integration_module
+from tests.test_execution import execution_request
 
 controllers = load_integration_module("controllers")
+execution = load_integration_module("execution")
 landscape = load_integration_module("landscape")
 pipeline = load_integration_module("pipeline")
+pipeline_runtime = load_integration_module("pipeline.runtime_monitoring")
 scientific_inputs = load_integration_module("scientific_inputs")
 
 
@@ -503,7 +506,7 @@ def test_execution_adapts_existing_engine_without_hardware_control() -> None:
         pipeline.PipelineStageStatus.PARTIAL
     )
     assert result.stage(pipeline.PipelineStage.RUNTIME_MONITORING).status is (
-        pipeline.PipelineStageStatus.BLOCKED
+        pipeline.PipelineStageStatus.PARTIAL
     )
 
 
@@ -520,3 +523,72 @@ def test_execution_does_not_invent_missing_schedule() -> None:
     execution_stage = result.stage(pipeline.PipelineStage.EXECUTION)
     assert execution_stage.status is pipeline.PipelineStageStatus.BLOCKED
     assert "execution_unavailable" in execution_stage.blocker_codes
+
+def test_runtime_monitoring_adapts_existing_engine_without_live_outcomes() -> None:
+    evaluated_at = datetime(2026, 8, 6, 6, 5, tzinfo=UTC)
+    configured_profile = profile(configured_context=True)
+    normalized = scientific_inputs.build_scientific_input_snapshot(
+        landscape=configured_profile,
+        weather_entities=((
+            "weather.home",
+            "sunny",
+            {"temperature": 38, "humidity": 40, "wind_speed": 8, "wind_speed_unit": "m/s"},
+        ),),
+        evaluated_at=evaluated_at,
+        country_code="US",
+        latitude=34.0,
+        elevation_meters=100.0,
+    )
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(), configured_profile, normalized, evaluated_at=evaluated_at
+    )
+
+    assert len(result.runtime_monitoring) == 1
+    runtime_result = result.runtime_monitoring[0]
+    report = runtime_result.report
+    execution_plan = result.execution[0].execution_plan
+    assert report is not None
+    assert execution_plan is not None
+    assert report.source_execution_plan == execution_plan
+    assert report.execution_plan_id == execution_plan.execution_plan_id
+    assert report.status.value == "no_execution"
+    assert report.expected_command_count == 0
+    assert report.acknowledged_command_count == 0
+    assert report.unresolved_command_count == 0
+    assert result.stage(pipeline.PipelineStage.RUNTIME_MONITORING).status is (
+        pipeline.PipelineStageStatus.PARTIAL
+    )
+    assert "runtime_no_execution" in runtime_result.blocker_codes
+
+
+def test_runtime_monitoring_does_not_invent_missing_execution_plan() -> None:
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(),
+        profile(complete=False),
+        inputs_snapshot(ready=False),
+        evaluated_at=datetime(2026, 8, 6, 6, 5, tzinfo=UTC),
+    )
+
+    assert len(result.runtime_monitoring) == 1
+    assert result.runtime_monitoring[0].report is None
+    runtime_stage = result.stage(pipeline.PipelineStage.RUNTIME_MONITORING)
+    assert runtime_stage.status is pipeline.PipelineStageStatus.BLOCKED
+    assert "runtime_monitoring_unavailable" in runtime_stage.blocker_codes
+
+def test_runtime_monitoring_refuses_to_invent_results_for_runnable_commands() -> None:
+    execution_plan = execution.build_execution_plan(execution_request())
+    assert execution_plan.status.value == "ready"
+    evaluations = pipeline_runtime.build_area_runtime_reports(
+        (
+            pipeline.AreaExecutionEvaluation(
+                area_id="area-1",
+                execution_plan=execution_plan,
+            ),
+        ),
+        snapshot(),
+        evaluated_at=datetime(2026, 8, 6, 6, 5, tzinfo=UTC),
+    )
+
+    assert len(evaluations) == 1
+    assert evaluations[0].report is None
+    assert "runtime_command_results_unavailable" in evaluations[0].blocker_codes
