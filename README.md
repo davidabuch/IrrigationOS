@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.11 — Pipeline Entities and Diagnostics**
+**v1.0.12 — Home Assistant Lifecycle Validation**
 
 The current release:
 
@@ -25,7 +25,7 @@ The current release:
 - exports redacted diagnostics;
 - does not start, stop, enable, disable, or reschedule irrigation.
 
-See [`docs/V1_0_11_PIPELINE_ENTITIES_DIAGNOSTICS.md`](docs/V1_0_11_PIPELINE_ENTITIES_DIAGNOSTICS.md) and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+See [`docs/V1_0_12_HA_LIFECYCLE_VALIDATION.md`](docs/V1_0_12_HA_LIFECYCLE_VALIDATION.md) and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
 
 Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can reach. Home Assistant Cloud is optional. If no suitable URL is configured, IrrigationOS reports a repair warning and continues observing through polling.
 
@@ -65,7 +65,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation mode remains the default operating mode in v1.0.11; stable pipeline stage and per-zone science/advisory/simulation entities expose the synchronized non-actuating pipeline, with redacted diagnostics for troubleshooting. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+Observation mode remains the default operating mode in v1.0.12; startup, unload/setup, config-entry reload, migration, persistence, and pipeline entity identity are regression-tested while live execution remains disabled. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
 
 ## Landscape Digital Twin
 

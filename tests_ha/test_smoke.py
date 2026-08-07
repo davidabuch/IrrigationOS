@@ -650,3 +650,148 @@ async def test_remote_registration_failure_keeps_fallback_polling_active(
         "last_update_success": True,
     }
     assert entry.runtime_data.update_interval == timedelta(minutes=5)
+
+
+def _pipeline_entity_registry_map(
+    hass: HomeAssistant,
+    entry: MockConfigEntry,
+) -> dict[str, str]:
+    """Return stable pipeline registry IDs for lifecycle assertions."""
+    registry = er.async_get(hass)
+    return {
+        item.unique_id: item.entity_id
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if item.unique_id.startswith("irrigationos_pipeline_")
+        or item.unique_id.endswith("_pipeline_output")
+    }
+
+
+@pytest.mark.asyncio
+async def test_pipeline_entities_survive_unload_and_restart_without_duplicates(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cold restart keeps pipeline identities, options, and entity IDs stable."""
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    profile_key = "controller_test:slot:1"
+    options = {
+        CONF_AREA_PROFILES: {
+            profile_key: {"display_name": "Persistent Orchard"}
+        }
+    }
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        options=options,
+        version=3,
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    first_coordinator = entry.runtime_data
+    first_map = _pipeline_entity_registry_map(hass, entry)
+    assert first_map
+    assert len(first_map) == len(set(first_map.values()))
+    persisted_data = dict(entry.data)
+    persisted_options = dict(entry.options)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    second_map = _pipeline_entity_registry_map(hass, entry)
+    assert entry.runtime_data is not first_coordinator
+    assert second_map == first_map
+    assert len(second_map) == len(set(second_map.values()))
+    assert dict(entry.data) == persisted_data
+    assert dict(entry.options) == persisted_options
+    registry = er.async_get(hass)
+    for item in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if item.unique_id not in second_map or item.disabled_by is not None:
+            continue
+        assert hass.states.get(item.entity_id) is not None
+
+
+@pytest.mark.asyncio
+async def test_pipeline_entities_survive_config_entry_reload_with_same_ids(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Config-entry reload replaces runtime state without duplicating entities."""
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    before_runtime = entry.runtime_data
+    before_map = _pipeline_entity_registry_map(hass, entry)
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+    after_map = _pipeline_entity_registry_map(hass, entry)
+    assert entry.runtime_data is not before_runtime
+    assert after_map == before_map
+    registry_entries = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    unique_ids = [item.unique_id for item in registry_entries]
+    assert len(unique_ids) == len(set(unique_ids))
+
+
+@pytest.mark.asyncio
+async def test_migrated_entry_starts_with_canonical_pipeline_entities(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A legacy entry can migrate and then start the completed pipeline cleanly."""
+    class MigrationAdapter(MutableAdapter):
+        def __init__(self, identities: ControllerIdentityRegistry) -> None:
+            controller_id = identities.controller_id_for(
+                "rachio", "native-controller-1"
+            )
+            super().__init__(_snapshot(controller_id))
+
+    monkeypatch.setattr(
+        DEFAULT_PROVIDER_FACTORY,
+        "create",
+        lambda _provider, _session, _api_key, identities: MigrationAdapter(identities),
+    )
+    old_data = _entry_data()
+    old_data.pop(CONF_IDENTITY_REGISTRY)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=old_data,
+        options={
+            CONF_AREA_PROFILES: {
+                "rachio:native-zone-1": {"display_name": "Migrated Orchard"}
+            }
+        },
+        version=1,
+    )
+    entry.add_to_hass(hass)
+
+    assert await async_migrate_entry(hass, entry)
+    assert entry.version == 3
+    canonical_controller_id = entry.data[CONF_IDENTITY_REGISTRY]["controllers"][
+        "rachio:native-controller-1"
+    ]
+    canonical_area_id = f"{canonical_controller_id}:slot:1"
+    assert canonical_area_id in entry.options[CONF_AREA_PROFILES]
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    registry_map = _pipeline_entity_registry_map(hass, entry)
+    assert f"{canonical_area_id}_pipeline_output" in registry_map
+    assert "irrigationos_pipeline_stage_runtime_monitoring" in registry_map
+    assert entry.runtime_data.pipeline_evaluation is not None

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.12 - Home Assistant Lifecycle Validation
+
+- Validate cold startup of the completed Home Assistant pipeline from persisted config-entry data and options.
+- Validate unload/setup and config-entry reload without changing or duplicating pipeline entity IDs and unique IDs.
+- Validate canonical identity and landscape-profile persistence across lifecycle transitions.
+- Validate legacy migration followed by a real Home Assistant startup with canonical per-zone pipeline entities.
+- Preserve the Observation-and-simulation-only boundary; this milestone adds lifecycle validation and no live command path.
+
 ## 1.0.11 - Pipeline Entities and Diagnostics
 
 - Add one stable diagnostic sensor for every synchronized pipeline stage.
