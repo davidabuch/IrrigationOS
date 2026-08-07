@@ -395,7 +395,7 @@ def test_planning_adapts_existing_engine_without_inventing_directives() -> None:
     planning_stage = result.stage(pipeline.PipelineStage.PLANNING)
     assert planning_stage.status is pipeline.PipelineStageStatus.PARTIAL
     assert result.stage(pipeline.PipelineStage.SCHEDULING).status is (
-        pipeline.PipelineStageStatus.BLOCKED
+        pipeline.PipelineStageStatus.PARTIAL
     )
 
 
@@ -412,3 +412,60 @@ def test_planning_does_not_invent_missing_recommendation_assessment() -> None:
     planning_stage = result.stage(pipeline.PipelineStage.PLANNING)
     assert planning_stage.status is pipeline.PipelineStageStatus.BLOCKED
     assert "planning_unavailable" in planning_stage.blocker_codes
+
+
+def test_scheduling_adapts_existing_engine_without_inventing_windows() -> None:
+    evaluated_at = datetime(2026, 8, 6, 6, 5, tzinfo=UTC)
+    configured_profile = profile(configured_context=True)
+    normalized = scientific_inputs.build_scientific_input_snapshot(
+        landscape=configured_profile,
+        weather_entities=((
+            "weather.home",
+            "sunny",
+            {"temperature": 38, "humidity": 40, "wind_speed": 8, "wind_speed_unit": "m/s"},
+        ),),
+        evaluated_at=evaluated_at,
+        country_code="US",
+        latitude=34.0,
+        elevation_meters=100.0,
+    )
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(), configured_profile, normalized, evaluated_at=evaluated_at
+    )
+
+    assert len(result.scheduling) == 1
+    schedule = result.scheduling[0].schedule
+    plan = result.planning[0].plan
+    assert schedule is not None
+    assert plan is not None
+    assert schedule.plan_id == plan.plan_id
+    assert schedule.status.value == "partial"
+    by_plan_action = {item.plan_action_id: item for item in schedule.actions}
+    for action in plan.actions:
+        scheduled = by_plan_action[action.action_id]
+        assert scheduled.source_action == action
+        assert scheduled.starts_at is None
+        assert scheduled.ends_at is None
+        assert scheduled.window_id is None
+        assert scheduled.disposition.value in {"manual_only", "blocked"}
+    assert result.stage(pipeline.PipelineStage.SCHEDULING).status is (
+        pipeline.PipelineStageStatus.PARTIAL
+    )
+    assert result.stage(pipeline.PipelineStage.EXECUTION).status is (
+        pipeline.PipelineStageStatus.BLOCKED
+    )
+
+
+def test_scheduling_does_not_invent_missing_plan() -> None:
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(),
+        profile(complete=False),
+        inputs_snapshot(ready=False),
+        evaluated_at=datetime(2026, 8, 6, 6, 5, tzinfo=UTC),
+    )
+
+    assert len(result.scheduling) == 1
+    assert result.scheduling[0].schedule is None
+    scheduling_stage = result.stage(pipeline.PipelineStage.SCHEDULING)
+    assert scheduling_stage.status is pipeline.PipelineStageStatus.BLOCKED
+    assert "scheduling_unavailable" in scheduling_stage.blocker_codes
