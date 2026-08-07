@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.9 - Execution Simulation Pipeline Integration
+
+- Adapt the existing deterministic Execution engine into the synchronized Home Assistant pipeline.
+- Consume canonical proposed Scheduling outputs without recomputing scheduling or upstream scientific logic.
+- Preserve schedule-to-execution-plan and scheduled-action provenance with deterministic simulated command models.
+- Keep the execution path simulation-only: no controller adapter, Rachio API, Home Assistant service, valve, or switch calls are introduced.
+- Keep Runtime Monitoring blocked until its dedicated integration milestone.
+
 ## 1.0.8 - Scheduling Pipeline Integration
 
 - Adapt the existing deterministic Scheduling engine into the synchronized Home Assistant pipeline.

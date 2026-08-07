@@ -452,7 +452,7 @@ def test_scheduling_adapts_existing_engine_without_inventing_windows() -> None:
         pipeline.PipelineStageStatus.PARTIAL
     )
     assert result.stage(pipeline.PipelineStage.EXECUTION).status is (
-        pipeline.PipelineStageStatus.BLOCKED
+        pipeline.PipelineStageStatus.PARTIAL
     )
 
 
@@ -469,3 +469,54 @@ def test_scheduling_does_not_invent_missing_plan() -> None:
     scheduling_stage = result.stage(pipeline.PipelineStage.SCHEDULING)
     assert scheduling_stage.status is pipeline.PipelineStageStatus.BLOCKED
     assert "scheduling_unavailable" in scheduling_stage.blocker_codes
+
+
+def test_execution_adapts_existing_engine_without_hardware_control() -> None:
+    evaluated_at = datetime(2026, 8, 6, 6, 5, tzinfo=UTC)
+    configured_profile = profile(configured_context=True)
+    normalized = scientific_inputs.build_scientific_input_snapshot(
+        landscape=configured_profile,
+        weather_entities=((
+            "weather.home",
+            "sunny",
+            {"temperature": 38, "humidity": 40, "wind_speed": 8, "wind_speed_unit": "m/s"},
+        ),),
+        evaluated_at=evaluated_at,
+        country_code="US",
+        latitude=34.0,
+        elevation_meters=100.0,
+    )
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(), configured_profile, normalized, evaluated_at=evaluated_at
+    )
+
+    assert len(result.execution) == 1
+    execution_plan = result.execution[0].execution_plan
+    schedule = result.scheduling[0].schedule
+    assert execution_plan is not None
+    assert schedule is not None
+    assert execution_plan.source_schedule == schedule
+    assert execution_plan.schedule_id == schedule.schedule_id
+    assert execution_plan.status.value == "no_commands"
+    assert execution_plan.commands == ()
+    assert result.stage(pipeline.PipelineStage.EXECUTION).status is (
+        pipeline.PipelineStageStatus.PARTIAL
+    )
+    assert result.stage(pipeline.PipelineStage.RUNTIME_MONITORING).status is (
+        pipeline.PipelineStageStatus.BLOCKED
+    )
+
+
+def test_execution_does_not_invent_missing_schedule() -> None:
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(),
+        profile(complete=False),
+        inputs_snapshot(ready=False),
+        evaluated_at=datetime(2026, 8, 6, 6, 5, tzinfo=UTC),
+    )
+
+    assert len(result.execution) == 1
+    assert result.execution[0].execution_plan is None
+    execution_stage = result.stage(pipeline.PipelineStage.EXECUTION)
+    assert execution_stage.status is pipeline.PipelineStageStatus.BLOCKED
+    assert "execution_unavailable" in execution_stage.blocker_codes
