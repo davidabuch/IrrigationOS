@@ -13,7 +13,7 @@ def test_manifest_is_valid() -> None:
     manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["domain"] == "irrigationos"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.0.3"
+    assert manifest["version"] == "1.0.4"
 
 
 def test_hacs_metadata_is_valid() -> None:

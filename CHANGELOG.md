@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.4 - Plant Stress Pipeline Integration
+
+- Build conservative Environmental Intelligence from normalized current Home Assistant weather.
+- Execute water-deficit, heat, and freeze stress engines per eligible irrigation area.
+- Aggregate independent stress dimensions without recomputing upstream Water Requirement science.
+- Preserve explicit partial and blocked states when current weather lacks drying or forecast evidence.
+- Keep Plant Health and all downstream stages non-actuating and blocked until their dedicated integration milestones.
+
 ## 1.0.3 - Water Requirement Pipeline Integration
 
 - Add per-area plant establishment stage to the Landscape Digital Twin.

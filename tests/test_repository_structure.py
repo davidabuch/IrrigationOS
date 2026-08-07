@@ -37,7 +37,7 @@ def test_manifest_and_hacs_versions_are_consistent() -> None:
     manifest = json.loads(
         (ROOT / "custom_components/irrigationos/manifest.json").read_text(encoding="utf-8")
     )
-    assert manifest["version"] == "1.0.3"
+    assert manifest["version"] == "1.0.4"
     assert manifest["domain"] == "irrigationos"
 
 
