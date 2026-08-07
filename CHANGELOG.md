@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.10 - Runtime Monitoring Pipeline Integration
+
+- Adapt the existing deterministic Runtime Monitoring engine into the synchronized Home Assistant pipeline.
+- Consume canonical simulation-only Execution plans without recomputing execution, scheduling, or upstream scientific logic.
+- Preserve execution-plan provenance and report truthful no-execution/blocked states without fabricating command acknowledgements, failures, or interruptions.
+- Keep runnable simulated commands unmonitored until real command-result and interruption observations are integrated.
+- Preserve the Observation-and-simulation-only boundary; no retry, recovery, controller, or Home Assistant command path is introduced.
+
 ## 1.0.9 - Execution Simulation Pipeline Integration
 
 - Adapt the existing deterministic Execution engine into the synchronized Home Assistant pipeline.

@@ -12,6 +12,7 @@ from ..plant_health import PlantHealthStatus
 from ..plant_stress import PlantStressRiskStatus
 from ..plant_water_requirement import PlantWaterRequirementStatus
 from ..recommendations import RecommendationStatus
+from ..runtime_monitoring import RuntimeStatus
 from ..scheduling import ScheduleStatus
 from ..scientific_inputs import ScientificInputSnapshot, ScientificInputStatus
 from .environmental_intelligence import build_environmental_report
@@ -25,6 +26,7 @@ from .models import (
     AreaPlantHealthEvaluation,
     AreaPlantStressEvaluation,
     AreaRecommendationEvaluation,
+    AreaRuntimeMonitoringEvaluation,
     AreaSchedulingEvaluation,
     AreaWaterRequirementEvaluation,
     PipelineEvaluation,
@@ -35,6 +37,7 @@ from .models import (
 )
 from .planning import build_area_plans
 from .recommendation import build_area_recommendations
+from .runtime_monitoring import build_area_runtime_reports
 from .scheduling import build_area_schedules
 from .stress import build_area_plant_stress
 from .water_requirement import build_area_water_requirements
@@ -114,14 +117,13 @@ def build_pipeline_evaluation(
     execution_stage = _execution_stage(configured, scheduling_stage, execution)
     stages.append(execution_stage)
 
-    stages.append(
-        PipelineStageEvaluation(
-            stage=PipelineStage.RUNTIME_MONITORING,
-            status=PipelineStageStatus.BLOCKED,
-            reason="Runtime Monitoring is not yet integrated with Home Assistant.",
-            blocker_codes=("runtime_monitoring_not_integrated",),
-        )
+    runtime_monitoring = build_area_runtime_reports(
+        execution, snapshot, evaluated_at=evaluated_at
     )
+    runtime_stage = _runtime_monitoring_stage(
+        configured, execution_stage, runtime_monitoring
+    )
+    stages.append(runtime_stage)
 
     current_stage = next(
         (item.stage for item in stages if item.status is not PipelineStageStatus.READY),
@@ -152,6 +154,7 @@ def build_pipeline_evaluation(
         planning=planning,
         scheduling=scheduling,
         execution=execution,
+        runtime_monitoring=runtime_monitoring,
     )
 
 
@@ -567,6 +570,68 @@ def _execution_stage(
         blocker_codes=tuple(
             dict.fromkeys(
                 (*blockers, *scheduling_stage.blocker_codes, "execution_unavailable")
+            )
+        ),
+    )
+
+def _runtime_monitoring_stage(
+    configured: int,
+    execution_stage: PipelineStageEvaluation,
+    runtime_monitoring: tuple[AreaRuntimeMonitoringEvaluation, ...],
+) -> PipelineStageEvaluation:
+    if configured == 0:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.RUNTIME_MONITORING,
+            status=PipelineStageStatus.BLOCKED,
+            reason="No configured irrigation areas are available.",
+            blocker_codes=("no_configured_areas",),
+        )
+
+    blockers = tuple(
+        dict.fromkeys(code for item in runtime_monitoring for code in item.blocker_codes)
+    )
+    reports = tuple(item.report for item in runtime_monitoring if item.report is not None)
+    completed = tuple(
+        report for report in reports if report.status is RuntimeStatus.COMPLETED
+    )
+    usable = tuple(
+        report
+        for report in reports
+        if report.status
+        in {
+            RuntimeStatus.COMPLETED,
+            RuntimeStatus.PENDING,
+            RuntimeStatus.IN_PROGRESS,
+            RuntimeStatus.PARTIAL,
+            RuntimeStatus.NO_EXECUTION,
+        }
+    )
+    if len(completed) == configured:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.RUNTIME_MONITORING,
+            status=PipelineStageStatus.READY,
+            reason="Runtime Monitoring reconciled execution for every configured area.",
+        )
+    if usable:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.RUNTIME_MONITORING,
+            status=PipelineStageStatus.PARTIAL,
+            reason=(
+                "Runtime Monitoring evaluated simulated execution without inventing "
+                "live command outcomes."
+            ),
+            blocker_codes=blockers,
+        )
+    return PipelineStageEvaluation(
+        stage=PipelineStage.RUNTIME_MONITORING,
+        status=PipelineStageStatus.BLOCKED,
+        reason=(
+            "Runtime Monitoring requires a usable execution plan and truthful runtime "
+            "observations."
+        ),
+        blocker_codes=tuple(
+            dict.fromkeys(
+                (*blockers, *execution_stage.blocker_codes, "runtime_monitoring_unavailable")
             )
         ),
     )
