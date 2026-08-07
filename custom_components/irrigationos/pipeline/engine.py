@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ..controllers import ControllerRegistrySnapshot
+from ..execution import ExecutionPlanStatus
 from ..landscape import LandscapeProfile
 from ..planning import PlanStatus
 from ..plant_health import PlantHealthStatus
@@ -14,10 +15,12 @@ from ..recommendations import RecommendationStatus
 from ..scheduling import ScheduleStatus
 from ..scientific_inputs import ScientificInputSnapshot, ScientificInputStatus
 from .environmental_intelligence import build_environmental_report
+from .execution import build_area_execution_plans
 from .health import build_area_plant_health
 from .models import (
     PIPELINE_ALGORITHM_VERSION,
     PIPELINE_SCHEMA_VERSION,
+    AreaExecutionEvaluation,
     AreaPlanningEvaluation,
     AreaPlantHealthEvaluation,
     AreaPlantStressEvaluation,
@@ -107,19 +110,18 @@ def build_pipeline_evaluation(
     scheduling_stage = _scheduling_stage(configured, planning_stage, scheduling)
     stages.append(scheduling_stage)
 
-    downstream = (
-        PipelineStage.EXECUTION,
-        PipelineStage.RUNTIME_MONITORING,
-    )
-    for stage in downstream:
-        stages.append(
-            PipelineStageEvaluation(
-                stage=stage,
-                status=PipelineStageStatus.BLOCKED,
-                reason="An upstream scientific stage is not yet integrated with Home Assistant.",
-                blocker_codes=("upstream_scientific_stage_not_integrated",),
-            )
+    execution = build_area_execution_plans(scheduling, evaluated_at=evaluated_at)
+    execution_stage = _execution_stage(configured, scheduling_stage, execution)
+    stages.append(execution_stage)
+
+    stages.append(
+        PipelineStageEvaluation(
+            stage=PipelineStage.RUNTIME_MONITORING,
+            status=PipelineStageStatus.BLOCKED,
+            reason="Runtime Monitoring is not yet integrated with Home Assistant.",
+            blocker_codes=("runtime_monitoring_not_integrated",),
         )
+    )
 
     current_stage = next(
         (item.stage for item in stages if item.status is not PipelineStageStatus.READY),
@@ -149,6 +151,7 @@ def build_pipeline_evaluation(
         recommendations=recommendations,
         planning=planning,
         scheduling=scheduling,
+        execution=execution,
     )
 
 
@@ -504,6 +507,66 @@ def _scheduling_stage(
         blocker_codes=tuple(
             dict.fromkeys(
                 (*blockers, *planning_stage.blocker_codes, "scheduling_unavailable")
+            )
+        ),
+    )
+
+
+def _execution_stage(
+    configured: int,
+    scheduling_stage: PipelineStageEvaluation,
+    execution: tuple[AreaExecutionEvaluation, ...],
+) -> PipelineStageEvaluation:
+    if configured == 0:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.EXECUTION,
+            status=PipelineStageStatus.BLOCKED,
+            reason="No configured irrigation areas are available.",
+            blocker_codes=("no_configured_areas",),
+        )
+
+    blockers = tuple(
+        dict.fromkeys(code for item in execution for code in item.blocker_codes)
+    )
+    plans = tuple(
+        item.execution_plan for item in execution if item.execution_plan is not None
+    )
+    ready = tuple(
+        plan for plan in plans if plan.status is ExecutionPlanStatus.READY
+    )
+    usable = tuple(
+        plan
+        for plan in plans
+        if plan.status
+        in {
+            ExecutionPlanStatus.READY,
+            ExecutionPlanStatus.PARTIAL,
+            ExecutionPlanStatus.NO_COMMANDS,
+        }
+    )
+    if len(ready) == configured:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.EXECUTION,
+            status=PipelineStageStatus.READY,
+            reason="Simulation-only execution plans were generated for every configured area.",
+        )
+    if usable:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.EXECUTION,
+            status=PipelineStageStatus.PARTIAL,
+            reason=(
+                "Execution simulation was evaluated without hardware control; "
+                "some areas have no runnable scheduled commands."
+            ),
+            blocker_codes=blockers,
+        )
+    return PipelineStageEvaluation(
+        stage=PipelineStage.EXECUTION,
+        status=PipelineStageStatus.BLOCKED,
+        reason="Execution simulation could not produce a usable plan from scheduling.",
+        blocker_codes=tuple(
+            dict.fromkeys(
+                (*blockers, *scheduling_stage.blocker_codes, "execution_unavailable")
             )
         ),
     )
