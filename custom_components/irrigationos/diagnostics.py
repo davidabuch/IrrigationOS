@@ -36,6 +36,18 @@ TO_REDACT = {
     "account_id",
     "controller_id",
     "area_id",
+    "assessment_id",
+    "recommendation_assessment_id",
+    "plant_instance_id",
+    "location_id",
+    "plan_id",
+    "schedule_id",
+    "execution_plan_id",
+    "report_id",
+    "request_id",
+    "command_id",
+    "scheduled_action_id",
+    "target_id",
     "serial_number",
     "serialNumber",
     "macAddress",
@@ -54,6 +66,35 @@ async def async_get_config_entry_diagnostics(
     landscape = asdict(entry.runtime_data.landscape)
     realtime = entry.runtime_data.realtime
     pipeline = entry.runtime_data.pipeline_evaluation
+    pipeline_summary = None
+    if pipeline is not None:
+        pipeline_summary = {
+            "algorithm_version": pipeline.algorithm_version,
+            "status": pipeline.status.value,
+            "current_stage": pipeline.current_stage.value,
+            "evaluated_at": pipeline.evaluated_at.isoformat(),
+            "configured_area_count": pipeline.configured_area_count,
+            "complete_profile_count": pipeline.complete_profile_count,
+            "blocker_codes": list(pipeline.blocker_codes),
+            "stages": {
+                stage.stage.value: {
+                    "status": stage.status.value,
+                    "reason": stage.reason,
+                    "blocker_codes": list(stage.blocker_codes),
+                }
+                for stage in pipeline.stages
+            },
+            "output_counts": {
+                "water_requirements": len(pipeline.water_requirements),
+                "plant_stress": len(pipeline.plant_stress),
+                "plant_health": len(pipeline.plant_health),
+                "recommendations": len(pipeline.recommendations),
+                "planning": len(pipeline.planning),
+                "scheduling": len(pipeline.scheduling),
+                "execution": len(pipeline.execution),
+                "runtime_monitoring": len(pipeline.runtime_monitoring),
+            },
+        }
     return {
         "entry": redact_data(dict(entry.data), TO_REDACT),
         "coordinator": {
@@ -71,6 +112,7 @@ async def async_get_config_entry_diagnostics(
             ),
             "data": redact_data(snapshot, TO_REDACT),
             "landscape": redact_data(landscape, TO_REDACT),
+            "pipeline_summary": pipeline_summary,
             "pipeline_evaluation": (
                 redact_data(asdict(pipeline), TO_REDACT)
                 if pipeline is not None

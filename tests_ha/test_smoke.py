@@ -293,16 +293,40 @@ async def test_runtime_inventory_and_diagnostics(
     assert "controller_test_status" in unique_ids
     assert "controller_test:slot:1_observation" in unique_ids
     assert "controller_test:slot:2_observation" in unique_ids
+    for stage in (
+        "observations",
+        "knowledge",
+        "water_requirement",
+        "stress",
+        "health",
+        "recommendations",
+        "planning",
+        "scheduling",
+        "execution",
+        "runtime_monitoring",
+    ):
+        assert f"irrigationos_pipeline_stage_{stage}" in unique_ids
+    assert "controller_test:slot:1_pipeline_output" in unique_ids
+    assert "controller_test:slot:2_pipeline_output" in unique_ids
     unused = next(
         item for item in entries if item.unique_id == "controller_test:slot:2_observation"
     )
     assert unused.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+    unused_pipeline = next(
+        item
+        for item in entries
+        if item.unique_id == "controller_test:slot:2_pipeline_output"
+    )
+    assert unused_pipeline.disabled_by is er.RegistryEntryDisabler.INTEGRATION
 
     adapter.snapshot = _snapshot(slots=3)
     await entry.runtime_data.async_refresh()
     await hass.async_block_till_done()
     entries = er.async_entries_for_config_entry(entity_registry, entry.entry_id)
     assert "controller_test:slot:3_observation" in {item.unique_id for item in entries}
+    assert "controller_test:slot:3_pipeline_output" in {
+        item.unique_id for item in entries
+    }
 
     configured = next(
         item for item in entries if item.unique_id == "controller_test:slot:1_observation"
@@ -325,6 +349,11 @@ async def test_runtime_inventory_and_diagnostics(
     observation = diagnostics["coordinator"]["data"]["observation"]
     assert observation["source"] == "rachio"
     assert "observed_at" in observation
+    pipeline_summary = diagnostics["coordinator"]["pipeline_summary"]
+    assert pipeline_summary is not None
+    assert pipeline_summary["algorithm_version"] == "1.0.10"
+    assert "runtime_monitoring" in pipeline_summary["stages"]
+    assert pipeline_summary["output_counts"]["runtime_monitoring"] >= 1
 
 
 @pytest.mark.asyncio

@@ -19,7 +19,7 @@ from .entity import (
     IrrigationOSEntity,
     IrrigationOSLandscapeAreaEntity,
 )
-from .pipeline import PIPELINE_ALGORITHM_VERSION
+from .pipeline import PIPELINE_ALGORITHM_VERSION, PipelineStage
 from .reconciliation import EntityInventory, controller_first
 
 
@@ -45,6 +45,10 @@ async def async_setup_entry(
         IrrigationOSPipelineLastEvaluationSensor(coordinator),
         IrrigationOSScientificInputStatusSensor(coordinator),
         IrrigationOSWeatherSourceSensor(coordinator),
+        *(
+            IrrigationOSPipelineStageStatusSensor(coordinator, stage)
+            for stage in PipelineStage
+        ),
     ]
     inventory = EntityInventory()
     entities.extend(_new_dynamic_entities(coordinator, inventory))
@@ -70,6 +74,9 @@ def _new_dynamic_entities(
         )
     for area in coordinator.data.areas:
         candidates[f"area:{area.area_id}"] = IrrigationOSAreaSummarySensor(
+            coordinator, area
+        )
+        candidates[f"pipeline:{area.area_id}"] = IrrigationOSAreaPipelineSensor(
             coordinator, area
         )
         if area.configured:
@@ -420,6 +427,180 @@ class IrrigationOSPipelineStageSensor(IrrigationOSEntity, SensorEntity):
             }
             for item in evaluation.stages
         }
+
+
+class IrrigationOSPipelineStageStatusSensor(IrrigationOSEntity, SensorEntity):
+    """Expose one stable synchronized pipeline-stage status."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:timeline-check-outline"
+
+    def __init__(
+        self, coordinator: IrrigationOSCoordinator, stage: PipelineStage
+    ) -> None:
+        super().__init__(coordinator)
+        self.stage = stage
+        slug = stage.value
+        self._attr_name = f"Pipeline {slug.replace('_', ' ')}"
+        self._attr_unique_id = f"irrigationos_pipeline_stage_{slug}"
+        self.entity_id = f"sensor.irrigationos_pipeline_stage_{slug}"
+
+    @property
+    def native_value(self) -> str:
+        evaluation = self.coordinator.pipeline_evaluation
+        if evaluation is None:
+            return "unavailable"
+        return evaluation.stage(self.stage).status.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        evaluation = self.coordinator.pipeline_evaluation
+        if evaluation is None:
+            return {}
+        stage = evaluation.stage(self.stage)
+        return {
+            "reason": stage.reason,
+            "blocker_codes": list(stage.blocker_codes),
+            "evaluated_at": evaluation.evaluated_at.isoformat(),
+            "pipeline_algorithm_version": evaluation.algorithm_version,
+        }
+
+
+def _area_result_by_id(values: tuple[Any, ...], area_id: str) -> Any | None:
+    """Return one immutable per-area pipeline result without recomputation."""
+    return next((item for item in values if item.area_id == area_id), None)
+
+
+class IrrigationOSAreaPipelineSensor(IrrigationOSAreaEntity, SensorEntity):
+    """Expose compact science, advisory, and simulation output for one area."""
+
+    _attr_name = "Pipeline output"
+    _attr_icon = "mdi:timeline-text-outline"
+
+    def __init__(self, coordinator: IrrigationOSCoordinator, area: IrrigationArea) -> None:
+        super().__init__(coordinator, area)
+        self._attr_unique_id = f"{area.area_id}_pipeline_output"
+        self._attr_suggested_object_id = f"zone_{area.slot_number}_pipeline_output"
+
+    def _output(self) -> tuple[str, dict[str, Any]]:
+        evaluation = self.coordinator.pipeline_evaluation
+        if evaluation is None:
+            return "unavailable", {}
+
+        area_id = self.area_id
+        water = _area_result_by_id(evaluation.water_requirements, area_id)
+        stress = _area_result_by_id(evaluation.plant_stress, area_id)
+        health = _area_result_by_id(evaluation.plant_health, area_id)
+        recommendation = _area_result_by_id(evaluation.recommendations, area_id)
+        planning = _area_result_by_id(evaluation.planning, area_id)
+        scheduling = _area_result_by_id(evaluation.scheduling, area_id)
+        execution = _area_result_by_id(evaluation.execution, area_id)
+        runtime = _area_result_by_id(evaluation.runtime_monitoring, area_id)
+
+        attrs: dict[str, Any] = {
+            "evaluated_at": evaluation.evaluated_at.isoformat(),
+            "pipeline_algorithm_version": evaluation.algorithm_version,
+            "water_requirement_status": (
+                water.assessment.status.value
+                if water is not None and water.assessment is not None
+                else "unavailable"
+            ),
+            "plant_stress_status": (
+                stress.assessment.overall_status.value
+                if stress is not None and stress.assessment is not None
+                else "unavailable"
+            ),
+            "plant_health_status": (
+                health.assessment.status.value
+                if health is not None and health.assessment is not None
+                else "unavailable"
+            ),
+            "recommendation_status": (
+                recommendation.assessment.status.value
+                if recommendation is not None and recommendation.assessment is not None
+                else "unavailable"
+            ),
+            "planning_status": (
+                planning.plan.status.value
+                if planning is not None and planning.plan is not None
+                else "unavailable"
+            ),
+            "scheduling_status": (
+                scheduling.schedule.status.value
+                if scheduling is not None and scheduling.schedule is not None
+                else "unavailable"
+            ),
+            "execution_status": (
+                execution.execution_plan.status.value
+                if execution is not None and execution.execution_plan is not None
+                else "unavailable"
+            ),
+            "runtime_status": (
+                runtime.report.status.value
+                if runtime is not None and runtime.report is not None
+                else "unavailable"
+            ),
+            "blocker_codes": sorted(
+                {
+                    code
+                    for item in (
+                        water,
+                        stress,
+                        health,
+                        recommendation,
+                        planning,
+                        scheduling,
+                        execution,
+                        runtime,
+                    )
+                    if item is not None
+                    for code in item.blocker_codes
+                }
+            ),
+        }
+        if recommendation is not None and recommendation.assessment is not None:
+            attrs["recommendation_count"] = len(
+                recommendation.assessment.recommendations
+            )
+            attrs["recommendation_assessment_id"] = (
+                recommendation.assessment.assessment_id
+            )
+        if planning is not None and planning.plan is not None:
+            attrs["plan_id"] = planning.plan.plan_id
+            attrs["plan_action_count"] = len(planning.plan.actions)
+        if scheduling is not None and scheduling.schedule is not None:
+            attrs["schedule_id"] = scheduling.schedule.schedule_id
+            attrs["scheduled_action_count"] = len(scheduling.schedule.actions)
+        if execution is not None and execution.execution_plan is not None:
+            attrs["execution_plan_id"] = execution.execution_plan.execution_plan_id
+            attrs["simulated_command_count"] = len(execution.execution_plan.commands)
+        if runtime is not None and runtime.report is not None:
+            attrs["runtime_report_id"] = runtime.report.report_id
+            attrs["runtime_issue_count"] = len(runtime.report.issues)
+
+        final_status = attrs["runtime_status"]
+        if final_status == "unavailable":
+            for key in (
+                "execution_status",
+                "scheduling_status",
+                "planning_status",
+                "recommendation_status",
+                "plant_health_status",
+                "plant_stress_status",
+                "water_requirement_status",
+            ):
+                if attrs[key] != "unavailable":
+                    final_status = attrs[key]
+                    break
+        return str(final_status), attrs
+
+    @property
+    def native_value(self) -> str:
+        return self._output()[0]
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self._output()[1]
 
 
 class IrrigationOSPipelineVersionSensor(IrrigationOSEntity, SensorEntity):
