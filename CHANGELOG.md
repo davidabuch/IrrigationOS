@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.7 - Planning Pipeline Integration
+
+- Adapt the existing deterministic Planning engine into the synchronized Home Assistant pipeline.
+- Consume canonical Recommendation assessments without recomputing recommendation or upstream scientific logic.
+- Create machine-readable plans without inventing irrigation quantities, runtime, targets, or scheduling directives.
+- Preserve recommendation provenance and `NO_AUTOMATIC_EXECUTION` as manual-only planning dispositions.
+- Keep Scheduling, Execution, and Runtime Monitoring blocked until their dedicated integration milestones.
+
 ## 1.0.6 - Recommendation Pipeline Integration
 
 - Adapt the existing deterministic Recommendation engine into the synchronized Home Assistant pipeline.
