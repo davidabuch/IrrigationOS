@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.11
+- **Installable Home Assistant release:** v1.0.12
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** validate startup, reload, persistence, migration, and entity lifecycle for the completed Home Assistant pipeline
+- **Next milestone:** freeze public domain APIs and compatibility contracts for the completed v1.0 pipeline
 
 ## Delivery model
 
@@ -56,7 +56,6 @@ Remaining release work:
 
 - freeze public domain APIs and compatibility tests
 - reconcile architecture and release documentation
-- validate startup, reload, persistence, migration, and entity lifecycle
 - complete v1.0.0 release metadata and release notes
 - deploy with live execution disabled by default
 
