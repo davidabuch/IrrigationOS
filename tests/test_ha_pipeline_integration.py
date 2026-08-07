@@ -1,4 +1,4 @@
-"""Repository-level contracts for v1.0.2 HA scientific-input integration."""
+"""Repository-level contracts for v1.0.3 HA Water Requirement integration."""
 
 from __future__ import annotations
 

@@ -56,6 +56,7 @@
           "display_name": "Landscape name",
           "plant_type": "Plant type",
           "plant_description": "Plant description",
+          "establishment_stage": "Establishment stage",
           "irrigation_method": "Irrigation method",
           "sun_exposure": "Sun exposure",
           "slope_percent": "Slope percent",

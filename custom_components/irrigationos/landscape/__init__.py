@@ -2,6 +2,7 @@
 
 from .builder import LANDSCAPE_SCHEMA_VERSION, build_area_profile, build_landscape_profile
 from .models import (
+    EstablishmentStage,
     IrrigationAreaProfile,
     IrrigationMethod,
     LandscapeProfile,
@@ -14,6 +15,7 @@ from .models import (
 
 __all__ = [
     "LANDSCAPE_SCHEMA_VERSION",
+    "EstablishmentStage",
     "IrrigationAreaProfile",
     "IrrigationMethod",
     "LandscapeProfile",

@@ -103,6 +103,9 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             landscape=self.landscape,
             weather_entities=weather_entities,
             evaluated_at=self.last_successful_refresh,
+            country_code=self.hass.config.country,
+            latitude=self.hass.config.latitude,
+            elevation_meters=self.hass.config.elevation,
         )
         self.pipeline_evaluation = build_pipeline_evaluation(
             snapshot,

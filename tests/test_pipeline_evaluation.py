@@ -54,7 +54,9 @@ def snapshot(*, configured: bool = True) -> Any:
     )
 
 
-def profile(*, complete: bool = True) -> Any:
+def profile(
+    *, complete: bool = True, configured_context: bool = False
+) -> Any:
     source = landscape.ProfileValueSource.USER
     unknown = landscape.ProfileValueSource.UNKNOWN
     return landscape.LandscapeProfile(
@@ -68,7 +70,11 @@ def profile(*, complete: bool = True) -> Any:
                     source if complete else unknown,
                     100 if complete else 0,
                 ),
-                plant_description=landscape.ProfileValue(None, unknown, 0),
+                plant_description=landscape.ProfileValue(
+                    "Bermudagrass" if configured_context else None,
+                    source if configured_context else unknown,
+                    100 if configured_context else 0,
+                ),
                 irrigation_method=landscape.ProfileValue(
                     landscape.IrrigationMethod.DRIP,
                     source,
@@ -91,6 +97,13 @@ def profile(*, complete: bool = True) -> Any:
                     0.5, source, 100
                 ),
                 distribution_efficiency=landscape.ProfileValue(0.9, source, 100),
+                establishment_stage=landscape.ProfileValue(
+                    landscape.EstablishmentStage.ESTABLISHED
+                    if configured_context
+                    else landscape.EstablishmentStage.UNKNOWN,
+                    source if configured_context else unknown,
+                    100 if configured_context else 0,
+                ),
             ),
         ),
     )
@@ -149,7 +162,7 @@ def test_pipeline_snapshot_is_immutable_and_synchronized() -> None:
     assert result.stage(pipeline.PipelineStage.OBSERVATIONS).status is (
         pipeline.PipelineStageStatus.READY
     )
-    assert "plant_water_context_not_configured" in result.blocker_codes
+    assert "establishment_stage_not_configured" in result.blocker_codes
 
 
 def test_incomplete_landscape_is_reported_without_inventing_science() -> None:
@@ -177,3 +190,32 @@ def test_no_configured_areas_blocks_pipeline() -> None:
     assert result.status is pipeline.PipelineEvaluationStatus.BLOCKED
     assert result.current_stage is pipeline.PipelineStage.KNOWLEDGE
     assert "no_configured_areas" in result.blocker_codes
+
+
+def test_water_requirement_executes_with_configured_context() -> None:
+    evaluated_at = datetime(2026, 8, 6, 6, 5, tzinfo=UTC)
+    configured_profile = profile(configured_context=True)
+    normalized = scientific_inputs.build_scientific_input_snapshot(
+        landscape=configured_profile,
+        weather_entities=((
+            "weather.home",
+            "sunny",
+            {"temperature": 28, "humidity": 40},
+        ),),
+        evaluated_at=evaluated_at,
+        country_code="US",
+        latitude=34.0,
+        elevation_meters=100.0,
+    )
+    result = pipeline.build_pipeline_evaluation(
+        snapshot(), configured_profile, normalized, evaluated_at=evaluated_at
+    )
+
+    water = result.stage(pipeline.PipelineStage.WATER_REQUIREMENT)
+    assert water.status is pipeline.PipelineStageStatus.PARTIAL
+    assert len(result.water_requirements) == 1
+    assessment = result.water_requirements[0].assessment
+    assert assessment is not None
+    assert assessment.value == 0.6
+    assert result.water_requirements[0].season.value == "summer"
+    assert result.current_stage is pipeline.PipelineStage.WATER_REQUIREMENT

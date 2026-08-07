@@ -6,16 +6,19 @@ from datetime import datetime
 
 from ..controllers import ControllerRegistrySnapshot
 from ..landscape import LandscapeProfile
+from ..plant_water_requirement import PlantWaterRequirementStatus
 from ..scientific_inputs import ScientificInputSnapshot, ScientificInputStatus
 from .models import (
     PIPELINE_ALGORITHM_VERSION,
     PIPELINE_SCHEMA_VERSION,
+    AreaWaterRequirementEvaluation,
     PipelineEvaluation,
     PipelineEvaluationStatus,
     PipelineStage,
     PipelineStageEvaluation,
     PipelineStageStatus,
 )
+from .water_requirement import build_area_water_requirements
 
 
 def build_pipeline_evaluation(
@@ -28,7 +31,6 @@ def build_pipeline_evaluation(
     """Build one immutable, truthful pipeline snapshot for Home Assistant."""
     configured = len(snapshot.configured_areas)
     complete = landscape.complete_area_count
-
     stages: list[PipelineStageEvaluation] = [
         PipelineStageEvaluation(
             stage=PipelineStage.OBSERVATIONS,
@@ -37,78 +39,21 @@ def build_pipeline_evaluation(
         )
     ]
 
-    if configured == 0:
-        stages.append(
-            PipelineStageEvaluation(
-                stage=PipelineStage.KNOWLEDGE,
-                status=PipelineStageStatus.BLOCKED,
-                reason="No configured irrigation areas are available.",
-                blocker_codes=("no_configured_areas",),
-            )
-        )
-    elif complete < configured:
-        stages.append(
-            PipelineStageEvaluation(
-                stage=PipelineStage.KNOWLEDGE,
-                status=PipelineStageStatus.PARTIAL,
-                reason="One or more landscape profiles are incomplete.",
-                blocker_codes=("incomplete_landscape_profiles",),
-            )
-        )
-    else:
-        stages.append(
-            PipelineStageEvaluation(
-                stage=PipelineStage.KNOWLEDGE,
-                status=PipelineStageStatus.READY,
-                reason="All configured landscape profiles are complete.",
-            )
-        )
+    knowledge_stage = _knowledge_stage(configured, complete, scientific_inputs)
+    stages.append(knowledge_stage)
 
-    if configured == 0:
-        pass
-    elif complete < configured:
-        stages[1] = PipelineStageEvaluation(
-            stage=PipelineStage.KNOWLEDGE,
-            status=PipelineStageStatus.PARTIAL,
-            reason="Landscape profiles or scientific inputs are incomplete.",
-            blocker_codes=tuple(
-                dict.fromkeys(
-                    ("incomplete_landscape_profiles", *scientific_inputs.blocker_codes)
-                )
-            ),
-        )
-    elif scientific_inputs.status is ScientificInputStatus.READY:
-        stages[1] = PipelineStageEvaluation(
-            stage=PipelineStage.KNOWLEDGE,
-            status=PipelineStageStatus.READY,
-            reason="Landscape profiles and curated plant knowledge are resolved.",
-        )
-    elif scientific_inputs.status is ScientificInputStatus.PARTIAL:
-        stages[1] = PipelineStageEvaluation(
-            stage=PipelineStage.KNOWLEDGE,
-            status=PipelineStageStatus.PARTIAL,
-            reason="Scientific inputs are available with unresolved gaps.",
-            blocker_codes=scientific_inputs.blocker_codes,
-        )
-    else:
-        stages[1] = PipelineStageEvaluation(
-            stage=PipelineStage.KNOWLEDGE,
-            status=PipelineStageStatus.BLOCKED,
-            reason="Required scientific inputs are unavailable.",
-            blocker_codes=scientific_inputs.blocker_codes,
-        )
-
-    stages.append(
-        PipelineStageEvaluation(
-            stage=PipelineStage.WATER_REQUIREMENT,
-            status=PipelineStageStatus.BLOCKED,
-            reason=(
-                "Current weather and plant knowledge are integrated, but seasonal and "
-                "establishment context are not yet configured."
-            ),
-            blocker_codes=("plant_water_context_not_configured",),
-        )
+    water_requirements = build_area_water_requirements(
+        landscape,
+        scientific_inputs,
+        evaluated_at=evaluated_at,
     )
+    water_stage = _water_requirement_stage(
+        configured,
+        knowledge_stage,
+        water_requirements,
+    )
+    stages.append(water_stage)
+
     downstream = (
         PipelineStage.STRESS,
         PipelineStage.HEALTH,
@@ -123,8 +68,8 @@ def build_pipeline_evaluation(
             PipelineStageEvaluation(
                 stage=stage,
                 status=PipelineStageStatus.BLOCKED,
-                reason="An upstream scientific assessment is not yet available.",
-                blocker_codes=("upstream_scientific_stage_blocked",),
+                reason="An upstream scientific stage is not yet integrated with Home Assistant.",
+                blocker_codes=("upstream_scientific_stage_not_integrated",),
             )
         )
 
@@ -134,8 +79,6 @@ def build_pipeline_evaluation(
     )
     if configured == 0:
         status = PipelineEvaluationStatus.BLOCKED
-    elif complete < configured:
-        status = PipelineEvaluationStatus.PARTIAL
     else:
         status = PipelineEvaluationStatus.PARTIAL
 
@@ -151,4 +94,107 @@ def build_pipeline_evaluation(
         stages=tuple(stages),
         configured_area_count=configured,
         complete_profile_count=complete,
+        water_requirements=water_requirements,
+    )
+
+
+def _knowledge_stage(
+    configured: int,
+    complete: int,
+    scientific_inputs: ScientificInputSnapshot,
+) -> PipelineStageEvaluation:
+    if configured == 0:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.KNOWLEDGE,
+            status=PipelineStageStatus.BLOCKED,
+            reason="No configured irrigation areas are available.",
+            blocker_codes=("no_configured_areas",),
+        )
+    if complete < configured:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.KNOWLEDGE,
+            status=PipelineStageStatus.PARTIAL,
+            reason="Landscape profiles or scientific inputs are incomplete.",
+            blocker_codes=tuple(
+                dict.fromkeys(
+                    ("incomplete_landscape_profiles", *scientific_inputs.blocker_codes)
+                )
+            ),
+        )
+    if scientific_inputs.status is ScientificInputStatus.READY:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.KNOWLEDGE,
+            status=PipelineStageStatus.READY,
+            reason="Landscape profiles and curated plant knowledge are resolved.",
+        )
+    if scientific_inputs.status is ScientificInputStatus.PARTIAL:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.KNOWLEDGE,
+            status=PipelineStageStatus.PARTIAL,
+            reason="Scientific inputs are available with unresolved gaps.",
+            blocker_codes=scientific_inputs.blocker_codes,
+        )
+    return PipelineStageEvaluation(
+        stage=PipelineStage.KNOWLEDGE,
+        status=PipelineStageStatus.BLOCKED,
+        reason="Required scientific inputs are unavailable.",
+        blocker_codes=scientific_inputs.blocker_codes,
+    )
+
+
+def _water_requirement_stage(
+    configured: int,
+    knowledge_stage: PipelineStageEvaluation,
+    water_requirements: tuple[AreaWaterRequirementEvaluation, ...],
+) -> PipelineStageEvaluation:
+    if configured == 0:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.WATER_REQUIREMENT,
+            status=PipelineStageStatus.BLOCKED,
+            reason="No configured irrigation areas are available.",
+            blocker_codes=("no_configured_areas",),
+        )
+
+    blocker_codes = tuple(
+        dict.fromkeys(code for item in water_requirements for code in item.blocker_codes)
+    )
+    usable = tuple(
+        item
+        for item in water_requirements
+        if item.assessment is not None
+        and item.assessment.status
+        in {
+            PlantWaterRequirementStatus.AVAILABLE,
+            PlantWaterRequirementStatus.PARTIAL,
+        }
+    )
+    fully_available = tuple(
+        item
+        for item in water_requirements
+        if item.assessment is not None
+        and item.assessment.status is PlantWaterRequirementStatus.AVAILABLE
+    )
+
+    if len(fully_available) == configured:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.WATER_REQUIREMENT,
+            status=PipelineStageStatus.READY,
+            reason="Plant Water Requirement was assessed for every configured area.",
+        )
+    if usable:
+        return PipelineStageEvaluation(
+            stage=PipelineStage.WATER_REQUIREMENT,
+            status=PipelineStageStatus.PARTIAL,
+            reason="Plant Water Requirement is available with incomplete context or coverage.",
+            blocker_codes=blocker_codes,
+        )
+
+    inherited = knowledge_stage.blocker_codes
+    return PipelineStageEvaluation(
+        stage=PipelineStage.WATER_REQUIREMENT,
+        status=PipelineStageStatus.BLOCKED,
+        reason="Plant Water Requirement could not produce an evidence-backed assessment.",
+        blocker_codes=tuple(
+            dict.fromkeys((*blocker_codes, *inherited, "plant_water_requirement_unavailable"))
+        ),
     )
