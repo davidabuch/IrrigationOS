@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.14
+- **Installable Home Assistant release:** v1.0.15
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** resolve final public versioning, complete release metadata/release notes, and run final release-candidate validation
+- **Next milestone:** merge and tag v1.0.15 after final green release validation; public distribution remains a separate explicit action
 
 ## Delivery model
 
@@ -39,7 +39,7 @@ Delivered:
 
 ## v1.0 Release Completion
 
-**Status: In progress**
+**Status: Release candidate complete**
 
 Completed domain layers:
 
@@ -52,12 +52,17 @@ Completed domain layers:
 - Execution simulation
 - Runtime Monitoring
 
-Remaining release work:
+Release-candidate completion:
 
-- resolve the final public semantic version; internal v1.0.13/v1.0.14 milestones make a later `v1.0.0` tag a SemVer downgrade
-- reconcile release metadata and release notes, including the historical `pyproject.toml` project version
-- perform final release-candidate validation against the frozen API and lifecycle contracts
-- deploy with live execution disabled by default
+- final public semantic version resolved as `v1.0.15`, preserving monotonic SemVer after the internal v1.0.x milestone line
+- `pyproject.toml`, Home Assistant manifest, runtime constant, tests, and validation metadata synchronized at 1.0.15
+- stable release notes and release-candidate documentation completed
+- frozen API and Home Assistant lifecycle contracts retained as release gates
+- live execution remains disabled; Observation is the only commissioned operating mode
+
+Remaining distribution action after merge and green CI:
+
+- create the `v1.0.15` tag/release only from the validated merged `main` commit when public distribution is explicitly approved
 
 See `docs/V1_0_ARCHITECTURE_AUDIT.md`.
 

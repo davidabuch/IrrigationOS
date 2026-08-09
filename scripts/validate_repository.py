@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,6 +19,7 @@ REQUIRED_FILES = (
     "PRODUCT_PRINCIPLES.md",
     "V0_4_1_RELEASE_NOTES.md",
     "V0_4_2_RELEASE_NOTES.md",
+    "V1_0_15_RELEASE_NOTES.md",
     "custom_components/irrigationos/brand/icon.png",
     "custom_components/irrigationos/manifest.json",
     "custom_components/irrigationos/strings.json",
@@ -57,6 +59,7 @@ REQUIRED_FILES = (
     "docs/V1_0_12_HA_LIFECYCLE_VALIDATION.md",
     "docs/V1_0_13_PUBLIC_API_COMPATIBILITY_FREEZE.md",
     "docs/V1_0_14_ARCHITECTURE_RELEASE_DOCUMENTATION.md",
+    "docs/V1_0_15_STABLE_RELEASE_CANDIDATE.md",
     "docs/V1_0_PUBLIC_API_CONTRACT.json",
     "hacs.json",
     "pyproject.toml",
@@ -73,6 +76,12 @@ def load_json(relative_path: str) -> object:
         return json.load(handle)
 
 
+def load_pyproject() -> dict[str, object]:
+    """Load pyproject metadata with the standard-library TOML parser."""
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        return tomllib.load(handle)
+
+
 def main() -> int:
     """Validate the repository structure and metadata."""
     missing = [path for path in REQUIRED_FILES if not (ROOT / path).is_file()]
@@ -86,8 +95,15 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.14":
-        raise SystemExit("manifest.json version must be 1.0.14")
+    if manifest.get("version") != "1.0.15":
+        raise SystemExit("manifest.json version must be 1.0.15")
+
+    pyproject = load_pyproject()
+    project = pyproject.get("project")
+    if not isinstance(project, dict):
+        raise SystemExit("pyproject.toml must contain a [project] table")
+    if project.get("version") != manifest.get("version"):
+        raise SystemExit("pyproject.toml and manifest.json versions must match")
 
     hacs = load_json("hacs.json")
     if not isinstance(hacs, dict) or hacs.get("name") != "IrrigationOS":

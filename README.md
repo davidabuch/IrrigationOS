@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.14 — Architecture and Release Documentation Reconciliation**
+**v1.0.15 — Stable Release Candidate**
 
 The current release:
 
@@ -23,6 +23,7 @@ The current release:
 - executes evidence-backed Plant Water Requirement, aggregate Plant Stress, Plant Health, advisory Recommendations, machine-readable Planning, conservative proposed Scheduling, and simulation-only Execution and conservative Runtime Monitoring in the synchronized pipeline;
 - exposes stable per-stage and per-zone pipeline output sensors plus redacted pipeline diagnostics;
 - freezes the v1.0 domain and pipeline public API contracts with machine-readable compatibility tests;
+- synchronizes Python package and Home Assistant integration release metadata at v1.0.15;
 - reconciles the architecture, operating-mode, release-strategy, and v1.0 audit documents with the shipped observation/simulation runtime;
 - exports redacted diagnostics;
 - does not start, stop, enable, disable, or reschedule irrigation.
@@ -67,7 +68,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation mode remains the default and only commissioned operating mode in v1.0.14; startup, unload/setup, config-entry reload, migration, persistence, and pipeline entity identity are regression-tested while live execution remains disabled. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+Observation mode remains the default and only commissioned operating mode in v1.0.15; startup, unload/setup, config-entry reload, migration, persistence, and pipeline entity identity are regression-tested while live execution remains disabled. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
 
 ## Landscape Digital Twin
 
