@@ -77,9 +77,11 @@ GLOBAL_ENTITY_ID_MIGRATIONS = {
 async def async_setup_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry) -> bool:
     """Set up IrrigationOS from a config entry."""
     coordinator = IrrigationOSCoordinator(hass, entry)
+    await coordinator.async_initialize_health()
     await coordinator.async_config_entry_first_refresh()
     coordinator.realtime = RealtimeObservationManager(hass, entry, coordinator)
     await coordinator.realtime.async_setup()
+    await coordinator.async_start_health_monitoring()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -88,8 +90,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry)
 async def async_unload_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry) -> bool:
     """Unload an IrrigationOS config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unloaded and entry.runtime_data.realtime is not None:
-        await entry.runtime_data.realtime.async_shutdown()
+    if unloaded:
+        await entry.runtime_data.async_stop_health_monitoring()
+        if entry.runtime_data.realtime is not None:
+            await entry.runtime_data.realtime.async_shutdown()
     return unloaded
 
 

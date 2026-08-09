@@ -33,6 +33,7 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     entities: list[SensorEntity] = [
         IrrigationOSStatusSensor(coordinator),
+        IrrigationOSHealthSensor(coordinator),
         IrrigationOSProviderSensor(coordinator),
         IrrigationOSControllerCountSensor(coordinator),
         IrrigationOSAreaCountSensor(coordinator),
@@ -79,13 +80,73 @@ def _new_dynamic_entities(
         candidates[f"pipeline:{area.area_id}"] = IrrigationOSAreaPipelineSensor(
             coordinator, area
         )
-        if area.configured:
+        if area.configured and _has_landscape_profile(coordinator, area.area_id):
             candidates[f"landscape:{area.area_id}"] = IrrigationOSLandscapeProfileSensor(
                 coordinator, area
             )
     result = inventory.reconcile(set(candidates))
     return [candidates[key] for key in controller_first(result.added)]
 
+
+def _has_landscape_profile(
+    coordinator: IrrigationOSCoordinator, area_id: str
+) -> bool:
+    """Return whether the current landscape contains the canonical area profile."""
+
+    return any(profile.area_id == area_id for profile in coordinator.landscape.areas)
+
+class IrrigationOSHealthSensor(IrrigationOSEntity, SensorEntity):
+    """Expose aggregate operator-facing health and incident context."""
+
+    _attr_name = "Health"
+    _attr_unique_id = "irrigationos_health"
+    entity_id = "sensor.irrigationos_health"
+    _attr_icon = "mdi:heart-pulse"
+
+    def __init__(self, coordinator: IrrigationOSCoordinator) -> None:
+        super().__init__(coordinator)
+
+    @property
+    def available(self) -> bool:
+        """Remain available while the integration is loaded, even if polling fails."""
+
+        return True
+
+    @property
+    def native_value(self) -> str:
+        """Return the aggregate health state."""
+
+        return self.coordinator.health_assessment.state.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return safe health, incident, and daily-log context."""
+
+        assessment = self.coordinator.health_assessment
+        incident = self.coordinator.health_incident_diagnostics()
+        log = self.coordinator.operational_log.diagnostics()
+        return {
+            "reason": assessment.reason,
+            "reason_codes": list(assessment.reason_codes),
+            "affected_components": list(assessment.affected_components),
+            "startup_grace_active": assessment.startup_grace_active,
+            "observation_age_seconds": assessment.observation_age_seconds,
+            "polling_healthy": assessment.polling_healthy,
+            "realtime_healthy": assessment.realtime_healthy,
+            "controller_count": assessment.controller_count,
+            "online_controller_count": assessment.online_controller_count,
+            "unavailable_controller_count": assessment.unavailable_controller_count,
+            "pipeline_available": assessment.pipeline_available,
+            "incident_latched": incident["incident_latched"],
+            "incident_active": incident["incident_active"],
+            "incident_started_at": incident["incident_started_at"],
+            "last_unhealthy_at": incident["last_unhealthy_at"],
+            "last_recovery_at": incident["last_recovery_at"],
+            "incident_duration_seconds": incident["incident_duration_seconds"],
+            "daily_log_file": log["current_file"],
+            "daily_log_retention_days": log["retention_days"],
+            "daily_log_write_error_count": log["write_error_count"],
+        }
 
 class IrrigationOSStatusSensor(IrrigationOSEntity, SensorEntity):
     """Show the observation-only system state."""

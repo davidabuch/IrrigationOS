@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.15
+- **Installable Home Assistant release:** v1.0.16
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** merge and tag v1.0.15 after final green release validation; public distribution remains a separate explicit action
+- **Next milestone:** v1.0.16 aggregate health monitoring, persistent incident latching, daily operational logs, and notification events
 
 ## Delivery model
 
@@ -39,7 +39,7 @@ Delivered:
 
 ## v1.0 Release Completion
 
-**Status: Release candidate complete**
+**Status: Stable v1.0.15 released; post-release observability work in progress**
 
 Completed domain layers:
 
@@ -60,9 +60,17 @@ Release-candidate completion:
 - frozen API and Home Assistant lifecycle contracts retained as release gates
 - live execution remains disabled; Observation is the only commissioned operating mode
 
-Remaining distribution action after merge and green CI:
+Stable distribution completed:
 
-- create the `v1.0.15` tag/release only from the validated merged `main` commit when public distribution is explicitly approved
+- `v1.0.15` was tagged and published from the validated merged `main` commit.
+
+Post-release v1.0.16 health milestone:
+
+- aggregate `INITIALIZING / HEALTHY / DEGRADED / UNHEALTHY` health
+- six-minute startup/reload grace and elapsed-time failure thresholds
+- persistent health-incident latching with non-actuating reset button
+- one-shot unhealthy/recovery Home Assistant events
+- 30-day safe JSONL daily logs under `/config/irrigationos_logs/`
 
 See `docs/V1_0_ARCHITECTURE_AUDIT.md`.
 
