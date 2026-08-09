@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.15 - Stable Release Candidate
+
+- Resolve the first stable public semantic version as 1.0.15, preserving monotonic version ordering after the internal v1.0.x milestone line.
+- Synchronize `pyproject.toml`, Home Assistant manifest, runtime version constant, repository validation, and tests at 1.0.15.
+- Add machine-enforced validation that the Python project version and Home Assistant manifest version remain synchronized.
+- Add stable v1.0.15 release notes and final release-candidate documentation.
+- Preserve the frozen v1.0 public API compatibility contract established at v1.0.13.
+- Preserve the Observation-and-simulation-only boundary; live irrigation execution remains disabled.
+
 ## 1.0.14 - Architecture and Release Documentation Reconciliation
 
 - Reconcile the v1.0 architecture audit with the completed Home Assistant pipeline, entity/diagnostics, lifecycle, and public-API milestones.

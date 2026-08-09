@@ -2,13 +2,9 @@
 
 ## Versioning
 
-IrrigationOS uses semantic versioning. The `v1.0.x` integration milestones are release-candidate implementation checkpoints leading to the final stable `v1.0.0` release designation defined by this project. Each milestone must remain backward-compatible with the frozen v1.0 public contract unless a documented migration is provided.
+IrrigationOS uses semantic versioning. The internal v1.0.x implementation milestones are part of the repository's observable version history, so the first stable public release is **v1.0.15** rather than a numerically lower v1.0.0 tag. This preserves monotonic SemVer for Home Assistant, HACS, packaging, and other update-aware tooling.
 
-After the stable v1.0.0 release:
-
-- Patch: backward-compatible fixes and maintenance.
-- Minor: backward-compatible capabilities.
-- Major: intentionally breaking public contracts with migration guidance.
+The v1.0 public compatibility contract was frozen at v1.0.13 and remains binding for v1.0.15. Future backward-compatible maintenance releases increment the patch version; backward-compatible capability releases increment the minor version; intentionally breaking public contracts require a major-version change with migration guidance.
 
 ## Release sequence
 
@@ -48,15 +44,10 @@ A milestone is complete only when:
 - installation or migration instructions are accurate;
 - the final delivered ZIP has been inspected after creation.
 
-## Current v1.0 release-candidate line
+## Stable v1.0 release candidate
 
-The domain pipeline is complete through Runtime Monitoring and is integrated into Home Assistant in an Observation-and-simulation-only boundary. Stable pipeline entities/diagnostics, lifecycle tests, and the public API compatibility freeze are complete through v1.0.14.
+Version **1.0.15** is the first stable public release candidate. The deterministic domain pipeline is complete through Runtime Monitoring and is integrated into Home Assistant within an Observation-and-simulation-only boundary. Stable pipeline entities/diagnostics, lifecycle tests, and the frozen public API contract are complete.
 
-Remaining before the first stable public release:
+Release metadata is intentionally synchronized across `pyproject.toml`, `custom_components/irrigationos/manifest.json`, `custom_components/irrigationos/const.py`, repository validation, and tests. The final release gate is a green feature-branch validation, merge to `main`, green GitHub Actions, and then an explicit decision to create the `v1.0.15` tag/release.
 
-1. Resolve the final public semantic version. Internal milestones already use `1.0.13` and `1.0.14`, so publishing `1.0.0` afterward would be a version downgrade for SemVer-aware tooling. The roadmap shorthand “v1.0.0” must therefore be reconciled before tagging or distribution.
-2. Reconcile all release metadata, including the historical `pyproject.toml` project version, manifest/constant versions, release notes, and tag/release naming.
-3. Run final release-candidate validation against the frozen API and Home Assistant lifecycle contracts.
-4. Deploy/distribute with live execution disabled by default.
-
-Live command delivery, Shadow commissioning, ownership/command attribution, and autonomous recovery remain post-release commissioning work unless explicitly promoted into a separately reviewed milestone.
+Live command delivery, Shadow commissioning, ownership/command attribution, and autonomous recovery are not part of v1.0.15. Observation remains the only commissioned operating mode; Simulation remains non-actuating.

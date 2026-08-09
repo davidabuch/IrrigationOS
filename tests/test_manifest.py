@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,7 +14,15 @@ def test_manifest_is_valid() -> None:
     manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["domain"] == "irrigationos"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.0.14"
+    assert manifest["version"] == "1.0.15"
+
+
+def test_python_project_version_matches_manifest() -> None:
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        pyproject = tomllib.load(handle)
+    manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
+    assert pyproject["project"]["version"] == "1.0.15"
+    assert pyproject["project"]["version"] == manifest["version"]
 
 
 def test_hacs_metadata_is_valid() -> None:

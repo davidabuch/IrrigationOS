@@ -2,7 +2,7 @@
 
 ## Status
 
-Reconciled through **v1.0.14**. The original audit identified the work required to integrate the completed domain pipeline into Home Assistant; that integration work is now complete through the release-candidate boundary described below.
+Reconciled through **v1.0.15**. The original audit identified the work required to integrate the completed domain pipeline into Home Assistant; that integration work is now complete through the release-candidate boundary described below.
 
 ## Current baseline
 
@@ -35,7 +35,7 @@ Each layer owns one responsibility, consumes immutable upstream outputs, preserv
 
 ### No release-blocking engine redesign
 
-Still valid. The completed domain packages have clear boundaries, immutable models, deterministic engines, and explicit compatibility contracts. A repository-wide rename or package reorganization is not justified before v1.0.0.
+Still valid. The completed domain packages have clear boundaries, immutable models, deterministic engines, and explicit compatibility contracts. A repository-wide rename or package reorganization is not justified before the stable v1.0 release.
 
 ### Home Assistant pipeline wiring — complete
 
@@ -63,12 +63,11 @@ Execution is simulation-only. Canonical command models may be generated, but no 
 
 Future live control requires an explicit commissioning milestone covering command attribution, ownership, acknowledgement/reconciliation, safety preemption, durable audit history, and user-controlled promotion.
 
-## Remaining release work
+## Stable release-candidate status
 
-1. Resolve the final public semantic version. Internal milestones already use `1.0.13`/`1.0.14`, so a later `1.0.0` tag would sort lower in SemVer-aware tooling.
-2. Reconcile release metadata and release notes, including the historical `pyproject.toml` project version.
-3. Run final release-candidate validation against the frozen public contract and Home Assistant lifecycle suite.
-4. Deploy/distribute with live execution disabled by default.
+Version **1.0.15** resolves the public semantic-version sequence without a downgrade. Active package and Home Assistant release metadata are synchronized, stable release notes are present, and repository validation enforces version consistency.
+
+Remaining release action is operational rather than architectural: merge the validated feature branch, confirm GitHub Actions on `main`, and create the `v1.0.15` tag/release only when distribution is explicitly approved. Live execution remains disabled.
 
 ## Deferred beyond the current v1.0 release candidate
 
