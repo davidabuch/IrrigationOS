@@ -30,6 +30,7 @@ async def async_setup_entry(
     del hass
     coordinator = entry.runtime_data
     entities: list[BinarySensorEntity] = [
+        IrrigationOSHealthIncidentSensor(coordinator),
         IrrigationOSCloudHealthySensor(coordinator),
         IrrigationOSRealtimeHealthySensor(coordinator),
         IrrigationOSPollingFallbackHealthySensor(coordinator),
@@ -64,6 +65,35 @@ def _new_dynamic_entities(
     result = inventory.reconcile(set(candidates))
     return [candidates[key] for key in controller_first(result.added)]
 
+class IrrigationOSHealthIncidentSensor(IrrigationOSEntity, BinarySensorEntity):
+    """Latch genuine unhealthy incidents until acknowledged after recovery."""
+
+    _attr_name = "Health incident"
+    _attr_unique_id = "irrigationos_health_incident"
+    entity_id = "binary_sensor.irrigationos_health_incident"
+    _attr_device_class = BinarySensorDeviceClass.PROBLEM
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: IrrigationOSCoordinator) -> None:
+        super().__init__(coordinator)
+
+    @property
+    def available(self) -> bool:
+        """Remain available while the integration is loaded, even if polling fails."""
+
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether an unhealthy incident remains latched."""
+
+        return self.coordinator.health_incident_latched
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return incident history without exposing controller identifiers."""
+
+        return self.coordinator.health_incident_diagnostics()
 
 class IrrigationOSCloudHealthySensor(IrrigationOSEntity, BinarySensorEntity):
     """Report whether the latest cloud refresh succeeded."""

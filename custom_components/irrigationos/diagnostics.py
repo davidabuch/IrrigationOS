@@ -123,5 +123,6 @@ async def async_get_config_entry_diagnostics(
                 if realtime is not None
                 else None
             ),
+            "operational_health": entry.runtime_data.operational_health_diagnostics(),
         },
     }

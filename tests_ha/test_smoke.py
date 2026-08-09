@@ -8,6 +8,7 @@ import json
 import logging
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -33,12 +34,15 @@ from custom_components.irrigationos.const import (
     CONF_WEBHOOK_AUTH,
     CONF_WEBHOOK_ID,
     DOMAIN,
+    EVENT_HEALTH_RECOVERED,
+    EVENT_HEALTH_UNHEALTHY,
     MODE_OBSERVATION,
 )
 from custom_components.irrigationos.controllers import (
     ControllerAvailability,
     ControllerCapabilities,
     ControllerIdentityRegistry,
+    ControllerProviderError,
     ControllerRegistrySnapshot,
     IrrigationArea,
     IrrigationAreaState,
@@ -49,6 +53,7 @@ from custom_components.irrigationos.controllers import (
     VendorBinding,
 )
 from custom_components.irrigationos.diagnostics import async_get_config_entry_diagnostics
+from custom_components.irrigationos.health import IrrigationOSHealthState
 
 
 def _area(
@@ -795,3 +800,122 @@ async def test_migrated_entry_starts_with_canonical_pipeline_entities(
     assert f"{canonical_area_id}_pipeline_output" in registry_map
     assert "irrigationos_pipeline_stage_runtime_monitoring" in registry_map
     assert entry.runtime_data.pipeline_evaluation is not None
+
+
+@pytest.mark.asyncio
+async def test_health_incident_latches_recovers_persists_and_resets(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Health transitions are latched, persisted, logged, and non-actuating."""
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    entry.add_to_hass(hass)
+    unhealthy_events: list[dict[str, Any]] = []
+    recovery_events: list[dict[str, Any]] = []
+    hass.bus.async_listen(
+        EVENT_HEALTH_UNHEALTHY,
+        lambda event: unhealthy_events.append(dict(event.data)),
+    )
+    hass.bus.async_listen(
+        EVENT_HEALTH_RECOVERED,
+        lambda event: recovery_events.append(dict(event.data)),
+    )
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    coordinator._started_at = datetime.now(UTC) - timedelta(minutes=20)
+    coordinator._polling_healthy = True
+    assert coordinator.realtime is not None
+    coordinator.realtime.enabled = True
+    coordinator.realtime.remote_health = RealtimeRegistrationHealth(
+        healthy=True,
+        registered_controllers=1,
+        expected_controllers=1,
+        error=None,
+    )
+    await coordinator.async_update_health("test_healthy")
+    assert coordinator.health_assessment.state is IrrigationOSHealthState.HEALTHY
+    assert hass.states.get("sensor.irrigationos_health").state == "HEALTHY"
+
+    original_snapshot = adapter.async_get_snapshot
+
+    async def _failed_snapshot(_account_id: str) -> ControllerRegistrySnapshot:
+        raise ControllerProviderError("temporary provider failure")
+
+    monkeypatch.setattr(adapter, "async_get_snapshot", _failed_snapshot)
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert coordinator.health_assessment.state is IrrigationOSHealthState.DEGRADED
+    assert hass.states.get("sensor.irrigationos_health").state == "DEGRADED"
+    assert hass.states.get("sensor.irrigationos_health").state != STATE_UNAVAILABLE
+    monkeypatch.setattr(adapter, "async_get_snapshot", original_snapshot)
+
+    coordinator.last_successful_refresh = datetime.now(UTC) - timedelta(minutes=13)
+    coordinator._polling_healthy = False
+    await coordinator.async_update_health("test_stale")
+    await hass.async_block_till_done()
+    assert coordinator.health_assessment.state is IrrigationOSHealthState.UNHEALTHY
+    assert hass.states.get("binary_sensor.irrigationos_health_incident").state == "on"
+    assert len(unhealthy_events) == 1
+
+    coordinator.last_successful_refresh = datetime.now(UTC)
+    coordinator._polling_healthy = True
+    await coordinator.async_update_health("test_recovery")
+    await hass.async_block_till_done()
+    assert coordinator.health_assessment.state is IrrigationOSHealthState.HEALTHY
+    assert hass.states.get("binary_sensor.irrigationos_health_incident").state == "on"
+    assert len(recovery_events) == 1
+
+    log_dir = Path(hass.config.path("irrigationos_logs"))
+    assert list(log_dir.glob("irrigationos_*.jsonl"))
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.runtime_data.health_incident_latched is True
+    assert hass.states.get("binary_sensor.irrigationos_health_incident").state == "on"
+
+    entry.runtime_data._started_at = datetime.now(UTC) - timedelta(minutes=20)
+    entry.runtime_data._polling_healthy = True
+    await entry.runtime_data.async_update_health("test_post_reload_degraded")
+    await hass.async_block_till_done()
+    assert entry.runtime_data.health_assessment.state is IrrigationOSHealthState.DEGRADED
+    assert entry.runtime_data.health_incident_latched is True
+    assert await entry.runtime_data.reset_health_incident_latch() is False
+    assert entry.runtime_data.health_incident_latched is True
+
+    assert entry.runtime_data.realtime is not None
+    entry.runtime_data.realtime.enabled = True
+    entry.runtime_data.realtime.remote_health = RealtimeRegistrationHealth(
+        healthy=True,
+        registered_controllers=1,
+        expected_controllers=1,
+        error=None,
+    )
+    await entry.runtime_data.async_update_health("test_post_reload_healthy")
+    await hass.async_block_till_done()
+    assert entry.runtime_data.health_assessment.state is IrrigationOSHealthState.HEALTHY
+    reset_button = hass.states.get("button.irrigationos_reset_health_incident")
+    assert reset_button is not None
+    assert reset_button.state != STATE_UNAVAILABLE
+
+    await hass.services.async_call(
+        "button",
+        "press",
+        {"entity_id": "button.irrigationos_reset_health_incident"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert entry.runtime_data.health_incident_latched is False
+    assert hass.states.get("binary_sensor.irrigationos_health_incident").state == "off"
+    assert await entry.runtime_data.reset_health_incident_latch() is True
+    assert entry.runtime_data.health_incident_latched is False

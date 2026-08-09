@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.16 - Health Monitoring and Incident Diagnostics
+
+- Add aggregate `INITIALIZING`, `HEALTHY`, `DEGRADED`, and `UNHEALTHY` operational health with a six-minute startup/reload grace period.
+- Treat realtime failure with successful polling fallback as degraded redundancy rather than a full outage.
+- Escalate stale observations after twelve minutes and sustained all-controller unavailability after ten minutes to unhealthy.
+- Persist and latch genuine unhealthy incidents across Home Assistant restarts, with a non-actuating reset button available only after recovery.
+- Emit one-shot Home Assistant unhealthy and recovery events suitable for phone-notification automations while keeping degraded states notification-free by default.
+- Add 30-day daily JSONL operational logs under `/config/irrigationos_logs/` using local-day filenames plus local and UTC timestamps.
+- Preserve the Observation-and-simulation-only safety boundary; no irrigation decision or controller actuation behavior changes.
+
 ## 1.0.15 - Stable Release Candidate
 
 - Resolve the first stable public semantic version as 1.0.15, preserving monotonic version ordering after the internal v1.0.x milestone line.
