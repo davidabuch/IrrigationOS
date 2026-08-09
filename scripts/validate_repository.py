@@ -56,6 +56,7 @@ REQUIRED_FILES = (
     "docs/V1_0_11_PIPELINE_ENTITIES_DIAGNOSTICS.md",
     "docs/V1_0_12_HA_LIFECYCLE_VALIDATION.md",
     "docs/V1_0_13_PUBLIC_API_COMPATIBILITY_FREEZE.md",
+    "docs/V1_0_14_ARCHITECTURE_RELEASE_DOCUMENTATION.md",
     "docs/V1_0_PUBLIC_API_CONTRACT.json",
     "hacs.json",
     "pyproject.toml",
@@ -85,8 +86,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.13":
-        raise SystemExit("manifest.json version must be 1.0.13")
+    if manifest.get("version") != "1.0.14":
+        raise SystemExit("manifest.json version must be 1.0.14")
 
     hacs = load_json("hacs.json")
     if not isinstance(hacs, dict) or hacs.get("name") != "IrrigationOS":

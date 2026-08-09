@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.14 - Architecture and Release Documentation Reconciliation
+
+- Reconcile the v1.0 architecture audit with the completed Home Assistant pipeline, entity/diagnostics, lifecycle, and public-API milestones.
+- Distinguish current observation/simulation behavior from future Shadow and Live control architecture across canonical architecture and operating-mode documents.
+- Update release strategy and roadmap language to match the v1.0 release-candidate state and remaining release work.
+- Preserve the frozen v1.0 public API contract and the Observation-and-simulation-only safety boundary.
+- Make no runtime, domain-engine, Home Assistant entity, or controller behavior changes.
+
 ## 1.0.13 - Public API and Compatibility Freeze
 
 - Freeze exact public exports for all completed v1.0 domain layers and the synchronized Home Assistant pipeline.

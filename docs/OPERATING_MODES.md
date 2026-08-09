@@ -4,64 +4,58 @@
 
 Operating modes define what IrrigationOS is permitted to do. They are safety boundaries, not merely UI labels.
 
-## Observation
+## Current release-candidate boundary
+
+The v1.0.14 Home Assistant integration is commissioned in **Observation** mode only. The completed domain pipeline may calculate advisory recommendations, proposed plans/schedules, simulated execution commands, and conservative runtime-monitoring outputs, but **no watering-control endpoint is called**.
+
+`Simulation`, `Shadow`, and `Live` describe progressively more permissive product states. They are not currently user-commissionable modes in the v1.0.14 integration.
+
+## Observation — implemented
 
 - Reads controller and environmental data.
-- Publishes entities and diagnostics.
-- Records observed external watering.
-- Does not create executable irrigation plans.
-- Does not call any watering-control endpoint.
+- Builds the synchronized deterministic domain pipeline.
+- Publishes read-only observation and simulation entities and redacted diagnostics.
+- Records current external/controller watering observations where available.
+- May create proposed schedules and simulated command models.
+- Does not dispatch start, stop, enable, disable, or reschedule commands.
 
-This is the mandatory initial mode for every installation.
+This is the mandatory initial and current mode for every installation.
 
-## Simulation
+## Simulation — future explicit mode
 
-- Builds water-demand assessments and nightly plans.
-- Simulates cycle-and-soak timing and resource use.
+- Uses the same deterministic pipeline while making simulation intent explicit to the user.
+- Exercises proposed scheduling and command generation without transport.
 - Produces explanations and predicted outcomes.
 - Does not send commands.
 
-Simulation must be deterministic for a fixed evaluation context.
-
-## Shadow
+## Shadow — future commissioning mode
 
 - Builds the plan IrrigationOS would have executed.
 - Observes actual controller behavior during the same period.
 - Compares planned and actual watering, timing, and outcomes.
 - Does not send commands.
 
-Shadow mode provides commissioning evidence before Live activation.
+Shadow mode is intended to provide evidence before Live activation.
 
-## Live
+## Live — future control mode
 
 - May dispatch approved canonical operations through the controller adapter.
-- Requires explicit user activation.
-- Requires healthy command attribution, ownership, diagnostics, and Flight Recorder subsystems.
-- Enforces hard watering boundaries, including no start before the allowed window and no operation beyond the sunrise safety boundary.
-- Preserves external/manual operation unless an explicit safety policy requires intervention.
+- Requires explicit user activation and commissioning.
+- Requires command attribution, ownership, safety, diagnostics, and durable audit/reconciliation capabilities.
+- Must preserve external/manual operation unless an explicit safety policy requires intervention.
+
+Live mode is **not enabled in the current release candidate**.
 
 ## Promotion rules
 
-Promotion is one-way only after explicit approval:
+The intended promotion path is:
 
 ```text
 Observation -> Simulation -> Shadow -> Live
 ```
 
-A system may automatically demote to a safer mode after faults. It must never automatically promote to a more permissive mode.
-
-## Demotion triggers
-
-Examples include:
-
-- authentication failure;
-- stale or contradictory critical observations;
-- repeated command timeouts;
-- attribution or ownership failure;
-- Flight Recorder failure during Live mode;
-- restart state that cannot be reconciled safely;
-- user safety stop.
+A system may demote to a safer mode after faults. It must never automatically promote to a more permissive mode.
 
 ## Capability gates
 
-Code may contain future execution components before Live mode exists, but all control endpoints must remain unreachable unless the required mode and safety gates are satisfied.
+Code may contain models or adapter capabilities needed by future control features. Their presence does not make live execution available. No control endpoint may become reachable without an explicit versioned commissioning milestone, safety gates, and tests.
