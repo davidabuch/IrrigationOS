@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.13
+- **Installable Home Assistant release:** v1.0.14
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** reconcile architecture and release documentation for v1.0 completion
+- **Next milestone:** resolve final public versioning, complete release metadata/release notes, and run final release-candidate validation
 
 ## Delivery model
 
@@ -54,8 +54,9 @@ Completed domain layers:
 
 Remaining release work:
 
-- reconcile architecture and release documentation
-- complete v1.0.0 release metadata and release notes
+- resolve the final public semantic version; internal v1.0.13/v1.0.14 milestones make a later `v1.0.0` tag a SemVer downgrade
+- reconcile release metadata and release notes, including the historical `pyproject.toml` project version
+- perform final release-candidate validation against the frozen API and lifecycle contracts
 - deploy with live execution disabled by default
 
 See `docs/V1_0_ARCHITECTURE_AUDIT.md`.

@@ -37,7 +37,7 @@ def test_manifest_and_hacs_versions_are_consistent() -> None:
     manifest = json.loads(
         (ROOT / "custom_components/irrigationos/manifest.json").read_text(encoding="utf-8")
     )
-    assert manifest["version"] == "1.0.13"
+    assert manifest["version"] == "1.0.14"
     assert manifest["domain"] == "irrigationos"
 
 
@@ -86,3 +86,18 @@ def test_controller_foundation_files_exist() -> None:
     )
     for relative_path in required:
         assert (ROOT / relative_path).is_file(), relative_path
+
+def test_v1_release_documentation_matches_current_boundary() -> None:
+    """Canonical docs must distinguish implemented simulation from future live control."""
+    audit = (ROOT / "docs/V1_0_ARCHITECTURE_AUDIT.md").read_text(encoding="utf-8")
+    operating_modes = (ROOT / "docs/OPERATING_MODES.md").read_text(encoding="utf-8")
+    assert "Home Assistant coordinator invokes the synchronized pipeline" in audit
+    assert "Observation and simulation only" in audit
+    assert "Live mode is **not enabled in the current release candidate**" in operating_modes
+
+
+def test_v1_release_strategy_uses_github_as_authoritative_state() -> None:
+    """Release governance must preserve the verified GitHub-first workflow."""
+    strategy = (ROOT / "docs/RELEASE_STRATEGY.md").read_text(encoding="utf-8")
+    assert "GitHub `main` is authoritative" in strategy
+    assert "local/uncommitted state" in strategy

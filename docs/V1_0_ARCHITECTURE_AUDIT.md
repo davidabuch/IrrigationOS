@@ -2,14 +2,17 @@
 
 ## Status
 
-Completed for the v1.0 architecture-freeze branch.
+Reconciled through **v1.0.14**. The original audit identified the work required to integrate the completed domain pipeline into Home Assistant; that integration work is now complete through the release-candidate boundary described below.
 
-## Baseline
+## Current baseline
 
-- 449 tests pass.
-- Repository validation passes.
 - The deterministic domain pipeline is complete through Runtime Monitoring.
-- Home Assistant remains observation-only and does not yet invoke the completed domain pipeline.
+- The Home Assistant coordinator invokes the synchronized pipeline on refresh.
+- Stable per-stage and per-zone pipeline entities and redacted diagnostics are exposed.
+- Startup, unload/setup, config-entry reload, persistence, migration, and entity identity are regression-tested.
+- The v1.0 domain and pipeline public API contracts are frozen by a machine-readable compatibility manifest and tests.
+- The operating boundary remains **Observation and simulation only**.
+- No pipeline output is dispatched to Rachio or another controller.
 
 ## Frozen domain pipeline
 
@@ -22,67 +25,58 @@ Observations
     -> Recommendations
     -> Planning
     -> Scheduling
-    -> Execution
+    -> Execution simulation
     -> Runtime Monitoring
 ```
 
-Each layer has one responsibility and consumes immutable upstream outputs. No downstream
-layer recomputes upstream science.
+Each layer owns one responsibility, consumes immutable upstream outputs, preserves provenance, and has explicit schema/algorithm version contracts. Downstream layers do not recompute upstream science.
 
-## Findings
+## Findings after reconciliation
 
 ### No release-blocking engine redesign
 
-The domain packages have clear boundaries, immutable models, deterministic engines,
-explicit schema and algorithm versions, and downstream provenance. No repository-wide
-model rename or package reorganization is justified before v1.0.
+Still valid. The completed domain packages have clear boundaries, immutable models, deterministic engines, and explicit compatibility contracts. A repository-wide rename or package reorganization is not justified before v1.0.0.
 
-### Release metadata is stale
+### Home Assistant pipeline wiring — complete
 
-The installable Home Assistant integration reported v0.4.2 at audit time in `manifest.json`,
-`const.py`, `pyproject.toml`, validation scripts, tests, README, and roadmap documents.
-This is accurate for the currently wired Home Assistant runtime, but it does not describe
-the completed v0.9.5 domain pipeline.
+Completed across v1.0.1 through v1.0.10. The coordinator now evaluates controller observations, Landscape Digital Twin/scientific evidence, Water Requirement, Stress, Health, Recommendations, Planning, Scheduling, Execution simulation, and Runtime Monitoring.
 
-The integration version must not be changed to v1.0.0 until the v1.0 Home Assistant
-wiring and release validation are complete.
+### Stable pipeline entities and diagnostics — complete
 
-### Home Assistant wiring is incomplete
+Completed in v1.0.11. Home Assistant exposes stable global stage sensors and compact per-zone pipeline outputs without recomputing domain logic. Diagnostics include a redacted pipeline summary and immutable evaluation snapshot.
 
-The coordinator currently refreshes controller observations and the early Landscape
-Digital Twin only. It does not yet execute the completed domain pipeline or expose its
-recommendations, plans, schedules, execution simulations, or runtime reports.
+### Lifecycle validation — complete
 
-This is the primary product-integration milestone remaining before v1.0.
+Completed in v1.0.12. Cold startup, unload/setup, reload, persisted identities/options, legacy migration, permanent slot identity, and duplicate-registry protections are covered by Home Assistant smoke tests.
 
-### Documentation requires reconciliation
+### Public API freeze — complete
 
-The roadmap and architecture documents still emphasize the v0.4.2 observation release
-and older monolithic Decision Engine terminology. They must be reconciled with the
-layered domain pipeline before release.
+Completed in v1.0.13. `docs/V1_0_PUBLIC_API_CONTRACT.json` freezes exact public exports, schema/algorithm versions, enum values, and dataclass field order for the eight domain layers and synchronized pipeline. Compatibility tests fail on accidental drift.
 
-### Public API freeze needs enforcement
+### Architecture/release documentation — reconciled
 
-Stable package exports exist, but the repository did not have one explicit compatibility
-test that freezes the public symbols of the v1.0 domain pipeline. That contract is added
-by this milestone.
+Completed in v1.0.14. Canonical documents now distinguish implemented Observation/simulation behavior from future Shadow/Live architecture and no longer describe completed integration milestones as pending.
 
-## v1.0 release sequence
+## Current safety boundary
 
-1. Freeze and test public domain APIs.
-2. Reconcile roadmap and architecture documentation.
-3. Wire the complete pipeline into the Home Assistant coordinator in observation and
-   simulation modes.
-4. Expose stable Home Assistant entities and diagnostics for recommendations, plans,
-   schedules, execution simulation, runtime status, blockers, and provenance.
-5. Validate startup, reload, migration, persistence, and entity lifecycle in Home
-   Assistant.
-6. Complete release metadata, release notes, and version bump to v1.0.0.
-7. Deploy initially with live execution disabled.
+Execution is simulation-only. Canonical command models may be generated, but no watering-control endpoint is invoked. Runtime Monitoring does not fabricate command outcomes for commands that were never sent.
 
-## Deferred beyond v1.0
+Future live control requires an explicit commissioning milestone covering command attribution, ownership, acknowledgement/reconciliation, safety preemption, durable audit history, and user-controlled promotion.
 
-- Additional controller brands.
+## Remaining release work
+
+1. Resolve the final public semantic version. Internal milestones already use `1.0.13`/`1.0.14`, so a later `1.0.0` tag would sort lower in SemVer-aware tooling.
+2. Reconcile release metadata and release notes, including the historical `pyproject.toml` project version.
+3. Run final release-candidate validation against the frozen public contract and Home Assistant lifecycle suite.
+4. Deploy/distribute with live execution disabled by default.
+
+## Deferred beyond the current v1.0 release candidate
+
+- Shadow-mode commissioning and comparison against actual controller behavior.
+- Live controller command dispatch.
+- Command attribution and ownership enforcement for live operations.
 - Automatic recovery execution.
+- Flight Recorder-backed live accountability.
+- Additional controller brands.
 - AI-generated decisions.
 - Breaking domain-model redesign without a versioned migration.

@@ -1,11 +1,35 @@
 # IrrigationOS Architecture Specification v1.0
 
-**Status:** Canonical design baseline
-**Date:** July 30, 2026
+**Status:** Canonical design baseline, reconciled with v1.0.14 release-candidate implementation
+**Date:** July 30, 2026; implementation status reconciled August 7, 2026
 **Initial controller:** Rachio
 **Target platform:** Home Assistant custom integration installed through HACS
 
 ---
+
+## Implementation status for the v1.0 release candidate
+
+This specification includes both the **implemented v1.0 release-candidate architecture** and the **target architecture for future Shadow/Live control**. They must not be conflated.
+
+Implemented through v1.0.14:
+
+- direct read-only Rachio discovery/observation and realtime reconciliation;
+- canonical controller identities and permanent slot identities;
+- Landscape Digital Twin profiles and Home Assistant weather normalization;
+- the deterministic pipeline from Plant Water Requirement through Runtime Monitoring;
+- advisory Recommendations, proposed Planning/Scheduling, and Execution **simulation** only;
+- stable pipeline entities, redacted diagnostics, lifecycle/migration tests, and frozen public API contracts.
+
+Not yet implemented as a commissioned control path:
+
+- live start/stop dispatch from pipeline decisions;
+- Shadow-mode commissioning;
+- command attribution/ownership enforcement for live operations;
+- automatic recovery execution;
+- Flight Recorder-backed live command accountability;
+- default direct Open-Meteo and SSURGO provider workflows described later in this target design.
+
+The current Home Assistant operating boundary is **Observation and simulation only**. Later sections that describe Live mode, command dispatch, Flight Recorder, Open-Meteo defaults, SSURGO onboarding, and multi-controller expansion are target-state requirements unless a shipped milestone explicitly marks them complete.
 
 ## 1. Purpose
 
