@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.21 — Replay and Control-Readiness Evidence
+
+- Added deterministic replay of retained actual-vs-shadow reconciliation evidence.
+- Added fixed golden comparison scenarios and aggregate replay coverage/match metrics.
+- Added explicit conservative readiness criteria with manual-review semantics.
+- Added Home Assistant control-readiness evidence sensor and diagnostics.
+- Preserved observation-only operation; live control authorization remains hard-coded false.
+
 ## 1.0.20 — Shadow Reporting and Commissioning Summary
 
 - Added operator-facing aggregate reporting over retained shadow and reconciliation evidence.

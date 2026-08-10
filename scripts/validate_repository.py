@@ -72,6 +72,9 @@ REQUIRED_FILES = (
     "docs/V1_0_18_SHADOW_EVALUATION_FOUNDATION.md",
     "docs/V1_0_19_ACTUAL_VS_SHADOW_RECONCILIATION.md",
     "docs/V1_0_20_SHADOW_REPORTING_COMMISSIONING_SUMMARY.md",
+    "docs/V1_0_21_REPLAY_CONTROL_READINESS_EVIDENCE.md",
+    "custom_components/irrigationos/replay_readiness/engine.py",
+    "custom_components/irrigationos/replay_readiness/models.py",
     "custom_components/irrigationos/commissioning_report/engine.py",
     "custom_components/irrigationos/commissioning_report/models.py",
     "docs/V1_0_PUBLIC_API_CONTRACT.json",
@@ -109,8 +112,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.20":
-        raise SystemExit("manifest.json version must be 1.0.20")
+    if manifest.get("version") != "1.0.21":
+        raise SystemExit("manifest.json version must be 1.0.21")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")

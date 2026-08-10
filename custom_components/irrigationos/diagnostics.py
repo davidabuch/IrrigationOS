@@ -127,5 +127,6 @@ async def async_get_config_entry_diagnostics(
             "shadow_evaluations": entry.runtime_data.shadow_evaluations.diagnostics(),
             "actual_vs_shadow": entry.runtime_data.actual_vs_shadow.diagnostics(),
             "commissioning_report": entry.runtime_data.commissioning_report.diagnostics(),
+            "replay_readiness": entry.runtime_data.replay_readiness.diagnostics(),
         },
     }
