@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.26
+- **Installable Home Assistant release:** v1.0.27
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** implement restart-safe command reconciliation behind the disabled Live-mode boundary; live control remains deferred
+- **Next milestone:** implement the safety preemption path behind the disabled Live-mode boundary; live control remains deferred
 
 ## Delivery model
 
@@ -324,3 +324,15 @@ Delivered canonical non-actuating command intent attribution, correlation IDs, i
 ## v1.0.26 — Command Acknowledgement and Timeout Foundation
 
 Delivered deterministic synthetic acknowledgement, rejection, and timeout semantics with a bounded acknowledgement deadline and immutable local evidence. This is the second implemented Live-mode safeguard; no controller dispatch path exists, and restart-safe command reconciliation remains deferred.
+
+
+## v1.0.27 — Restart-Safe Command Reconciliation
+
+**Status: Complete**
+
+- Replays persisted acknowledgement evidence at integration startup.
+- Restores only still-valid waiting acknowledgement windows.
+- Persists timeout transitions for windows that expired while Home Assistant was offline.
+- Treats malformed persisted evidence as a fail-closed reconciliation failure.
+- Marks restart-safe command reconciliation as Live-mode safeguard 3 of 6.
+- Does not add a controller dispatch path or authorize Live mode.

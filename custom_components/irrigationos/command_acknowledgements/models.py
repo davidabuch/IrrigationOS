@@ -46,3 +46,20 @@ class CommandAcknowledgementRecord:
         payload["recorded_at_utc"] = self.recorded_at_utc.isoformat()
         payload["deadline_at_utc"] = self.deadline_at_utc.isoformat()
         return payload
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> CommandAcknowledgementRecord:
+        """Restore validated acknowledgement evidence from persisted JSON."""
+
+        return cls(
+            event_id=str(payload["event_id"]),
+            command_id=str(payload["command_id"]),
+            state=CommandAcknowledgementState(str(payload["state"])),
+            recorded_at_utc=datetime.fromisoformat(str(payload["recorded_at_utc"])),
+            deadline_at_utc=datetime.fromisoformat(str(payload["deadline_at_utc"])),
+            detail_code=str(payload["detail_code"]),
+            synthetic_only=bool(payload.get("synthetic_only", True)),
+            schema_version=int(
+                payload.get("schema_version", COMMAND_ACKNOWLEDGEMENT_SCHEMA_VERSION)
+            ),
+        )

@@ -184,8 +184,9 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         await self.ownership_commissioning.async_initialize()
 
     async def async_initialize_observation_history(self) -> None:
-        """Restore active watering sessions and shadow metadata before first refresh."""
+        """Restore restart-safe command and observation evidence before refresh."""
 
+        await self.command_acknowledgements.async_initialize(now=datetime.now(UTC))
         await self.observation_history.async_initialize()
         await self.shadow_evaluations.async_initialize()
         shadow_records = await self.shadow_evaluations.async_load_records()

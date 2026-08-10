@@ -1,3 +1,12 @@
+## 1.0.27 — Restart-Safe Command Reconciliation
+
+- Replays immutable acknowledgement evidence during Home Assistant startup.
+- Restores only unexpired waiting acknowledgement windows.
+- Converts expired waiting windows into persisted timeout evidence.
+- Fails closed when persisted acknowledgement evidence is malformed.
+- Marks restart-safe command reconciliation as the third implemented Live-mode safeguard.
+- Keeps controller dispatch and Live-mode authorization disabled.
+
 # Changelog
 
 ## 1.0.26 — Command Acknowledgement and Timeout Foundation
