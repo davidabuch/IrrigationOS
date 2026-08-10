@@ -299,6 +299,9 @@ class ActualVsShadowReconciliationManager:
             reasons=reasons,
             now=now,
             action=action,
+            observation_quality_override=(
+                None if observation_quality is None else observation_quality.value
+            ),
         )
 
     def _record(
@@ -313,6 +316,7 @@ class ActualVsShadowReconciliationManager:
         session: WateringSession | None = None,
         start_delta: int | None = None,
         runtime_delta: int | None = None,
+        observation_quality_override: str | None = None,
     ) -> ActualVsShadowRecord:
         seed = "|".join(
             (
@@ -348,7 +352,11 @@ class ActualVsShadowReconciliationManager:
             start_delta_seconds=start_delta,
             runtime_delta_seconds=runtime_delta,
             observation_source=None if session is None else session.observation_source.value,
-            observation_quality=None if session is None else session.observation_quality.value,
+            observation_quality=(
+                observation_quality_override
+                if session is None
+                else session.observation_quality.value
+            ),
             timestamp_precision=None if session is None else session.timestamp_precision.value,
             observation_incomplete=None if session is None else session.incomplete,
         )

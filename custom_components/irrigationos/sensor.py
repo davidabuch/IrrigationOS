@@ -51,6 +51,7 @@ async def async_setup_entry(
         IrrigationOSScientificInputStatusSensor(coordinator),
         IrrigationOSWeatherSourceSensor(coordinator),
         IrrigationOSCommissioningSummarySensor(coordinator),
+        IrrigationOSControlReadinessSensor(coordinator),
         *(
             IrrigationOSPipelineStageStatusSensor(coordinator, stage)
             for stage in PipelineStage
@@ -126,6 +127,33 @@ class IrrigationOSCommissioningSummarySensor(IrrigationOSEntity, SensorEntity):
         """Return privacy-safe aggregate commissioning metrics."""
 
         return self.coordinator.commissioning_report.summary.to_dict()
+
+
+class IrrigationOSControlReadinessSensor(IrrigationOSEntity, SensorEntity):
+    """Expose replay-backed readiness evidence without enabling control."""
+
+    _attr_name = "Control readiness evidence"
+    _attr_unique_id = "irrigationos_control_readiness_evidence"
+    entity_id = "sensor.irrigationos_control_readiness_evidence"
+    _attr_icon = "mdi:shield-check-outline"
+
+    @property
+    def available(self) -> bool:
+        """Remain available while replay evidence accumulates."""
+
+        return True
+
+    @property
+    def native_value(self) -> str:
+        """Return the current evidence-based readiness state."""
+
+        return self.coordinator.replay_readiness.summary.readiness_status.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return replay metrics and explicit promotion criteria."""
+
+        return self.coordinator.replay_readiness.summary.to_dict()
 
 
 class IrrigationOSCurrentWateringSessionSensor(IrrigationOSEntity, SensorEntity):

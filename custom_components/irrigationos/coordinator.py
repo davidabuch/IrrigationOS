@@ -56,6 +56,7 @@ from .observation_history import (
 from .observation_history.manager import WateringSessionHistoryManager
 from .operational_log import DailyOperationalLog
 from .pipeline import PipelineEvaluation, build_pipeline_evaluation
+from .replay_readiness.manager import ReplayReadinessManager
 from .scientific_inputs import build_scientific_input_snapshot
 from .shadow_evaluation import ShadowEvaluationReason
 from .shadow_evaluation.manager import ShadowEvaluationManager
@@ -137,6 +138,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             hass, entry.entry_id, log_root, local_timezone
         )
         self.commissioning_report = CommissioningReportManager()
+        self.replay_readiness = ReplayReadinessManager()
         self._shadow_nightly_unsubscribe: Callable[[], None] | None = None
         self._force_next_shadow_reason: ShadowEvaluationReason | None = None
         self._next_observation_context: tuple[
@@ -180,6 +182,9 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         )
         reconciliation_records = await self.actual_vs_shadow.async_load_records()
         self.commissioning_report.initialize(shadow_records, reconciliation_records)
+        self.replay_readiness.initialize(
+            reconciliation_records, self.commissioning_report.summary
+        )
 
     async def async_start_health_monitoring(self) -> None:
         """Start non-network health reevaluation after realtime setup completes."""
@@ -294,6 +299,10 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.commissioning_report.consider(
             shadow_record=shadow_record,
             reconciliation_records=reconciliation_records,
+        )
+        self.replay_readiness.consider(
+            reconciliation_records=reconciliation_records,
+            commissioning_summary=self.commissioning_report.summary,
         )
         self.refresh_count += 1
         self._polling_healthy = True

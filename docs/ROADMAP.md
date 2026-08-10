@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.20
+- **Installable Home Assistant release:** v1.0.21
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** extended replay and explicit promotion criteria using accumulated commissioning evidence; live control remains deferred
+- **Next milestone:** accumulate real-world shadow/replay evidence and define the separate safety architecture required before any Live-mode commissioning; live control remains deferred
 
 ## Delivery model
 
@@ -298,3 +298,8 @@ Delivered immutable observation-only comparison evidence between preserved shado
 ## v1.0.20 — Shadow Reporting and Commissioning Summary
 
 Delivered aggregate operator-facing reporting across retained shadow and reconciliation evidence. The summary reports agreement, disagreements, confidence, timing/runtime deltas, skipped/unexpected watering, evidence coverage, and a review state. It deliberately does not authorize or automatically promote Live mode.
+
+
+## v1.0.21 — Replay and Control-Readiness Evidence
+
+Delivered deterministic historical replay of retained reconciliation evidence, fixed golden scenarios, replay coverage/integrity metrics, and explicit conservative promotion criteria. Meeting the criteria only produces a manual-review evidence state; it does not authorize or enable Live mode.
