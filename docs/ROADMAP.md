@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.25
+- **Installable Home Assistant release:** v1.0.26
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** continue implementing acknowledgement/timeouts and restart-safe command reconciliation behind the disabled Live-mode boundary; live control remains deferred
+- **Next milestone:** implement restart-safe command reconciliation behind the disabled Live-mode boundary; live control remains deferred
 
 ## Delivery model
 
@@ -320,3 +320,7 @@ Delivered a separate fail-closed safety architecture that distinguishes good com
 ## v1.0.25 — Command Attribution and Receipt Foundation
 
 Delivered canonical non-actuating command intent attribution, correlation IDs, immutable not-dispatched receipts, and local audit evidence. This satisfies only the attribution/receipt safeguard; all command delivery remains disabled.
+
+## v1.0.26 — Command Acknowledgement and Timeout Foundation
+
+Delivered deterministic synthetic acknowledgement, rejection, and timeout semantics with a bounded acknowledgement deadline and immutable local evidence. This is the second implemented Live-mode safeguard; no controller dispatch path exists, and restart-safe command reconciliation remains deferred.

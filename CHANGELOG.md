@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.26 — Command Acknowledgement and Timeout Foundation
+
+- Added a deterministic synthetic acknowledgement lifecycle with waiting, acknowledged, rejected, and timed-out states.
+- Added a provisional 30-second acknowledgement deadline with fail-closed late-arrival handling.
+- Added immutable 30-day acknowledgement transition evidence and privacy-safe diagnostics.
+- Marked acknowledgement-and-timeout handling as the second implemented Live-mode safeguard.
+- Preserved disabled command delivery; restart-safe command reconciliation remains unimplemented.
+
 ## 1.0.25 — Command Attribution and Receipt Foundation
 
 - Added canonical non-actuating command intent records with attribution and stable correlation IDs.

@@ -20,6 +20,7 @@ from homeassistant.util import dt as dt_util
 
 from .actual_vs_shadow.manager import ActualVsShadowReconciliationManager
 from .adapters.factory import DEFAULT_PROVIDER_FACTORY, ControllerProviderFactory
+from .command_acknowledgements.manager import CommandAcknowledgementManager
 from .command_receipts.manager import CommandReceiptManager
 from .commissioning_report.manager import CommissioningReportManager
 from .const import (
@@ -142,6 +143,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             hass, entry.entry_id, log_root, local_timezone
         )
         self.commissioning_report = CommissioningReportManager()
+        self.command_acknowledgements = CommandAcknowledgementManager(hass, log_root)
         self.command_receipts = CommandReceiptManager(hass, log_root)
         self.execution_authorization = ExecutionAuthorizationManager()
         self.live_mode_safety = LiveModeSafetyManager()
