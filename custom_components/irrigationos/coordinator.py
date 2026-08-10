@@ -13,7 +13,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.event import async_track_time_change, async_track_time_interval
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -55,6 +55,8 @@ from .observation_history.manager import WateringSessionHistoryManager
 from .operational_log import DailyOperationalLog
 from .pipeline import PipelineEvaluation, build_pipeline_evaluation
 from .scientific_inputs import build_scientific_input_snapshot
+from .shadow_evaluation import ShadowEvaluationReason
+from .shadow_evaluation.manager import ShadowEvaluationManager
 
 if TYPE_CHECKING:
     from .realtime import RealtimeObservationManager
@@ -126,6 +128,11 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             log_root,
             local_timezone,
         )
+        self.shadow_evaluations = ShadowEvaluationManager(
+            hass, entry.entry_id, log_root, local_timezone
+        )
+        self._shadow_nightly_unsubscribe: Callable[[], None] | None = None
+        self._force_next_shadow_reason: ShadowEvaluationReason | None = None
         self._next_observation_context: tuple[
             WateringObservationSource, str | None, str | None
         ] | None = None
@@ -154,9 +161,10 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         await self._write_operational_event("integration_starting")
 
     async def async_initialize_observation_history(self) -> None:
-        """Restore active watering sessions before the first canonical refresh."""
+        """Restore active watering sessions and shadow metadata before first refresh."""
 
         await self.observation_history.async_initialize()
+        await self.shadow_evaluations.async_initialize()
 
     async def async_start_health_monitoring(self) -> None:
         """Start non-network health reevaluation after realtime setup completes."""
@@ -168,6 +176,14 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
                 HEALTH_REEVALUATION_INTERVAL,
             )
         await self.async_update_health("startup_complete")
+        if self._shadow_nightly_unsubscribe is None:
+            self._shadow_nightly_unsubscribe = async_track_time_change(
+                self.hass,
+                self._async_nightly_shadow_evaluation,
+                hour=20,
+                minute=0,
+                second=0,
+            )
         await self._write_operational_event("integration_started")
 
     async def async_stop_health_monitoring(self) -> None:
@@ -177,6 +193,9 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         if self._health_tick_unsubscribe is not None:
             self._health_tick_unsubscribe()
             self._health_tick_unsubscribe = None
+        if self._shadow_nightly_unsubscribe is not None:
+            self._shadow_nightly_unsubscribe()
+            self._shadow_nightly_unsubscribe = None
 
     async def _async_update_data(self) -> ControllerRegistrySnapshot:
         observation_hint = self._next_observation_context
@@ -244,6 +263,13 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             await self._record_refresh_failure("pipeline")
             raise UpdateFailed("IrrigationOS pipeline evaluation failed") from err
 
+        force_shadow_reason = self._force_next_shadow_reason
+        self._force_next_shadow_reason = None
+        await self.shadow_evaluations.async_consider(
+            self.pipeline_evaluation,
+            completed_session_count=len(self.observation_history.completed_sessions),
+            force_reason=force_shadow_reason,
+        )
         self.refresh_count += 1
         self._polling_healthy = True
         self._health_snapshot = snapshot
@@ -255,6 +281,17 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         await self.async_update_health("refresh_success", notify_listeners=False)
         await self._write_operational_event("refresh_success")
         return snapshot
+
+    async def _async_nightly_shadow_evaluation(self, now: datetime) -> None:
+        """Persist the authoritative 8 PM local shadow evaluation without actuation."""
+
+        del now
+        self._force_next_shadow_reason = ShadowEvaluationReason.NIGHTLY
+        try:
+            await self.async_request_refresh()
+        finally:
+            if self._force_next_shadow_reason is ShadowEvaluationReason.NIGHTLY:
+                self._force_next_shadow_reason = None
 
     def mark_next_refresh_as_realtime(
         self,
