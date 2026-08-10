@@ -21,6 +21,7 @@ def build_execution_authorization_summary(
     pipeline_available: bool,
     readiness_status: str,
     ownership_confirmed: bool,
+    boundary_review_acknowledged: bool,
     active_watering_session_count: int,
     candidate_runtime_seconds: int | None = None,
 ) -> ExecutionAuthorizationSummary:
@@ -49,6 +50,7 @@ def build_execution_authorization_summary(
         ),
         "pipeline_available": bool(pipeline_available),
         "controller_ownership_confirmed": bool(ownership_confirmed),
+        "execution_boundary_review_acknowledged": bool(boundary_review_acknowledged),
         "no_active_watering_conflict": active_watering_session_count == 0,
         "candidate_runtime_within_limit": (
             candidate_runtime_seconds is None
@@ -75,7 +77,9 @@ def build_execution_authorization_summary(
         candidate_runtime_seconds=candidate_runtime_seconds,
         maximum_single_command_runtime_seconds=MAX_SINGLE_COMMAND_RUNTIME_SECONDS,
         ownership_state="confirmed" if ownership_confirmed else "uncommissioned",
-        manual_review_state="required",
+        manual_review_state=(
+            "acknowledged" if boundary_review_acknowledged else "required"
+        ),
         restart_policy="fail_closed_recompute_required",
         live_control_feature_enabled=False,
         live_control_authorized=False,

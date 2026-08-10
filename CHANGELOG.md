@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.23 — Controller Ownership Commissioning
+
+- Added explicit persisted controller ownership commissioning bound to canonical controller topology.
+- Added manual execution-boundary review acknowledgement as a separate fail-closed gate.
+- Added operator controls to confirm, review, and revoke ownership without actuating irrigation.
+- Added topology-change invalidation so controller membership changes require recommissioning.
+- Preserved live-control feature and authorization flags as false.
+
 ## 1.0.22 — Safety Manager and Execution Authorization Foundation
 
 - Added deterministic fail-closed execution authorization safety gates.

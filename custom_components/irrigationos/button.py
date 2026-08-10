@@ -21,7 +21,15 @@ async def async_setup_entry(
     """Set up the non-actuating health incident reset button."""
 
     del hass
-    async_add_entities([IrrigationOSResetHealthIncidentButton(entry.runtime_data)])
+    coordinator = entry.runtime_data
+    async_add_entities(
+        [
+            IrrigationOSResetHealthIncidentButton(coordinator),
+            IrrigationOSConfirmControllerOwnershipButton(coordinator),
+            IrrigationOSAcknowledgeExecutionBoundaryReviewButton(coordinator),
+            IrrigationOSRevokeControllerOwnershipButton(coordinator),
+        ]
+    )
 
 
 class IrrigationOSResetHealthIncidentButton(IrrigationOSEntity, ButtonEntity):
@@ -46,3 +54,57 @@ class IrrigationOSResetHealthIncidentButton(IrrigationOSEntity, ButtonEntity):
         """Reset the diagnostic latch only."""
 
         await self.coordinator.reset_health_incident_latch()
+
+
+class IrrigationOSConfirmControllerOwnershipButton(IrrigationOSEntity, ButtonEntity):
+    """Explicitly commission ownership without enabling live control."""
+
+    _attr_name = "Confirm controller ownership"
+    _attr_unique_id = "irrigationos_confirm_controller_ownership"
+    entity_id = "button.irrigationos_confirm_controller_ownership"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:account-check-outline"
+
+    @property
+    def available(self) -> bool:
+        return bool(self.coordinator.data.controllers)
+
+    async def async_press(self) -> None:
+        await self.coordinator.confirm_controller_ownership()
+
+
+class IrrigationOSAcknowledgeExecutionBoundaryReviewButton(
+    IrrigationOSEntity, ButtonEntity
+):
+    """Acknowledge manual execution-boundary review without authorizing commands."""
+
+    _attr_name = "Acknowledge execution boundary review"
+    _attr_unique_id = "irrigationos_acknowledge_execution_boundary_review"
+    entity_id = "button.irrigationos_acknowledge_execution_boundary_review"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:clipboard-check-outline"
+
+    @property
+    def available(self) -> bool:
+        summary = self.coordinator.execution_authorization.summary
+        return summary.blocker_codes == ("execution_boundary_review_acknowledged",)
+
+    async def async_press(self) -> None:
+        await self.coordinator.acknowledge_execution_boundary_review()
+
+
+class IrrigationOSRevokeControllerOwnershipButton(IrrigationOSEntity, ButtonEntity):
+    """Revoke ownership commissioning and fail closed."""
+
+    _attr_name = "Revoke controller ownership"
+    _attr_unique_id = "irrigationos_revoke_controller_ownership"
+    entity_id = "button.irrigationos_revoke_controller_ownership"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:shield-off-outline"
+
+    @property
+    def available(self) -> bool:
+        return self.coordinator.ownership_commissioning.summary.ownership_confirmed
+
+    async def async_press(self) -> None:
+        await self.coordinator.revoke_controller_ownership()
