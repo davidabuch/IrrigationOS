@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.23
+- **Installable Home Assistant release:** v1.0.24
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** accumulate real-world shadow/replay evidence and define the separate safety architecture required before any Live-mode commissioning; live control remains deferred
+- **Next milestone:** accumulate real-world shadow/replay evidence while implementing the required execution safeguards behind the still-disabled Live-mode boundary; live control remains deferred
 
 ## Delivery model
 
@@ -300,7 +300,7 @@ Delivered immutable observation-only comparison evidence between preserved shado
 Delivered aggregate operator-facing reporting across retained shadow and reconciliation evidence. The summary reports agreement, disagreements, confidence, timing/runtime deltas, skipped/unexpected watering, evidence coverage, and a review state. It deliberately does not authorize or automatically promote Live mode.
 
 
-## v1.0.22 — Replay and Control-Readiness Evidence
+## v1.0.21 — Replay and Control-Readiness Evidence
 
 Delivered deterministic historical replay of retained reconciliation evidence, fixed golden scenarios, replay coverage/integrity metrics, and explicit conservative promotion criteria. Meeting the criteria only produces a manual-review evidence state; it does not authorize or enable Live mode.
 
@@ -311,3 +311,8 @@ Delivered deterministic fail-closed authorization evidence between control-readi
 ## v1.0.23 — Controller Ownership Commissioning
 
 Delivered explicit persisted controller ownership commissioning, topology-bound invalidation, manual execution-boundary review acknowledgement, and operator confirm/revoke controls. These decisions only satisfy future safety prerequisites; live-control feature and authorization flags remain false.
+
+
+## v1.0.24 — Live-Mode Safety Architecture
+
+Defined a separate fail-closed architecture gate between commissioning evidence and any future Live-mode enablement. Existing readiness, ownership, and authorization evidence remain prerequisites only. Command attribution/receipts, acknowledgement/timeouts, restart-safe reconciliation, safety preemption, sunrise hard stop, and manual override preservation are explicit required safeguards and remain unimplemented. Live control remains disabled.

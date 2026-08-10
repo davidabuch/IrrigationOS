@@ -50,6 +50,7 @@ from .health import (
     evaluate_health,
 )
 from .landscape import LandscapeProfile, build_landscape_profile
+from .live_mode_safety.manager import LiveModeSafetyManager
 from .observation_history import (
     SessionObservationContext,
     WateringObservationSource,
@@ -141,6 +142,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         )
         self.commissioning_report = CommissioningReportManager()
         self.execution_authorization = ExecutionAuthorizationManager()
+        self.live_mode_safety = LiveModeSafetyManager()
         self.ownership_commissioning = OwnershipCommissioningManager(hass, entry.entry_id)
         self.replay_readiness = ReplayReadinessManager()
         self._shadow_nightly_unsubscribe: Callable[[], None] | None = None
@@ -407,6 +409,14 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
                 self.ownership_commissioning.summary.boundary_review_acknowledged
             ),
             active_watering_session_count=len(self.observation_history.active_sessions),
+        )
+        self.live_mode_safety.consider(
+            readiness_status=self.replay_readiness.summary.readiness_status.value,
+            execution_authorization_status=self.execution_authorization.summary.status.value,
+            ownership_confirmed=self.ownership_commissioning.summary.ownership_confirmed,
+            boundary_review_acknowledged=(
+                self.ownership_commissioning.summary.boundary_review_acknowledged
+            ),
         )
         incident_changed = await self._apply_incident_transition(previous, assessment, now)
         state_changed = assessment != previous

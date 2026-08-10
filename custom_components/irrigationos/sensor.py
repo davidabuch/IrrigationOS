@@ -54,6 +54,7 @@ async def async_setup_entry(
         IrrigationOSControlReadinessSensor(coordinator),
         IrrigationOSExecutionAuthorizationSensor(coordinator),
         IrrigationOSControllerOwnershipSensor(coordinator),
+        IrrigationOSLiveModeSafetySensor(coordinator),
         *(
             IrrigationOSPipelineStageStatusSensor(coordinator, stage)
             for stage in PipelineStage
@@ -204,6 +205,27 @@ class IrrigationOSExecutionAuthorizationSensor(IrrigationOSEntity, SensorEntity)
         """Return deterministic gates and blockers without enabling control."""
 
         return self.coordinator.execution_authorization.summary.to_dict()
+
+
+class IrrigationOSLiveModeSafetySensor(IrrigationOSEntity, SensorEntity):
+    """Expose the separate pre-Live safety architecture boundary."""
+
+    _attr_name = "Live mode safety architecture"
+    _attr_unique_id = "irrigationos_live_mode_safety_architecture"
+    entity_id = "sensor.irrigationos_live_mode_safety_architecture"
+    _attr_icon = "mdi:shield-alert-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.live_mode_safety.summary.status.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self.coordinator.live_mode_safety.summary.to_dict()
 
 
 class IrrigationOSCurrentWateringSessionSensor(IrrigationOSEntity, SensorEntity):
