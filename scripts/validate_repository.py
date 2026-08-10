@@ -70,6 +70,10 @@ REQUIRED_FILES = (
     "docs/V1_0_16_HEALTH_MONITORING.md",
     "docs/V1_0_17_OBSERVATION_HISTORY.md",
     "docs/V1_0_18_SHADOW_EVALUATION_FOUNDATION.md",
+    "docs/V1_0_19_ACTUAL_VS_SHADOW_RECONCILIATION.md",
+    "docs/V1_0_20_SHADOW_REPORTING_COMMISSIONING_SUMMARY.md",
+    "custom_components/irrigationos/commissioning_report/engine.py",
+    "custom_components/irrigationos/commissioning_report/models.py",
     "docs/V1_0_PUBLIC_API_CONTRACT.json",
     "hacs.json",
     "pyproject.toml",
@@ -105,8 +109,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.19":
-        raise SystemExit("manifest.json version must be 1.0.19")
+    if manifest.get("version") != "1.0.20":
+        raise SystemExit("manifest.json version must be 1.0.20")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")

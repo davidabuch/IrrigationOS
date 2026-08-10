@@ -50,6 +50,7 @@ async def async_setup_entry(
         IrrigationOSPipelineLastEvaluationSensor(coordinator),
         IrrigationOSScientificInputStatusSensor(coordinator),
         IrrigationOSWeatherSourceSensor(coordinator),
+        IrrigationOSCommissioningSummarySensor(coordinator),
         *(
             IrrigationOSPipelineStageStatusSensor(coordinator, stage)
             for stage in PipelineStage
@@ -98,6 +99,33 @@ def _has_landscape_profile(
     """Return whether the current landscape contains the canonical area profile."""
 
     return any(profile.area_id == area_id for profile in coordinator.landscape.areas)
+
+
+class IrrigationOSCommissioningSummarySensor(IrrigationOSEntity, SensorEntity):
+    """Expose aggregate shadow commissioning evidence without authorizing control."""
+
+    _attr_name = "Commissioning summary"
+    _attr_unique_id = "irrigationos_commissioning_summary"
+    entity_id = "sensor.irrigationos_commissioning_summary"
+    _attr_icon = "mdi:clipboard-check-outline"
+
+    @property
+    def available(self) -> bool:
+        """Remain available while evidence is still being collected."""
+
+        return True
+
+    @property
+    def native_value(self) -> str:
+        """Return the current evidence-review state."""
+
+        return self.coordinator.commissioning_report.summary.status.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return privacy-safe aggregate commissioning metrics."""
+
+        return self.coordinator.commissioning_report.summary.to_dict()
 
 
 class IrrigationOSCurrentWateringSessionSensor(IrrigationOSEntity, SensorEntity):

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.20 — Shadow Reporting and Commissioning Summary
+
+- Added operator-facing aggregate reporting over retained shadow and reconciliation evidence.
+- Added agreement, disagreement, skipped/unexpected watering, confidence, timing, and runtime metrics.
+- Added a Home Assistant commissioning-summary sensor and privacy-safe diagnostics.
+- Added explicit evidence states without treating evidence availability as approval for live control.
+- Preserved the observation-only, non-actuating commissioning boundary.
+
 ## 1.0.19 — Actual-vs-Shadow Reconciliation
 
 - Added immutable planned-vs-observed reconciliation evidence.

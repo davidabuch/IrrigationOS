@@ -41,9 +41,9 @@ def test_release_versions_are_consistent() -> None:
     with (ROOT / "pyproject.toml").open("rb") as handle:
         pyproject = tomllib.load(handle)
     const_text = (ROOT / "custom_components/irrigationos/const.py").read_text(encoding="utf-8")
-    assert manifest["version"] == "1.0.19"
+    assert manifest["version"] == "1.0.20"
     assert pyproject["project"]["version"] == manifest["version"]
-    assert 'VERSION: Final = "1.0.19"' in const_text
+    assert 'VERSION: Final = "1.0.20"' in const_text
     assert manifest["domain"] == "irrigationos"
 
 
@@ -72,6 +72,8 @@ def test_governance_documents_exist() -> None:
         "docs/V1_0_16_HEALTH_MONITORING.md",
         "docs/V1_0_17_OBSERVATION_HISTORY.md",
         "docs/V1_0_18_SHADOW_EVALUATION_FOUNDATION.md",
+        "docs/V1_0_19_ACTUAL_VS_SHADOW_RECONCILIATION.md",
+        "docs/V1_0_20_SHADOW_REPORTING_COMMISSIONING_SUMMARY.md",
     )
     for relative_path in required:
         assert (ROOT / relative_path).is_file(), relative_path
@@ -121,6 +123,6 @@ def test_v1_0_15_is_monotonic_stable_release_candidate() -> None:
     roadmap = (ROOT / "docs/ROADMAP.md").read_text(encoding="utf-8")
     notes = (ROOT / "V1_0_15_RELEASE_NOTES.md").read_text(encoding="utf-8")
     assert "first stable public release is **v1.0.15**" in strategy
-    assert "Installable Home Assistant release:** v1.0.19" in roadmap
+    assert "Installable Home Assistant release:** v1.0.20" in roadmap
     assert "first stable public release candidate" in notes
     assert "live execution remains disabled" in notes.lower()
