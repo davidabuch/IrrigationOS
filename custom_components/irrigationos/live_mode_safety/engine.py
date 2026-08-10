@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from .models import LiveModeSafetyStatus, LiveModeSafetySummary
 
-LIVE_MODE_SAFETY_ARCHITECTURE_REVISION = 1
+LIVE_MODE_SAFETY_ARCHITECTURE_REVISION = 2
 
 # These safeguards deliberately remain false until separately implemented and validated.
 _REQUIRED_SAFEGUARDS = {
-    "command_attribution_and_receipts": False,
+    "command_attribution_and_receipts": True,
     "acknowledgement_and_timeout_handling": False,
     "restart_safe_command_reconciliation": False,
     "safety_preemption_path": False,
