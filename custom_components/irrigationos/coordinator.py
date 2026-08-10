@@ -41,6 +41,7 @@ from .controllers import (
     ControllerRateLimitError,
     ControllerRegistrySnapshot,
 )
+from .execution_authorization.manager import ExecutionAuthorizationManager
 from .health import (
     HEALTH_REEVALUATION_INTERVAL,
     HEALTH_STORE_VERSION,
@@ -138,6 +139,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             hass, entry.entry_id, log_root, local_timezone
         )
         self.commissioning_report = CommissioningReportManager()
+        self.execution_authorization = ExecutionAuthorizationManager()
         self.replay_readiness = ReplayReadinessManager()
         self._shadow_nightly_unsubscribe: Callable[[], None] | None = None
         self._force_next_shadow_reason: ShadowEvaluationReason | None = None
@@ -374,6 +376,16 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         )
         previous = self._health_assessment
         self._health_assessment = assessment
+        self.execution_authorization.consider(
+            evaluated_at=now,
+            health_state=assessment.state.value,
+            observation_age_seconds=assessment.observation_age_seconds,
+            controller_count=assessment.controller_count,
+            online_controller_count=assessment.online_controller_count,
+            pipeline_available=assessment.pipeline_available,
+            readiness_status=self.replay_readiness.summary.readiness_status.value,
+            active_watering_session_count=len(self.observation_history.active_sessions),
+        )
         incident_changed = await self._apply_incident_transition(previous, assessment, now)
         state_changed = assessment != previous
         if notify_listeners and (state_changed or incident_changed):
