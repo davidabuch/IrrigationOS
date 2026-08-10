@@ -129,5 +129,6 @@ async def async_get_config_entry_diagnostics(
             "commissioning_report": entry.runtime_data.commissioning_report.diagnostics(),
             "replay_readiness": entry.runtime_data.replay_readiness.diagnostics(),
             "execution_authorization": entry.runtime_data.execution_authorization.diagnostics(),
+            "ownership_commissioning": entry.runtime_data.ownership_commissioning.diagnostics(),
         },
     }

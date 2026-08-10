@@ -20,6 +20,7 @@ class ExecutionAuthorizationManager:
             pipeline_available=False,
             readiness_status="insufficient_evidence",
             ownership_confirmed=False,
+            boundary_review_acknowledged=False,
             active_watering_session_count=0,
         )
 
@@ -33,6 +34,8 @@ class ExecutionAuthorizationManager:
         online_controller_count: int,
         pipeline_available: bool,
         readiness_status: str,
+        ownership_confirmed: bool,
+        boundary_review_acknowledged: bool,
         active_watering_session_count: int,
     ) -> None:
         """Recompute fail-closed gates from current evidence."""
@@ -45,7 +48,8 @@ class ExecutionAuthorizationManager:
             online_controller_count=online_controller_count,
             pipeline_available=pipeline_available,
             readiness_status=readiness_status,
-            ownership_confirmed=False,
+            ownership_confirmed=ownership_confirmed,
+            boundary_review_acknowledged=boundary_review_acknowledged,
             active_watering_session_count=active_watering_session_count,
         )
 

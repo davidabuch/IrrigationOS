@@ -28,6 +28,7 @@ def _summary(**overrides: Any) -> Any:
         "pipeline_available": True,
         "readiness_status": "criteria_met",
         "ownership_confirmed": True,
+        "boundary_review_acknowledged": True,
         "active_watering_session_count": 0,
         "candidate_runtime_seconds": 600,
     }
@@ -113,6 +114,8 @@ def test_runtime_manager_starts_and_recomputes_fail_closed() -> None:
         online_controller_count=1,
         pipeline_available=True,
         readiness_status="criteria_met",
+        ownership_confirmed=False,
+        boundary_review_acknowledged=False,
         active_watering_session_count=0,
     )
 
@@ -120,3 +123,11 @@ def test_runtime_manager_starts_and_recomputes_fail_closed() -> None:
     assert "controller_ownership_confirmed" in manager.summary.blocker_codes
     assert manager.summary.restart_policy == "fail_closed_recompute_required"
 
+
+
+def test_boundary_review_acknowledgement_is_required() -> None:
+    summary = _summary(boundary_review_acknowledged=False)
+
+    assert summary.status is ExecutionAuthorizationStatus.BLOCKED
+    assert summary.manual_review_state == "required"
+    assert "execution_boundary_review_acknowledged" in summary.blocker_codes

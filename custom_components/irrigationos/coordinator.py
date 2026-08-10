@@ -56,6 +56,7 @@ from .observation_history import (
 )
 from .observation_history.manager import WateringSessionHistoryManager
 from .operational_log import DailyOperationalLog
+from .ownership_commissioning.manager import OwnershipCommissioningManager
 from .pipeline import PipelineEvaluation, build_pipeline_evaluation
 from .replay_readiness.manager import ReplayReadinessManager
 from .scientific_inputs import build_scientific_input_snapshot
@@ -140,6 +141,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         )
         self.commissioning_report = CommissioningReportManager()
         self.execution_authorization = ExecutionAuthorizationManager()
+        self.ownership_commissioning = OwnershipCommissioningManager(hass, entry.entry_id)
         self.replay_readiness = ReplayReadinessManager()
         self._shadow_nightly_unsubscribe: Callable[[], None] | None = None
         self._force_next_shadow_reason: ShadowEvaluationReason | None = None
@@ -169,6 +171,11 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         if isinstance(stored, dict):
             self._restore_health_state(stored)
         await self._write_operational_event("integration_starting")
+
+    async def async_initialize_ownership_commissioning(self) -> None:
+        """Restore explicit operator ownership commissioning decisions."""
+
+        await self.ownership_commissioning.async_initialize()
 
     async def async_initialize_observation_history(self) -> None:
         """Restore active watering sessions and shadow metadata before first refresh."""
@@ -376,6 +383,17 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         )
         previous = self._health_assessment
         self._health_assessment = assessment
+        controller_ids = (
+            ()
+            if self._health_snapshot is None
+            else tuple(
+                sorted(
+                    controller.controller_id
+                    for controller in self._health_snapshot.controllers
+                )
+            )
+        )
+        self.ownership_commissioning.consider_topology(controller_ids)
         self.execution_authorization.consider(
             evaluated_at=now,
             health_state=assessment.state.value,
@@ -384,6 +402,10 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             online_controller_count=assessment.online_controller_count,
             pipeline_available=assessment.pipeline_available,
             readiness_status=self.replay_readiness.summary.readiness_status.value,
+            ownership_confirmed=self.ownership_commissioning.summary.ownership_confirmed,
+            boundary_review_acknowledged=(
+                self.ownership_commissioning.summary.boundary_review_acknowledged
+            ),
             active_watering_session_count=len(self.observation_history.active_sessions),
         )
         incident_changed = await self._apply_incident_transition(previous, assessment, now)
@@ -396,6 +418,33 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
                 extra={"previous_health_state": previous.state.value, "trigger": trigger},
             )
         return assessment
+
+    async def confirm_controller_ownership(self) -> bool:
+        """Persist explicit ownership commissioning without actuating equipment."""
+
+        result = await self.ownership_commissioning.async_confirm_ownership()
+        if result:
+            await self.async_update_health("ownership_confirmed")
+            await self._write_operational_event("controller_ownership_confirmed")
+        return result
+
+    async def acknowledge_execution_boundary_review(self) -> bool:
+        """Persist manual boundary review acknowledgement without enabling control."""
+
+        result = await self.ownership_commissioning.async_acknowledge_boundary_review()
+        if result:
+            await self.async_update_health("execution_boundary_review_acknowledged")
+            await self._write_operational_event("execution_boundary_review_acknowledged")
+        return result
+
+    async def revoke_controller_ownership(self) -> bool:
+        """Revoke commissioned ownership and immediately fail closed."""
+
+        result = await self.ownership_commissioning.async_revoke()
+        if result:
+            await self.async_update_health("ownership_revoked")
+            await self._write_operational_event("controller_ownership_revoked")
+        return result
 
     async def reset_health_incident_latch(self) -> bool:
         """Clear recovered incident history without changing irrigation behavior."""

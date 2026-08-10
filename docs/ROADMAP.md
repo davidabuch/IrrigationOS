@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.22
+- **Installable Home Assistant release:** v1.0.23
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** explicit controller ownership commissioning and manual execution-boundary review; live control remains deferred
+- **Next milestone:** accumulate real-world shadow/replay evidence and define the separate safety architecture required before any Live-mode commissioning; live control remains deferred
 
 ## Delivery model
 
@@ -39,7 +39,7 @@ Delivered:
 
 ## v1.0 Release Completion
 
-**Status: Stable v1.0.15 released; post-release health, observation, shadow, reconciliation, reporting, replay-readiness, and execution-authorization foundations complete through v1.0.22**
+**Status: Stable v1.0.15 released; v1.0.16 health, v1.0.17 observation history, and v1.0.18 shadow evaluation and v1.0.19 actual-vs-shadow reconciliation milestones complete**
 
 Completed domain layers:
 
@@ -300,10 +300,14 @@ Delivered immutable observation-only comparison evidence between preserved shado
 Delivered aggregate operator-facing reporting across retained shadow and reconciliation evidence. The summary reports agreement, disagreements, confidence, timing/runtime deltas, skipped/unexpected watering, evidence coverage, and a review state. It deliberately does not authorize or automatically promote Live mode.
 
 
-## v1.0.21 — Replay and Control-Readiness Evidence
+## v1.0.22 — Replay and Control-Readiness Evidence
 
 Delivered deterministic historical replay of retained reconciliation evidence, fixed golden scenarios, replay coverage/integrity metrics, and explicit conservative promotion criteria. Meeting the criteria only produces a manual-review evidence state; it does not authorize or enable Live mode.
 
 ## v1.0.22 — Safety Manager and Execution Authorization Foundation
 
 Delivered deterministic fail-closed authorization evidence between control-readiness and any future live execution boundary. Health, observation freshness, controller availability, pipeline state, ownership, active-watering conflicts, and runtime limits are explicit gates. Positive authorization is never persisted across restart, and live control remains disabled.
+
+## v1.0.23 — Controller Ownership Commissioning
+
+Delivered explicit persisted controller ownership commissioning, topology-bound invalidation, manual execution-boundary review acknowledgement, and operator confirm/revoke controls. These decisions only satisfy future safety prerequisites; live-control feature and authorization flags remain false.

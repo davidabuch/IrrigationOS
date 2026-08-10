@@ -53,6 +53,7 @@ async def async_setup_entry(
         IrrigationOSCommissioningSummarySensor(coordinator),
         IrrigationOSControlReadinessSensor(coordinator),
         IrrigationOSExecutionAuthorizationSensor(coordinator),
+        IrrigationOSControllerOwnershipSensor(coordinator),
         *(
             IrrigationOSPipelineStageStatusSensor(coordinator, stage)
             for stage in PipelineStage
@@ -155,6 +156,27 @@ class IrrigationOSControlReadinessSensor(IrrigationOSEntity, SensorEntity):
         """Return replay metrics and explicit promotion criteria."""
 
         return self.coordinator.replay_readiness.summary.to_dict()
+
+
+class IrrigationOSControllerOwnershipSensor(IrrigationOSEntity, SensorEntity):
+    """Expose explicit controller ownership commissioning evidence."""
+
+    _attr_name = "Controller ownership commissioning"
+    _attr_unique_id = "irrigationos_controller_ownership_commissioning"
+    entity_id = "sensor.irrigationos_controller_ownership_commissioning"
+    _attr_icon = "mdi:account-key-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.ownership_commissioning.summary.status.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self.coordinator.ownership_commissioning.summary.to_dict()
 
 
 class IrrigationOSExecutionAuthorizationSensor(IrrigationOSEntity, SensorEntity):
