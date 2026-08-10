@@ -61,6 +61,7 @@ def _area(
     slot: int,
     *,
     configured: bool,
+    state: IrrigationAreaState | None = None,
 ) -> IrrigationArea:
     return IrrigationArea(
         area_id=ControllerIdentityRegistry.area_id_for(controller_id, slot),
@@ -69,7 +70,9 @@ def _area(
         name=f"Zone {slot}",
         enabled=configured,
         configured=configured,
-        state=IrrigationAreaState.IDLE if configured else IrrigationAreaState.UNUSED,
+        state=state or (
+            IrrigationAreaState.IDLE if configured else IrrigationAreaState.UNUSED
+        ),
         binding=VendorBinding("rachio", f"native-zone-{slot}") if configured else None,
         vendor_name="Orchard" if configured else None,
     )
@@ -80,8 +83,12 @@ def _snapshot(
     *,
     slots: int = 2,
     include_controller: bool = True,
+    watering_slots: tuple[int, ...] = (),
+    observed_at: datetime | None = None,
+    availability: ControllerAvailability = ControllerAvailability.ONLINE,
+    watering_quality: ObservationQuality = ObservationQuality.CONFIRMED,
 ) -> ControllerRegistrySnapshot:
-    now = datetime.now(UTC)
+    now = observed_at or datetime.now(UTC)
     observation = ObservationMetadata(
         observed_at=now,
         fresh_until=now + timedelta(minutes=10),
@@ -97,14 +104,23 @@ def _snapshot(
             observation=observation,
         )
     areas = tuple(
-        _area(controller_id, slot, configured=slot == 1)
+        _area(
+            controller_id,
+            slot,
+            configured=slot == 1,
+            state=(
+                IrrigationAreaState.WATERING
+                if slot in watering_slots
+                else None
+            ),
+        )
         for slot in range(1, slots + 1)
     )
     controller = IrrigationController(
         controller_id=controller_id,
         binding=VendorBinding("rachio", "native-controller-1"),
         name="Back Yard",
-        availability=ControllerAvailability.ONLINE,
+        availability=availability,
         enabled=True,
         model="GENERATION3_8ZONE",
         serial_number="serial-secret",
@@ -112,7 +128,7 @@ def _snapshot(
         latitude=1.0,
         longitude=2.0,
         capacity=slots,
-        watering_observation_quality=ObservationQuality.CONFIRMED,
+        watering_observation_quality=watering_quality,
         capabilities=ControllerCapabilities(
             observe_current_watering=True,
             observe_last_watered=True,
@@ -295,6 +311,9 @@ async def test_runtime_inventory_and_diagnostics(
     entity_registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(entity_registry, entry.entry_id)
     unique_ids = {item.unique_id for item in entries}
+    assert "irrigationos_current_watering_session" in unique_ids
+    assert "irrigationos_last_completed_watering_session" in unique_ids
+    assert "irrigationos_watering_sessions_today" in unique_ids
     assert "controller_test_status" in unique_ids
     assert "controller_test:slot:1_observation" in unique_ids
     assert "controller_test:slot:2_observation" in unique_ids
@@ -576,6 +595,177 @@ async def test_no_external_url_keeps_polling_operational(
     await entry.runtime_data.async_refresh()
     assert entry.runtime_data.last_update_success
     assert adapter.snapshot_requests == 2
+
+
+@pytest.mark.asyncio
+async def test_watering_session_persists_across_restart_and_updates_entities(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An active canonical session survives unload and closes without duplication."""
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    started_at = datetime.now(UTC)
+    adapter.snapshot = _snapshot(watering_slots=(1,), observed_at=started_at)
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    active = entry.runtime_data.observation_history.active_sessions
+    assert len(active) == 1
+    session_id = active[0].session_id
+    assert active[0].incomplete is True
+    current = hass.states.get("sensor.irrigationos_current_watering_session")
+    assert current is not None
+    assert current.state == "watering"
+    assert current.attributes["active_session_count"] == 1
+    assert "native-zone-1" not in repr(current.attributes)
+    session_filename = (
+        entry.runtime_data.observation_history.session_log.current_file
+    )
+    assert session_filename is not None
+    session_log_text = (
+        Path(hass.config.path("irrigationos_logs")) / session_filename
+    ).read_text(encoding="utf-8")
+    assert '"event_type":"session_started"' in session_log_text
+    for secret in (
+        "native-controller-1",
+        "native-zone-1",
+        "person-1",
+        "top-secret-api-key",
+        entry.data[CONF_WEBHOOK_ID],
+        entry.data[CONF_WEBHOOK_AUTH],
+        "serial-secret",
+    ):
+        assert secret not in session_log_text
+
+    await entry.runtime_data.async_refresh()
+    assert len(entry.runtime_data.observation_history.active_sessions) == 1
+    assert entry.runtime_data.observation_history.active_sessions[0].session_id == session_id
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    restored = entry.runtime_data.observation_history.active_sessions
+    assert len(restored) == 1
+    assert restored[0].session_id == session_id
+    assert restored[0].reconstructed_after_restart is True
+    assert restored[0].incomplete is True
+
+    stopped_at = started_at + timedelta(minutes=10)
+    adapter.snapshot = _snapshot(observed_at=stopped_at)
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert entry.runtime_data.observation_history.active_sessions == ()
+    completed = entry.runtime_data.observation_history.last_completed_session
+    assert completed is not None
+    assert completed.session_id == session_id
+    assert completed.duration_seconds == 600
+    assert completed.reconstructed_after_restart is True
+    current = hass.states.get("sensor.irrigationos_current_watering_session")
+    last = hass.states.get("sensor.irrigationos_last_completed_watering_session")
+    today = hass.states.get("sensor.irrigationos_watering_sessions_today")
+    assert current is not None and current.state == "idle"
+    assert last is not None and last.state == "completed"
+    assert last.attributes["session_id"] == session_id
+    assert today is not None and int(today.state) >= 1
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    history = diagnostics["coordinator"]["operational_health"][
+        "observation_history"
+    ]
+    assert history["active_session_count"] == 0
+    assert history["last_completed_session"]["session_id"] == session_id
+    assert "native-zone-1" not in repr(history)
+
+
+@pytest.mark.asyncio
+async def test_realtime_refresh_records_session_without_false_ownership(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deduplicated realtime refreshes discover state but never invent attribution."""
+    async def standard_url(*_args: object) -> tuple[str, str]:
+        return "https://ha.example.com/api/webhook/stable", "standard"
+
+    monkeypatch.setattr(realtime_module, "async_resolve_webhook_url", standard_url)
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(domain=DOMAIN, data=_entry_data(), version=3)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    manager = entry.runtime_data.realtime
+    webhook_id = entry.data[CONF_WEBHOOK_ID]
+
+    adapter.snapshot = _snapshot(watering_slots=(1,))
+    raw, signature = _signed_event(entry, "session-start", "ZONE_STARTED")
+    response = await manager._async_handle_webhook(
+        hass, webhook_id, _mock_webhook_request(raw, signature)
+    )
+    assert response.status == 204
+    active = entry.runtime_data.observation_history.active_sessions
+    assert len(active) == 1
+    assert active[0].observation_source.value == "realtime_refresh"
+    assert active[0].attribution.value == "external_unknown"
+    assert active[0].incomplete is False
+
+    response = await manager._async_handle_webhook(
+        hass, webhook_id, _mock_webhook_request(raw, signature)
+    )
+    assert response.status == 204
+    assert len(entry.runtime_data.observation_history.active_sessions) == 1
+    assert manager.duplicate_event_count == 1
+
+    adapter.snapshot = _snapshot()
+    stop_raw, stop_signature = _signed_event(entry, "session-stop", "ZONE_STOPPED")
+    response = await manager._async_handle_webhook(
+        hass, webhook_id, _mock_webhook_request(stop_raw, stop_signature)
+    )
+    assert response.status == 204
+    completed = entry.runtime_data.observation_history.last_completed_session
+    assert completed is not None
+    assert completed.attribution.value == "external_unknown"
+    assert completed.attribution.value not in {"provider_schedule", "manual", "irrigationos"}
+    assert completed.incomplete is False
+
+
+@pytest.mark.asyncio
+async def test_offline_snapshot_marks_active_session_uncertain_without_closure(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HA lifecycle preserves an active session through controller unavailability."""
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(domain=DOMAIN, data=_entry_data(), version=3)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    adapter.snapshot = _snapshot(watering_slots=(1,))
+    await entry.runtime_data.async_refresh()
+    session_id = entry.runtime_data.observation_history.active_sessions[0].session_id
+    adapter.snapshot = _snapshot(availability=ControllerAvailability.OFFLINE)
+    await entry.runtime_data.async_refresh()
+    active = entry.runtime_data.observation_history.active_sessions
+    assert len(active) == 1
+    assert active[0].session_id == session_id
+    assert active[0].incomplete is True
+    assert active[0].observation_quality is ObservationQuality.PARTIAL
+
+    adapter.snapshot = _snapshot()
+    await entry.runtime_data.async_refresh()
+    assert entry.runtime_data.observation_history.active_sessions == ()
+    assert entry.runtime_data.observation_history.last_completed_session is not None
 
 
 @pytest.mark.asyncio

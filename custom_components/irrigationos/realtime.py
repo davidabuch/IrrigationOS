@@ -274,6 +274,7 @@ class RealtimeObservationManager:
             "event_type": event_type,
             "event_subtype": event_subtype,
         }
+        self._coordinator.mark_next_refresh_as_realtime(event_type, event_subtype)
         await self._coordinator.async_refresh()
         return web.Response(status=204)
 

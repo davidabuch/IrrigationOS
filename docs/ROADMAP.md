@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.16
+- **Installable Home Assistant release:** v1.0.17
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** v1.0.16 aggregate health monitoring, persistent incident latching, daily operational logs, and notification events
+- **Next milestone:** control-readiness observation using v1.0.17 session evidence; HACS/public-release gates remain deferred until explicitly scheduled
 
 ## Delivery model
 
@@ -39,7 +39,7 @@ Delivered:
 
 ## v1.0 Release Completion
 
-**Status: Stable v1.0.15 released; post-release observability work in progress**
+**Status: Stable v1.0.15 released; v1.0.16 health and v1.0.17 observation-history milestones complete**
 
 Completed domain layers:
 
@@ -71,6 +71,15 @@ Post-release v1.0.16 health milestone:
 - persistent health-incident latching with non-actuating reset button
 - one-shot unhealthy/recovery Home Assistant events
 - 30-day safe JSONL daily logs under `/config/irrigationos_logs/`
+
+Post-release v1.0.17 observation-history milestone:
+
+- canonical watering-session reconstruction from trustworthy controller snapshots
+- polling/realtime source and timestamp-precision evidence
+- independent simultaneous-slot sessions and conservative partial/offline handling
+- Home Assistant Store restart continuity and reconstructed-session marking
+- separate 30-day session JSONL evidence plus three compact operator sensors
+- default `external_unknown` attribution until explicit provider ownership evidence exists
 
 See `docs/V1_0_ARCHITECTURE_AUDIT.md`.
 

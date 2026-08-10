@@ -78,6 +78,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry)
     """Set up IrrigationOS from a config entry."""
     coordinator = IrrigationOSCoordinator(hass, entry)
     await coordinator.async_initialize_health()
+    await coordinator.async_initialize_observation_history()
     await coordinator.async_config_entry_first_refresh()
     coordinator.realtime = RealtimeObservationManager(hass, entry, coordinator)
     await coordinator.realtime.async_setup()
@@ -92,6 +93,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         await entry.runtime_data.async_stop_health_monitoring()
+        await entry.runtime_data.observation_history.async_shutdown()
         if entry.runtime_data.realtime is not None:
             await entry.runtime_data.realtime.async_shutdown()
     return unloaded
