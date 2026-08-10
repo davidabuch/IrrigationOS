@@ -1,12 +1,24 @@
 # Changelog
 
+## 1.0.25 — Command Attribution and Receipt Foundation
+
+- Added canonical non-actuating command intent records with attribution and stable correlation IDs.
+- Added immutable local receipts that explicitly record every v1.0.25 intent as not dispatched.
+- Added 30-day local command-intent/receipt audit evidence and diagnostics.
+- Marked only the command-attribution-and-receipts Live-mode safeguard as implemented.
+- Preserved the disabled command-delivery and Live-mode boundaries.
+
 ## 1.0.24 — Live-Mode Safety Architecture
 
-- Added a separate fail-closed pre-Live safety architecture assessment.
-- Distinguished prerequisite evidence from required execution-safety implementation.
-- Defined command receipts, acknowledgement/timeouts, restart reconciliation, safety preemption, sunrise hard stop, and manual override preservation as mandatory safeguards.
-- Added an operator-facing Live-mode safety architecture sensor and diagnostics.
-- Kept Live-mode commissioning and all control authorization hard-coded false.
+- Added a separate fail-closed Live-mode safety architecture and explicit execution safeguard gates.
+- Required command attribution/receipts, acknowledgement/timeouts, restart reconciliation, safety preemption, sunrise hard stop, and manual-override preservation before Live-mode review.
+- Preserved non-actuating operation and hard-coded Live control disabled.
+
+## 1.0.23 — Controller Ownership Commissioning
+
+- Added explicit persisted controller ownership commissioning bound to canonical controller topology.
+- Added topology-change invalidation and manual execution-boundary review acknowledgement.
+- Added operator confirm/revoke controls while preserving Live control disabled.
 
 ## 1.0.22 — Safety Manager and Execution Authorization Foundation
 

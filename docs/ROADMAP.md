@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.24
+- **Installable Home Assistant release:** v1.0.25
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** accumulate real-world shadow/replay evidence while implementing the required execution safeguards behind the still-disabled Live-mode boundary; live control remains deferred
+- **Next milestone:** continue implementing acknowledgement/timeouts and restart-safe command reconciliation behind the disabled Live-mode boundary; live control remains deferred
 
 ## Delivery model
 
@@ -315,4 +315,8 @@ Delivered explicit persisted controller ownership commissioning, topology-bound 
 
 ## v1.0.24 — Live-Mode Safety Architecture
 
-Defined a separate fail-closed architecture gate between commissioning evidence and any future Live-mode enablement. Existing readiness, ownership, and authorization evidence remain prerequisites only. Command attribution/receipts, acknowledgement/timeouts, restart-safe reconciliation, safety preemption, sunrise hard stop, and manual override preservation are explicit required safeguards and remain unimplemented. Live control remains disabled.
+Delivered a separate fail-closed safety architecture that distinguishes good commissioning evidence from actual Live-mode eligibility and explicitly tracks six required execution safeguards. Live control remains disabled.
+
+## v1.0.25 — Command Attribution and Receipt Foundation
+
+Delivered canonical non-actuating command intent attribution, correlation IDs, immutable not-dispatched receipts, and local audit evidence. This satisfies only the attribution/receipt safeguard; all command delivery remains disabled.

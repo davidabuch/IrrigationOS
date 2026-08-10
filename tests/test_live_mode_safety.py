@@ -26,7 +26,7 @@ def test_complete_prerequisite_evidence_still_blocks_live_mode() -> None:
     summary = _summary()
     assert summary.status is LiveModeSafetyStatus.ARCHITECTURE_INCOMPLETE
     assert summary.prerequisites_met_count == summary.prerequisites_total_count
-    assert summary.safeguards_met_count == 0
+    assert summary.safeguards_met_count == 1
     assert summary.live_mode_commissionable is False
     assert summary.live_control_feature_enabled is False
     assert summary.live_control_authorized is False
@@ -53,7 +53,12 @@ def test_required_safety_architecture_is_explicit() -> None:
         "sunrise_hard_stop",
         "manual_override_preservation",
     }
-    assert all(value is False for value in summary.safeguard_gates.values())
+    assert summary.safeguard_gates["command_attribution_and_receipts"] is True
+    assert all(
+        value is False
+        for name, value in summary.safeguard_gates.items()
+        if name != "command_attribution_and_receipts"
+    )
 
 
 def test_manager_starts_fail_closed() -> None:

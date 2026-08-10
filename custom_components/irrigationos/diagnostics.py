@@ -127,6 +127,7 @@ async def async_get_config_entry_diagnostics(
             "shadow_evaluations": entry.runtime_data.shadow_evaluations.diagnostics(),
             "actual_vs_shadow": entry.runtime_data.actual_vs_shadow.diagnostics(),
             "commissioning_report": entry.runtime_data.commissioning_report.diagnostics(),
+            "command_receipts": entry.runtime_data.command_receipts.diagnostics(),
             "replay_readiness": entry.runtime_data.replay_readiness.diagnostics(),
             "execution_authorization": entry.runtime_data.execution_authorization.diagnostics(),
             "ownership_commissioning": entry.runtime_data.ownership_commissioning.diagnostics(),
