@@ -1,12 +1,12 @@
 # Changelog
 
-## 1.0.23 — Controller Ownership Commissioning
+## 1.0.24 — Live-Mode Safety Architecture
 
-- Added explicit persisted controller ownership commissioning bound to canonical controller topology.
-- Added manual execution-boundary review acknowledgement as a separate fail-closed gate.
-- Added operator controls to confirm, review, and revoke ownership without actuating irrigation.
-- Added topology-change invalidation so controller membership changes require recommissioning.
-- Preserved live-control feature and authorization flags as false.
+- Added a separate fail-closed pre-Live safety architecture assessment.
+- Distinguished prerequisite evidence from required execution-safety implementation.
+- Defined command receipts, acknowledgement/timeouts, restart reconciliation, safety preemption, sunrise hard stop, and manual override preservation as mandatory safeguards.
+- Added an operator-facing Live-mode safety architecture sensor and diagnostics.
+- Kept Live-mode commissioning and all control authorization hard-coded false.
 
 ## 1.0.22 — Safety Manager and Execution Authorization Foundation
 

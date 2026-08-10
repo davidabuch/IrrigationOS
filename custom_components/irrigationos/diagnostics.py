@@ -130,5 +130,6 @@ async def async_get_config_entry_diagnostics(
             "replay_readiness": entry.runtime_data.replay_readiness.diagnostics(),
             "execution_authorization": entry.runtime_data.execution_authorization.diagnostics(),
             "ownership_commissioning": entry.runtime_data.ownership_commissioning.diagnostics(),
+            "live_mode_safety": entry.runtime_data.live_mode_safety.diagnostics(),
         },
     }

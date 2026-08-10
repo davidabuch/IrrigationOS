@@ -81,6 +81,9 @@ REQUIRED_FILES = (
     "custom_components/irrigationos/ownership_commissioning/engine.py",
     "custom_components/irrigationos/ownership_commissioning/models.py",
     "docs/V1_0_23_CONTROLLER_OWNERSHIP_COMMISSIONING.md",
+    "docs/V1_0_24_LIVE_MODE_SAFETY_ARCHITECTURE.md",
+    "custom_components/irrigationos/live_mode_safety/engine.py",
+    "custom_components/irrigationos/live_mode_safety/models.py",
     "custom_components/irrigationos/commissioning_report/engine.py",
     "custom_components/irrigationos/commissioning_report/models.py",
     "docs/V1_0_PUBLIC_API_CONTRACT.json",
@@ -118,8 +121,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.23":
-        raise SystemExit("manifest.json version must be 1.0.23")
+    if manifest.get("version") != "1.0.24":
+        raise SystemExit("manifest.json version must be 1.0.24")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")
