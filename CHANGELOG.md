@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.19 — Actual-vs-Shadow Reconciliation
+
+- Added immutable planned-vs-observed reconciliation evidence.
+- Added canonical zone, runtime, and timing comparison with conservative confidence.
+- Added skipped/unexpected watering classification with insufficient-evidence safeguards.
+- Added restart-safe pending-action and idempotency persistence with 30-day JSONL evidence.
+- Preserved the observation-only, non-actuating commissioning boundary.
+
 ## 1.0.18 — Shadow Evaluation Foundation
 
 - Added immutable point-in-time shadow evaluation evidence.

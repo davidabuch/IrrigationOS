@@ -14,14 +14,14 @@ def test_manifest_is_valid() -> None:
     manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["domain"] == "irrigationos"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.0.18"
+    assert manifest["version"] == "1.0.19"
 
 
 def test_python_project_version_matches_manifest() -> None:
     with (ROOT / "pyproject.toml").open("rb") as handle:
         pyproject = tomllib.load(handle)
     manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
-    assert pyproject["project"]["version"] == "1.0.18"
+    assert pyproject["project"]["version"] == "1.0.19"
     assert pyproject["project"]["version"] == manifest["version"]
 
 

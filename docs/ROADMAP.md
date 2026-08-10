@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.18
+- **Installable Home Assistant release:** v1.0.19
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** actual-vs-shadow reconciliation using v1.0.17 session evidence and v1.0.18 immutable shadow evaluations; live control remains deferred
+- **Next milestone:** replay and control-readiness evidence using preserved session, shadow, and reconciliation records; live control remains deferred
 
 ## Delivery model
 
@@ -39,7 +39,7 @@ Delivered:
 
 ## v1.0 Release Completion
 
-**Status: Stable v1.0.15 released; v1.0.16 health, v1.0.17 observation history, and v1.0.18 shadow evaluation milestones complete**
+**Status: Stable v1.0.15 released; v1.0.16 health, v1.0.17 observation history, and v1.0.18 shadow evaluation and v1.0.19 actual-vs-shadow reconciliation milestones complete**
 
 Completed domain layers:
 
@@ -289,3 +289,8 @@ Earlier drafts used v0.3.1 for live commissioning and v0.4.0 for an execution bo
 ## v1.0.18 — Shadow Evaluation Foundation
 
 Delivered immutable nightly and material-change shadow decision evidence with semantic deduplication while remaining observation-only.
+
+
+## v1.0.19 — Actual-vs-Shadow Reconciliation
+
+Delivered immutable observation-only comparison evidence between preserved shadow schedules and real watering sessions, including zone/runtime/timing agreement, skipped watering, unexpected watering, evidence completeness, and conservative confidence.
