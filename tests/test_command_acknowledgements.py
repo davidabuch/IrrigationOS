@@ -116,3 +116,62 @@ def test_required_identifiers_and_detail_codes_are_validated() -> None:
             accepted=True,
             detail_code=" ",
         )
+
+
+def test_persisted_record_round_trip_preserves_restart_fields() -> None:
+    pending = _pending()
+    restored = command_acknowledgements.CommandAcknowledgementRecord.from_dict(
+        pending.to_dict()
+    )
+    assert restored == pending
+
+
+def test_restart_reconciliation_restores_unexpired_waiting_window() -> None:
+    pending = _pending()
+    restored, timeouts = command_acknowledgements.reconcile_acknowledgement_history(
+        (pending,), now=pending.deadline_at_utc
+    )
+    assert restored == {pending.command_id: pending}
+    assert timeouts == ()
+
+
+def test_restart_reconciliation_fails_expired_window_closed() -> None:
+    pending = _pending()
+    restored, timeouts = command_acknowledgements.reconcile_acknowledgement_history(
+        (pending,), now=pending.deadline_at_utc + timedelta(microseconds=1)
+    )
+    assert restored == {}
+    assert len(timeouts) == 1
+    assert (
+        timeouts[0].state
+        is command_acknowledgements.CommandAcknowledgementState.TIMED_OUT
+    )
+
+
+def test_restart_reconciliation_uses_latest_terminal_evidence() -> None:
+    pending = _pending()
+    terminal = command_acknowledgements.resolve_acknowledgement(
+        pending,
+        observed_at=pending.recorded_at_utc + timedelta(seconds=2),
+        accepted=True,
+        detail_code="provider_accepted",
+    )
+    restored, timeouts = command_acknowledgements.reconcile_acknowledgement_history(
+        (pending, terminal), now=pending.deadline_at_utc + timedelta(minutes=1)
+    )
+    assert restored == {}
+    assert timeouts == ()
+
+
+
+def test_persisted_json_line_parser_restores_records() -> None:
+    pending = _pending()
+    records = command_acknowledgements.parse_acknowledgement_json_lines(
+        (command_acknowledgements.serialize_acknowledgement_record(pending),)
+    )
+    assert records == (pending,)
+
+
+def test_persisted_json_line_parser_rejects_malformed_evidence() -> None:
+    with pytest.raises(ValueError, match="acknowledgement_evidence_invalid"):
+        command_acknowledgements.parse_acknowledgement_json_lines(("{not-json}",))

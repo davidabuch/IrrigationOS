@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 
 from .models import CommandAcknowledgementRecord, CommandAcknowledgementState
@@ -99,3 +101,51 @@ def evaluate_acknowledgement_timeout(
         deadline_at_utc=pending.deadline_at_utc,
         detail_code="acknowledgement_deadline_exceeded",
     )
+
+
+def serialize_acknowledgement_record(record: CommandAcknowledgementRecord) -> str:
+    """Serialize immutable acknowledgement evidence deterministically."""
+
+    return json.dumps(record.to_dict(), sort_keys=True, separators=(",", ":"))
+
+
+def parse_acknowledgement_json_lines(
+    lines: Iterable[str],
+) -> tuple[CommandAcknowledgementRecord, ...]:
+    """Parse persisted acknowledgement evidence or reject the full history."""
+
+    records: list[CommandAcknowledgementRecord] = []
+    try:
+        for line in lines:
+            payload = json.loads(line)
+            if not isinstance(payload, dict):
+                raise ValueError("acknowledgement_record_not_object")
+            records.append(CommandAcknowledgementRecord.from_dict(payload))
+    except (KeyError, TypeError, ValueError) as err:
+        raise ValueError("acknowledgement_evidence_invalid") from err
+    return tuple(records)
+
+
+def reconcile_acknowledgement_history(
+    records: Iterable[CommandAcknowledgementRecord], *, now: datetime
+) -> tuple[
+    dict[str, CommandAcknowledgementRecord],
+    tuple[CommandAcknowledgementRecord, ...],
+]:
+    """Reconstruct pending windows and fail expired windows closed after restart."""
+
+    latest_by_command: dict[str, CommandAcknowledgementRecord] = {}
+    for record in records:
+        latest_by_command[record.command_id] = record
+
+    pending: dict[str, CommandAcknowledgementRecord] = {}
+    timeout_transitions: list[CommandAcknowledgementRecord] = []
+    for command_id, record in latest_by_command.items():
+        if record.state is not CommandAcknowledgementState.WAITING:
+            continue
+        reconciled = evaluate_acknowledgement_timeout(record, now=now)
+        if reconciled is record:
+            pending[command_id] = record
+        else:
+            timeout_transitions.append(reconciled)
+    return pending, tuple(timeout_transitions)

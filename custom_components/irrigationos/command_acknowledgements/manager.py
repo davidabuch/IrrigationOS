@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -11,7 +10,10 @@ from homeassistant.core import HomeAssistant
 from .engine import (
     begin_acknowledgement_wait,
     evaluate_acknowledgement_timeout,
+    parse_acknowledgement_json_lines,
+    reconcile_acknowledgement_history,
     resolve_acknowledgement,
+    serialize_acknowledgement_record,
 )
 from .models import CommandAcknowledgementRecord, CommandAcknowledgementState
 
@@ -29,7 +31,31 @@ class CommandAcknowledgementManager:
         self.timeout_count = 0
         self.last_record: CommandAcknowledgementRecord | None = None
         self.last_error: str | None = None
+        self.restart_reconciliation_completed = False
+        self.restored_pending_count = 0
+        self.restart_timeout_count = 0
         self._last_cleanup_date: date | None = None
+
+    async def async_initialize(self, *, now: datetime) -> None:
+        """Replay persisted evidence and reconstruct acknowledgement state safely."""
+
+        records = await self._hass.async_add_executor_job(self._load_records)
+        self._pending.clear()
+        self.restored_pending_count = 0
+        self.restart_timeout_count = 0
+        self.restart_reconciliation_completed = False
+        if records is None:
+            return
+        pending, timeout_transitions = reconcile_acknowledgement_history(
+            records, now=now
+        )
+        self._pending.update(pending)
+        self.restored_pending_count = len(pending)
+        for record in timeout_transitions:
+            await self._async_record(record)
+            self.timeout_count += 1
+            self.restart_timeout_count += 1
+        self.restart_reconciliation_completed = True
 
     async def async_begin_synthetic_tracking(
         self, *, command_id: str, dispatched_at: datetime
@@ -85,6 +111,21 @@ class CommandAcknowledgementManager:
             self.event_count += 1
             self.last_record = record
 
+    def _load_records(self) -> tuple[CommandAcknowledgementRecord, ...] | None:
+        """Load chronological acknowledgement evidence; malformed data fails closed."""
+
+        records: list[CommandAcknowledgementRecord] = []
+        try:
+            pattern = "irrigationos_command_acknowledgements_????-??-??.jsonl"
+            for path in sorted(self._root.glob(pattern)):
+                with path.open("r", encoding="utf-8") as handle:
+                    records.extend(parse_acknowledgement_json_lines(handle))
+            self.last_error = None
+            return tuple(records)
+        except (OSError, ValueError):
+            self.last_error = "command_acknowledgement_reconciliation_failed"
+            return None
+
     def _write_record(self, record: CommandAcknowledgementRecord) -> bool:
         try:
             self._root.mkdir(parents=True, exist_ok=True)
@@ -94,12 +135,7 @@ class CommandAcknowledgementManager:
                 f"irrigationos_command_acknowledgements_{local_date.isoformat()}.jsonl"
             )
             with path.open("a", encoding="utf-8") as handle:
-                handle.write(
-                    json.dumps(
-                        record.to_dict(), sort_keys=True, separators=(",", ":")
-                    )
-                    + "\n"
-                )
+                handle.write(serialize_acknowledgement_record(record) + "\n")
             self.last_error = None
             return True
         except (OSError, TypeError, ValueError):
@@ -135,6 +171,8 @@ class CommandAcknowledgementManager:
             ),
             "synthetic_only": True,
             "dispatch_capability": False,
-            "restart_reconciliation": False,
+            "restart_reconciliation": self.restart_reconciliation_completed,
+            "restored_pending_count": self.restored_pending_count,
+            "restart_timeout_count": self.restart_timeout_count,
             "last_error": self.last_error,
         }
