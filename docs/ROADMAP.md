@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.17
+- **Installable Home Assistant release:** v1.0.18
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** control-readiness observation using v1.0.17 session evidence; HACS/public-release gates remain deferred until explicitly scheduled
+- **Next milestone:** actual-vs-shadow reconciliation using v1.0.17 session evidence and v1.0.18 immutable shadow evaluations; live control remains deferred
 
 ## Delivery model
 
@@ -39,7 +39,7 @@ Delivered:
 
 ## v1.0 Release Completion
 
-**Status: Stable v1.0.15 released; v1.0.16 health and v1.0.17 observation-history milestones complete**
+**Status: Stable v1.0.15 released; v1.0.16 health, v1.0.17 observation history, and v1.0.18 shadow evaluation milestones complete**
 
 Completed domain layers:
 
@@ -284,3 +284,8 @@ All new adapters must implement the canonical controller contract without changi
 ## Release sequencing correction
 
 Earlier drafts used v0.3.1 for live commissioning and v0.4.0 for an execution boundary. The shipped v0.4.0 release was the first live, read-only installation. Execution is intentionally deferred until the canonical model, reliable observation history, ownership, and safety gates are complete.
+
+
+## v1.0.18 — Shadow Evaluation Foundation
+
+Delivered immutable nightly and material-change shadow decision evidence with semantic deduplication while remaining observation-only.

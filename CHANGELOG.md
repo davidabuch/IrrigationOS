@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.18 — Shadow Evaluation Foundation
+
+- Added immutable point-in-time shadow evaluation evidence.
+- Added authoritative nightly evaluation at 8:00 PM Home Assistant local time.
+- Added material-change reevaluation with semantic decision deduplication.
+- Added 30-day local JSONL shadow evidence and safe diagnostics.
+- Preserved the observation-only, non-actuating commissioning boundary.
+
 ## 1.0.17 - Observation History and Watering Session Recorder
 
 - Add immutable provider-neutral watering-session evidence with canonical controller, area, and permanent-slot identity.
