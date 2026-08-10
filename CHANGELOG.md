@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.22 — Safety Manager and Execution Authorization Foundation
+
+- Added deterministic fail-closed execution authorization safety gates.
+- Added health, freshness, controller availability, ownership, active-watering, pipeline, and runtime-limit prerequisites.
+- Added restart-safe semantics that never persist positive authorization.
+- Added an operator-facing Home Assistant execution-authorization sensor and diagnostics.
+- Preserved observation/simulation-only operation; live control remains hard-coded disabled.
+
 ## 1.0.21 — Replay and Control-Readiness Evidence
 
 - Added deterministic replay of retained actual-vs-shadow reconciliation evidence.

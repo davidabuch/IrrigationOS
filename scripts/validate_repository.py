@@ -75,6 +75,9 @@ REQUIRED_FILES = (
     "docs/V1_0_21_REPLAY_CONTROL_READINESS_EVIDENCE.md",
     "custom_components/irrigationos/replay_readiness/engine.py",
     "custom_components/irrigationos/replay_readiness/models.py",
+    "docs/V1_0_22_SAFETY_MANAGER_EXECUTION_AUTHORIZATION.md",
+    "custom_components/irrigationos/execution_authorization/engine.py",
+    "custom_components/irrigationos/execution_authorization/models.py",
     "custom_components/irrigationos/commissioning_report/engine.py",
     "custom_components/irrigationos/commissioning_report/models.py",
     "docs/V1_0_PUBLIC_API_CONTRACT.json",
@@ -112,8 +115,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.21":
-        raise SystemExit("manifest.json version must be 1.0.21")
+    if manifest.get("version") != "1.0.22":
+        raise SystemExit("manifest.json version must be 1.0.22")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")

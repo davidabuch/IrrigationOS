@@ -52,6 +52,7 @@ async def async_setup_entry(
         IrrigationOSWeatherSourceSensor(coordinator),
         IrrigationOSCommissioningSummarySensor(coordinator),
         IrrigationOSControlReadinessSensor(coordinator),
+        IrrigationOSExecutionAuthorizationSensor(coordinator),
         *(
             IrrigationOSPipelineStageStatusSensor(coordinator, stage)
             for stage in PipelineStage
@@ -154,6 +155,33 @@ class IrrigationOSControlReadinessSensor(IrrigationOSEntity, SensorEntity):
         """Return replay metrics and explicit promotion criteria."""
 
         return self.coordinator.replay_readiness.summary.to_dict()
+
+
+class IrrigationOSExecutionAuthorizationSensor(IrrigationOSEntity, SensorEntity):
+    """Expose fail-closed execution authorization safety evidence."""
+
+    _attr_name = "Execution authorization"
+    _attr_unique_id = "irrigationos_execution_authorization"
+    entity_id = "sensor.irrigationos_execution_authorization"
+    _attr_icon = "mdi:shield-lock-outline"
+
+    @property
+    def available(self) -> bool:
+        """Remain available while safety prerequisites are incomplete."""
+
+        return True
+
+    @property
+    def native_value(self) -> str:
+        """Return the current fail-closed authorization state."""
+
+        return self.coordinator.execution_authorization.summary.status.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return deterministic gates and blockers without enabling control."""
+
+        return self.coordinator.execution_authorization.summary.to_dict()
 
 
 class IrrigationOSCurrentWateringSessionSensor(IrrigationOSEntity, SensorEntity):
