@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.19
+- **Installable Home Assistant release:** v1.0.20
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** replay and control-readiness evidence using preserved session, shadow, and reconciliation records; live control remains deferred
+- **Next milestone:** extended replay and explicit promotion criteria using accumulated commissioning evidence; live control remains deferred
 
 ## Delivery model
 
@@ -294,3 +294,7 @@ Delivered immutable nightly and material-change shadow decision evidence with se
 ## v1.0.19 — Actual-vs-Shadow Reconciliation
 
 Delivered immutable observation-only comparison evidence between preserved shadow schedules and real watering sessions, including zone/runtime/timing agreement, skipped watering, unexpected watering, evidence completeness, and conservative confidence.
+
+## v1.0.20 — Shadow Reporting and Commissioning Summary
+
+Delivered aggregate operator-facing reporting across retained shadow and reconciliation evidence. The summary reports agreement, disagreements, confidence, timing/runtime deltas, skipped/unexpected watering, evidence coverage, and a review state. It deliberately does not authorize or automatically promote Live mode.

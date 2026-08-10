@@ -20,6 +20,7 @@ from homeassistant.util import dt as dt_util
 
 from .actual_vs_shadow.manager import ActualVsShadowReconciliationManager
 from .adapters.factory import DEFAULT_PROVIDER_FACTORY, ControllerProviderFactory
+from .commissioning_report.manager import CommissioningReportManager
 from .const import (
     CONF_API_KEY,
     CONF_AREA_PROFILES,
@@ -135,6 +136,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.actual_vs_shadow = ActualVsShadowReconciliationManager(
             hass, entry.entry_id, log_root, local_timezone
         )
+        self.commissioning_report = CommissioningReportManager()
         self._shadow_nightly_unsubscribe: Callable[[], None] | None = None
         self._force_next_shadow_reason: ShadowEvaluationReason | None = None
         self._next_observation_context: tuple[
@@ -176,6 +178,8 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             now=datetime.now(UTC),
             observation_quality=None,
         )
+        reconciliation_records = await self.actual_vs_shadow.async_load_records()
+        self.commissioning_report.initialize(shadow_records, reconciliation_records)
 
     async def async_start_health_monitoring(self) -> None:
         """Start non-network health reevaluation after realtime setup completes."""
@@ -281,11 +285,15 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             completed_session_count=len(self.observation_history.completed_sessions),
             force_reason=force_shadow_reason,
         )
-        await self.actual_vs_shadow.async_consider(
+        reconciliation_records = await self.actual_vs_shadow.async_consider(
             shadow_record=shadow_record,
             completed_sessions=self.observation_history.completed_sessions,
             now=self.last_successful_refresh,
             observation_quality=snapshot.observation.quality,
+        )
+        self.commissioning_report.consider(
+            shadow_record=shadow_record,
+            reconciliation_records=reconciliation_records,
         )
         self.refresh_count += 1
         self._polling_healthy = True
