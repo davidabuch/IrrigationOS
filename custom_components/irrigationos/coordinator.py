@@ -18,6 +18,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
+from .actual_vs_shadow.manager import ActualVsShadowReconciliationManager
 from .adapters.factory import DEFAULT_PROVIDER_FACTORY, ControllerProviderFactory
 from .const import (
     CONF_API_KEY,
@@ -131,6 +132,9 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.shadow_evaluations = ShadowEvaluationManager(
             hass, entry.entry_id, log_root, local_timezone
         )
+        self.actual_vs_shadow = ActualVsShadowReconciliationManager(
+            hass, entry.entry_id, log_root, local_timezone
+        )
         self._shadow_nightly_unsubscribe: Callable[[], None] | None = None
         self._force_next_shadow_reason: ShadowEvaluationReason | None = None
         self._next_observation_context: tuple[
@@ -165,6 +169,13 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
 
         await self.observation_history.async_initialize()
         await self.shadow_evaluations.async_initialize()
+        shadow_records = await self.shadow_evaluations.async_load_records()
+        await self.actual_vs_shadow.async_initialize(
+            shadow_records,
+            self.observation_history.completed_sessions,
+            now=datetime.now(UTC),
+            observation_quality=None,
+        )
 
     async def async_start_health_monitoring(self) -> None:
         """Start non-network health reevaluation after realtime setup completes."""
@@ -265,10 +276,16 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
 
         force_shadow_reason = self._force_next_shadow_reason
         self._force_next_shadow_reason = None
-        await self.shadow_evaluations.async_consider(
+        shadow_record = await self.shadow_evaluations.async_consider(
             self.pipeline_evaluation,
             completed_session_count=len(self.observation_history.completed_sessions),
             force_reason=force_shadow_reason,
+        )
+        await self.actual_vs_shadow.async_consider(
+            shadow_record=shadow_record,
+            completed_sessions=self.observation_history.completed_sessions,
+            now=self.last_successful_refresh,
+            observation_quality=snapshot.observation.quality,
         )
         self.refresh_count += 1
         self._polling_healthy = True

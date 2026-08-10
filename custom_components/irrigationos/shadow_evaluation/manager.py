@@ -207,6 +207,27 @@ class ShadowEvaluationManager:
             if file_date < oldest:
                 path.unlink()
 
+    async def async_load_records(self) -> tuple[dict[str, Any], ...]:
+        """Load preserved immutable shadow records in chronological order."""
+
+        return await self._hass.async_add_executor_job(self._load_records)
+
+    def _load_records(self) -> tuple[dict[str, Any], ...]:
+        records: list[dict[str, Any]] = []
+        try:
+            for path in sorted(self._root.glob("irrigationos_shadow_????-??-??.jsonl")):
+                with path.open("r", encoding="utf-8") as handle:
+                    for line in handle:
+                        if not line.strip():
+                            continue
+                        value = json.loads(line)
+                        if isinstance(value, dict):
+                            records.append(value)
+        except (OSError, ValueError, json.JSONDecodeError):
+            self.last_error = "shadow_log_read_failed"
+        records.sort(key=lambda item: str(item.get("timestamp_utc", "")))
+        return tuple(records)
+
     async def _async_persist_state(self) -> None:
         try:
             await self._store.async_save(

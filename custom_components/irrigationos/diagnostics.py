@@ -125,5 +125,6 @@ async def async_get_config_entry_diagnostics(
             ),
             "operational_health": entry.runtime_data.operational_health_diagnostics(),
             "shadow_evaluations": entry.runtime_data.shadow_evaluations.diagnostics(),
+            "actual_vs_shadow": entry.runtime_data.actual_vs_shadow.diagnostics(),
         },
     }
