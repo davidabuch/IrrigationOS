@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.17 - Observation History and Watering Session Recorder
+
+- Add immutable provider-neutral watering-session evidence with canonical controller, area, and permanent-slot identity.
+- Reconcile independent sessions from canonical polling and realtime-triggered snapshots without duplicate creation or false closure during partial/offline observations.
+- Persist active and recent completed sessions with Home Assistant Store and conservatively reconcile them after restart.
+- Add a separate 30-day local-day JSONL watering-session evidence stream without vendor-native identifiers or credentials.
+- Add compact current-session, last-completed-session, and sessions-today Home Assistant sensors plus safe diagnostics summaries.
+- Keep all naturally observed watering attribution at `external_unknown` because the current adapter exposes no explicit schedule/manual ownership evidence.
+- Preserve the Observation-and-simulation-only boundary; no controller command or scheduling behavior is added.
+
 ## 1.0.16 - Health Monitoring and Incident Diagnostics
 
 - Add aggregate `INITIALIZING`, `HEALTHY`, `DEGRADED`, and `UNHEALTHY` operational health with a six-minute startup/reload grace period.

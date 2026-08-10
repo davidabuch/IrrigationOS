@@ -55,3 +55,7 @@ Live command delivery, Shadow commissioning, ownership/command attribution, and 
 ## v1.0.16 health observability
 
 v1.0.16 is a backward-compatible observability milestone adding aggregate health, persistent incident history, safe daily operational logs, and Home Assistant transition events. It does not expand the commissioned operating boundary beyond Observation and non-actuating Simulation.
+
+## v1.0.17 observation history
+
+v1.0.17 is a backward-compatible observation milestone adding restart-safe canonical watering sessions, conservative attribution, safe session diagnostics/entities, and a separate 30-day evidence log. It does not commission live control or change recommendation, planning, scheduling, execution-simulation, or runtime-monitoring decisions.

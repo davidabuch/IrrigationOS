@@ -47,6 +47,11 @@ from .health import (
     evaluate_health,
 )
 from .landscape import LandscapeProfile, build_landscape_profile
+from .observation_history import (
+    SessionObservationContext,
+    WateringObservationSource,
+)
+from .observation_history.manager import WateringSessionHistoryManager
 from .operational_log import DailyOperationalLog
 from .pipeline import PipelineEvaluation, build_pipeline_evaluation
 from .scientific_inputs import build_scientific_input_snapshot
@@ -112,9 +117,18 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self._persistence_healthy = True
         self._operational_log_healthy = True
         self._polling_healthy = False
-        self.operational_log = DailyOperationalLog(
-            Path(hass.config.path("irrigationos_logs")), ZoneInfo(hass.config.time_zone)
+        log_root = Path(hass.config.path("irrigationos_logs"))
+        local_timezone = ZoneInfo(hass.config.time_zone)
+        self.operational_log = DailyOperationalLog(log_root, local_timezone)
+        self.observation_history = WateringSessionHistoryManager(
+            hass,
+            entry.entry_id,
+            log_root,
+            local_timezone,
         )
+        self._next_observation_context: tuple[
+            WateringObservationSource, str | None, str | None
+        ] | None = None
 
         self._health_tracking_since = self._started_at
         self._incident_latched = False
@@ -139,6 +153,11 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             self._restore_health_state(stored)
         await self._write_operational_event("integration_starting")
 
+    async def async_initialize_observation_history(self) -> None:
+        """Restore active watering sessions before the first canonical refresh."""
+
+        await self.observation_history.async_initialize()
+
     async def async_start_health_monitoring(self) -> None:
         """Start non-network health reevaluation after realtime setup completes."""
 
@@ -160,6 +179,8 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             self._health_tick_unsubscribe = None
 
     async def _async_update_data(self) -> ControllerRegistrySnapshot:
+        observation_hint = self._next_observation_context
+        self._next_observation_context = None
         account_id = str(self.entry.data[CONF_PERSON_ID])
         try:
             snapshot = await self.adapter.async_get_snapshot(account_id)
@@ -184,6 +205,20 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             overrides = {}
         self.landscape = build_landscape_profile(snapshot, _string_key_mapping(overrides))
         self.last_successful_refresh = dt_util.utcnow()
+        source, event_type, event_subtype = observation_hint or (
+            WateringObservationSource.POLLING,
+            None,
+            None,
+        )
+        await self.observation_history.async_reconcile(
+            snapshot,
+            SessionObservationContext(
+                observed_at=snapshot.observation.observed_at.astimezone(UTC),
+                source=source,
+                realtime_event_type=event_type,
+                realtime_event_subtype=event_subtype,
+            ),
+        )
         weather_entities = tuple(
             (entity_id, state.state, state.attributes)
             for entity_id in self.hass.states.async_entity_ids("weather")
@@ -220,6 +255,19 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         await self.async_update_health("refresh_success", notify_listeners=False)
         await self._write_operational_event("refresh_success")
         return snapshot
+
+    def mark_next_refresh_as_realtime(
+        self,
+        event_type: str,
+        event_subtype: str,
+    ) -> None:
+        """Attach safe normalized realtime metadata to the next canonical refresh."""
+
+        self._next_observation_context = (
+            WateringObservationSource.REALTIME_REFRESH,
+            event_type,
+            event_subtype,
+        )
 
     async def _record_refresh_failure(self, category: str) -> None:
         self._polling_healthy = False
@@ -332,6 +380,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             "assessment": self._health_assessment.as_dict(),
             "incident": self.health_incident_diagnostics(),
             "daily_log": self.operational_log.diagnostics(),
+            "observation_history": self.observation_history.diagnostics(),
         }
 
     async def _async_health_tick(self, now: datetime) -> None:

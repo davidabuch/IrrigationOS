@@ -19,6 +19,7 @@ from .entity import (
     IrrigationOSEntity,
     IrrigationOSLandscapeAreaEntity,
 )
+from .observation_history.models import safe_session_summary
 from .pipeline import PIPELINE_ALGORITHM_VERSION, PipelineStage
 from .reconciliation import EntityInventory, controller_first
 
@@ -34,6 +35,9 @@ async def async_setup_entry(
     entities: list[SensorEntity] = [
         IrrigationOSStatusSensor(coordinator),
         IrrigationOSHealthSensor(coordinator),
+        IrrigationOSCurrentWateringSessionSensor(coordinator),
+        IrrigationOSLastCompletedWateringSessionSensor(coordinator),
+        IrrigationOSWateringSessionsTodaySensor(coordinator),
         IrrigationOSProviderSensor(coordinator),
         IrrigationOSControllerCountSensor(coordinator),
         IrrigationOSAreaCountSensor(coordinator),
@@ -94,6 +98,98 @@ def _has_landscape_profile(
     """Return whether the current landscape contains the canonical area profile."""
 
     return any(profile.area_id == area_id for profile in coordinator.landscape.areas)
+
+
+class IrrigationOSCurrentWateringSessionSensor(IrrigationOSEntity, SensorEntity):
+    """Expose a compact summary of currently observed watering sessions."""
+
+    _attr_name = "Current watering session"
+    _attr_unique_id = "irrigationos_current_watering_session"
+    entity_id = "sensor.irrigationos_current_watering_session"
+    _attr_icon = "mdi:sprinkler-variant"
+
+    @property
+    def available(self) -> bool:
+        """Remain available through temporary controller observation gaps."""
+
+        return True
+
+    @property
+    def native_value(self) -> str:
+        """Return whether any canonical slot is currently observed watering."""
+
+        return (
+            "watering"
+            if self.coordinator.observation_history.active_sessions
+            else "idle"
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return vendor-ID-free active-session summaries."""
+
+        sessions = self.coordinator.observation_history.active_sessions
+        return {
+            "active_session_count": len(sessions),
+            "active_slots": [session.slot_number for session in sessions],
+            "sessions": [safe_session_summary(session) for session in sessions],
+        }
+
+
+class IrrigationOSLastCompletedWateringSessionSensor(
+    IrrigationOSEntity, SensorEntity
+):
+    """Expose the most recently completed observed watering session."""
+
+    _attr_name = "Last completed watering session"
+    _attr_unique_id = "irrigationos_last_completed_watering_session"
+    entity_id = "sensor.irrigationos_last_completed_watering_session"
+    _attr_icon = "mdi:history"
+
+    @property
+    def available(self) -> bool:
+        """Remain available when no completed session exists yet."""
+
+        return True
+
+    @property
+    def native_value(self) -> str:
+        """Return a compact completion state."""
+
+        return (
+            "completed"
+            if self.coordinator.observation_history.last_completed_session is not None
+            else "none"
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the latest safe completed-session summary."""
+
+        session = self.coordinator.observation_history.last_completed_session
+        return {} if session is None else safe_session_summary(session)
+
+
+class IrrigationOSWateringSessionsTodaySensor(IrrigationOSEntity, SensorEntity):
+    """Count sessions observed during the current Home Assistant local day."""
+
+    _attr_name = "Watering sessions today"
+    _attr_unique_id = "irrigationos_watering_sessions_today"
+    entity_id = "sensor.irrigationos_watering_sessions_today"
+    _attr_icon = "mdi:counter"
+    _attr_native_unit_of_measurement = "sessions"
+
+    @property
+    def available(self) -> bool:
+        """Remain available independently of controller connectivity."""
+
+        return True
+
+    @property
+    def native_value(self) -> int:
+        """Return the local-day observed-session count."""
+
+        return self.coordinator.observation_history.sessions_today()
 
 class IrrigationOSHealthSensor(IrrigationOSEntity, SensorEntity):
     """Expose aggregate operator-facing health and incident context."""

@@ -160,7 +160,7 @@ def test_daily_operational_log_uses_local_day_and_safe_jsonl(tmp_path: Path) -> 
     assert recorder.record(
         recorded_at,
         {
-            "integration_version": "1.0.16",
+            "integration_version": "1.0.17",
             "event_type": "refresh_success",
             "health_state": "HEALTHY",
             "reason_codes": [],

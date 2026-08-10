@@ -25,6 +25,10 @@ REQUIRED_FILES = (
     "custom_components/irrigationos/button.py",
     "custom_components/irrigationos/health.py",
     "custom_components/irrigationos/operational_log.py",
+    "custom_components/irrigationos/observation_history/models.py",
+    "custom_components/irrigationos/observation_history/reconciliation.py",
+    "custom_components/irrigationos/observation_history/manager.py",
+    "custom_components/irrigationos/observation_history/session_log.py",
     "custom_components/irrigationos/strings.json",
     "custom_components/irrigationos/translations/en.json",
     "docs/IRRIGATIONOS_ARCHITECTURE_V1.md",
@@ -64,6 +68,7 @@ REQUIRED_FILES = (
     "docs/V1_0_14_ARCHITECTURE_RELEASE_DOCUMENTATION.md",
     "docs/V1_0_15_STABLE_RELEASE_CANDIDATE.md",
     "docs/V1_0_16_HEALTH_MONITORING.md",
+    "docs/V1_0_17_OBSERVATION_HISTORY.md",
     "docs/V1_0_PUBLIC_API_CONTRACT.json",
     "hacs.json",
     "pyproject.toml",
@@ -99,8 +104,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.16":
-        raise SystemExit("manifest.json version must be 1.0.16")
+    if manifest.get("version") != "1.0.17":
+        raise SystemExit("manifest.json version must be 1.0.17")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")
