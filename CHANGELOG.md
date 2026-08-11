@@ -1,3 +1,11 @@
+## 1.0.28 — Safety Preemption Path
+
+- Added deterministic fail-closed safety preemption evaluation for future command lifecycles.
+- Added a terminal synthetic acknowledgement `preempted` state and immutable 30-day preemption evidence.
+- Added privacy-safe preemption diagnostics while preserving zero controller dispatch capability.
+- Marked safety preemption as the fourth implemented Live-mode safeguard.
+- Preserved disabled Live-mode commissioning and authorization; sunrise hard stop remains unimplemented.
+
 ## 1.0.27 — Restart-Safe Command Reconciliation
 
 - Replays immutable acknowledgement evidence during Home Assistant startup.

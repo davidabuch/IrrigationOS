@@ -62,6 +62,7 @@ from .operational_log import DailyOperationalLog
 from .ownership_commissioning.manager import OwnershipCommissioningManager
 from .pipeline import PipelineEvaluation, build_pipeline_evaluation
 from .replay_readiness.manager import ReplayReadinessManager
+from .safety_preemption.manager import SafetyPreemptionManager
 from .scientific_inputs import build_scientific_input_snapshot
 from .shadow_evaluation import ShadowEvaluationReason
 from .shadow_evaluation.manager import ShadowEvaluationManager
@@ -147,6 +148,9 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.command_receipts = CommandReceiptManager(hass, log_root)
         self.execution_authorization = ExecutionAuthorizationManager()
         self.live_mode_safety = LiveModeSafetyManager()
+        self.safety_preemption = SafetyPreemptionManager(
+            hass, log_root, self.command_acknowledgements
+        )
         self.ownership_commissioning = OwnershipCommissioningManager(hass, entry.entry_id)
         self.replay_readiness = ReplayReadinessManager()
         self._shadow_nightly_unsubscribe: Callable[[], None] | None = None

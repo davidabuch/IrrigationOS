@@ -103,6 +103,34 @@ def evaluate_acknowledgement_timeout(
     )
 
 
+def preempt_acknowledgement(
+    pending: CommandAcknowledgementRecord,
+    *,
+    observed_at: datetime,
+    detail_code: str,
+) -> CommandAcknowledgementRecord:
+    """Terminate a waiting synthetic acknowledgement lifecycle for safety."""
+
+    if pending.state is not CommandAcknowledgementState.WAITING:
+        raise ValueError("acknowledgement_already_terminal")
+    detail_code = detail_code.strip()
+    if not detail_code:
+        raise ValueError("detail_code_required")
+    recorded_at = observed_at.astimezone(UTC)
+    return CommandAcknowledgementRecord(
+        event_id=_event_id(
+            command_id=pending.command_id,
+            state=CommandAcknowledgementState.PREEMPTED,
+            recorded_at=recorded_at,
+        ),
+        command_id=pending.command_id,
+        state=CommandAcknowledgementState.PREEMPTED,
+        recorded_at_utc=recorded_at,
+        deadline_at_utc=pending.deadline_at_utc,
+        detail_code=detail_code,
+    )
+
+
 def serialize_acknowledgement_record(record: CommandAcknowledgementRecord) -> str:
     """Serialize immutable acknowledgement evidence deterministically."""
 

@@ -85,6 +85,9 @@ REQUIRED_FILES = (
     "docs/V1_0_25_COMMAND_ATTRIBUTION_RECEIPTS.md",
     "docs/V1_0_26_COMMAND_ACKNOWLEDGEMENT_TIMEOUTS.md",
     "docs/V1_0_27_RESTART_SAFE_COMMAND_RECONCILIATION.md",
+    "docs/V1_0_28_SAFETY_PREEMPTION_PATH.md",
+    "custom_components/irrigationos/safety_preemption/engine.py",
+    "custom_components/irrigationos/safety_preemption/models.py",
     "custom_components/irrigationos/command_acknowledgements/engine.py",
     "custom_components/irrigationos/command_acknowledgements/models.py",
     "custom_components/irrigationos/command_receipts/engine.py",
@@ -128,8 +131,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.27":
-        raise SystemExit("manifest.json version must be 1.0.27")
+    if manifest.get("version") != "1.0.28":
+        raise SystemExit("manifest.json version must be 1.0.28")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")
