@@ -86,6 +86,9 @@ REQUIRED_FILES = (
     "docs/V1_0_26_COMMAND_ACKNOWLEDGEMENT_TIMEOUTS.md",
     "docs/V1_0_27_RESTART_SAFE_COMMAND_RECONCILIATION.md",
     "docs/V1_0_28_SAFETY_PREEMPTION_PATH.md",
+    "docs/V1_0_29_SUNRISE_HARD_STOP.md",
+    "custom_components/irrigationos/sunrise_hard_stop/engine.py",
+    "custom_components/irrigationos/sunrise_hard_stop/models.py",
     "custom_components/irrigationos/safety_preemption/engine.py",
     "custom_components/irrigationos/safety_preemption/models.py",
     "custom_components/irrigationos/command_acknowledgements/engine.py",
@@ -131,8 +134,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.28":
-        raise SystemExit("manifest.json version must be 1.0.28")
+    if manifest.get("version") != "1.0.29":
+        raise SystemExit("manifest.json version must be 1.0.29")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")

@@ -66,6 +66,7 @@ from .safety_preemption.manager import SafetyPreemptionManager
 from .scientific_inputs import build_scientific_input_snapshot
 from .shadow_evaluation import ShadowEvaluationReason
 from .shadow_evaluation.manager import ShadowEvaluationManager
+from .sunrise_hard_stop.manager import SunriseHardStopManager
 
 if TYPE_CHECKING:
     from .realtime import RealtimeObservationManager
@@ -149,6 +150,9 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.execution_authorization = ExecutionAuthorizationManager()
         self.live_mode_safety = LiveModeSafetyManager()
         self.safety_preemption = SafetyPreemptionManager(
+            hass, log_root, self.command_acknowledgements
+        )
+        self.sunrise_hard_stop = SunriseHardStopManager(
             hass, log_root, self.command_acknowledgements
         )
         self.ownership_commissioning = OwnershipCommissioningManager(hass, entry.entry_id)

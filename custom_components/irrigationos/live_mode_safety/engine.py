@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .models import LiveModeSafetyStatus, LiveModeSafetySummary
 
-LIVE_MODE_SAFETY_ARCHITECTURE_REVISION = 5
+LIVE_MODE_SAFETY_ARCHITECTURE_REVISION = 6
 
 # These safeguards deliberately remain false until separately implemented and validated.
 _REQUIRED_SAFEGUARDS = {
@@ -12,7 +12,7 @@ _REQUIRED_SAFEGUARDS = {
     "acknowledgement_and_timeout_handling": True,
     "restart_safe_command_reconciliation": True,
     "safety_preemption_path": True,
-    "sunrise_hard_stop": False,
+    "sunrise_hard_stop": True,
     "manual_override_preservation": False,
 }
 

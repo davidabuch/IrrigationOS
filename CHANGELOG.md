@@ -1,3 +1,11 @@
+## 1.0.29 — Sunrise Hard Stop
+
+- Added deterministic sunrise-boundary evaluation for future synthetic command lifecycles.
+- Added immutable 30-day sunrise hard-stop evidence with explicit non-dispatch semantics.
+- Added fail-closed synthetic acknowledgement preemption at or after the configured sunrise boundary.
+- Marked sunrise hard stop as the fifth implemented Live-mode safeguard.
+- Preserved disabled controller dispatch and Live-mode authorization; manual override preservation remains unimplemented.
+
 ## 1.0.28 — Safety Preemption Path
 
 - Added deterministic fail-closed safety preemption evaluation for future command lifecycles.
