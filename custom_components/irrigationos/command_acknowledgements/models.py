@@ -17,6 +17,7 @@ class CommandAcknowledgementState(StrEnum):
     ACKNOWLEDGED = "acknowledged"
     REJECTED = "rejected"
     TIMED_OUT = "timed_out"
+    PREEMPTED = "preempted"
 
 
 @dataclass(frozen=True, slots=True)

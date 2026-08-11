@@ -11,6 +11,7 @@ from .engine import (
     begin_acknowledgement_wait,
     evaluate_acknowledgement_timeout,
     parse_acknowledgement_json_lines,
+    preempt_acknowledgement,
     reconcile_acknowledgement_history,
     resolve_acknowledgement,
     serialize_acknowledgement_record,
@@ -57,6 +58,11 @@ class CommandAcknowledgementManager:
             self.restart_timeout_count += 1
         self.restart_reconciliation_completed = True
 
+    def is_pending(self, command_id: str) -> bool:
+        """Return whether a synthetic acknowledgement window is still active."""
+
+        return command_id in self._pending
+
     async def async_begin_synthetic_tracking(
         self, *, command_id: str, dispatched_at: datetime
     ) -> CommandAcknowledgementRecord:
@@ -92,6 +98,25 @@ class CommandAcknowledgementManager:
         self._pending.pop(command_id, None)
         if record.state is CommandAcknowledgementState.TIMED_OUT:
             self.timeout_count += 1
+        return record
+
+    async def async_preempt_synthetic(
+        self,
+        *,
+        command_id: str,
+        observed_at: datetime,
+        detail_code: str,
+    ) -> CommandAcknowledgementRecord:
+        """Terminate an outstanding synthetic acknowledgement window for safety."""
+
+        pending = self._pending.get(command_id)
+        if pending is None:
+            raise ValueError("pending_acknowledgement_not_found")
+        record = preempt_acknowledgement(
+            pending, observed_at=observed_at, detail_code=detail_code
+        )
+        await self._async_record(record)
+        self._pending.pop(command_id, None)
         return record
 
     async def async_evaluate_timeouts(self, *, now: datetime) -> None:
