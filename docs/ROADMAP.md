@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.32
+- **Installable Home Assistant release:** v1.0.33
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
-- **Current operating boundary:** Observation and simulation only
+- **Current operating boundary:** Observation and simulation commissioned; physical first-live transport exists but its release gate is hard-disabled
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** validate and design the minimal supervised first-live command-delivery boundary behind the v1.0.32 protocol; live control remains disabled by default
+- **Next milestone:** bind canonical slots to exact native Rachio targets and design the explicit supervised execution action; physical delivery remains hard-disabled by default
 
 ## Delivery model
 
@@ -349,3 +349,15 @@ Delivered deterministic synthetic acknowledgement, rejection, and timeout semant
 - Requires a deliberately open supervised commissioning window, healthy fresh observations, and no external watering.
 - Defines mandatory acceptance evidence for future start/stop acknowledgement, observed watering, runtime compliance, safety, and post-run reconciliation.
 - Can produce `first_live_trial_eligible` evidence only; command dispatch and Live authorization remain disabled.
+
+
+## v1.0.33 — First-Live Command Delivery Foundation
+
+**Status: Complete**
+
+- Adds the audited Rachio `zone/start` and `device/stop_water` physical transport primitives.
+- Retains the strict 120-second first-live runtime ceiling.
+- Keeps the release-level physical delivery gate hard-disabled.
+- Adds no HA service, button, scheduler callback, or coordinator execution entrypoint.
+- Keeps autonomous scheduling and all Live authorization flags false.
+- Defers native target binding, operator execution action, approval consumption, live acknowledgement, and post-run reconciliation to the next commissioning milestone.

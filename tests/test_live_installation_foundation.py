@@ -31,10 +31,18 @@ def test_config_flow_contains_review_and_reauthentication_steps() -> None:
     assert "async_update_reload_and_abort" in source
 
 
-def test_live_installation_remains_observation_only() -> None:
+def test_live_installation_remains_observation_only_outside_release_gated_transport() -> None:
+    source_root = ROOT / "custom_components/irrigationos"
+    allowed_transport = source_root / "first_live_delivery/rachio.py"
     source = "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (ROOT / "custom_components/irrigationos").rglob("*.py")
+        for path in source_root.rglob("*.py")
+        if path != allowed_transport
     )
     for endpoint in ("/zone/start", "/device/stop_water", "/device/rain_delay"):
         assert endpoint not in source
+
+    transport_source = allowed_transport.read_text(encoding="utf-8")
+    assert '"/zone/start"' in transport_source
+    assert '"/device/stop_water"' in transport_source
+    assert '"/device/rain_delay"' not in transport_source
