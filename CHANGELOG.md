@@ -1,3 +1,11 @@
+## 1.0.30 — Manual Override Preservation
+
+- Added deterministic fail-closed preservation of observed watering not confidently attributed to IrrigationOS.
+- Preserves manual watering, provider schedules, and ambiguous external watering instead of allowing a future IrrigationOS command lifecycle to displace them.
+- Added immutable 30-day preservation evidence and privacy-safe diagnostics with explicit non-dispatch semantics.
+- Marked manual override preservation as the sixth implemented Live-mode safeguard.
+- All six safeguards are now represented in code, but Live-mode commissioning, feature enablement, and authorization remain disabled pending integrated review.
+
 ## 1.0.29 — Sunrise Hard Stop
 
 - Added deterministic sunrise-boundary evaluation for future synthetic command lifecycles.

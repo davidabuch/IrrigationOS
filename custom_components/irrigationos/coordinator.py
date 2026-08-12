@@ -53,6 +53,7 @@ from .health import (
 )
 from .landscape import LandscapeProfile, build_landscape_profile
 from .live_mode_safety.manager import LiveModeSafetyManager
+from .manual_override_preservation.manager import ManualOverridePreservationManager
 from .observation_history import (
     SessionObservationContext,
     WateringObservationSource,
@@ -149,6 +150,9 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.command_receipts = CommandReceiptManager(hass, log_root)
         self.execution_authorization = ExecutionAuthorizationManager()
         self.live_mode_safety = LiveModeSafetyManager()
+        self.manual_override_preservation = ManualOverridePreservationManager(
+            hass, log_root, self.command_acknowledgements
+        )
         self.safety_preemption = SafetyPreemptionManager(
             hass, log_root, self.command_acknowledgements
         )
