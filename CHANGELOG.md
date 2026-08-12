@@ -1,3 +1,11 @@
+## 1.0.31 — Integrated Live Safety Review & Commissioning Validation
+
+- Added integrated validation across all six pre-Live safeguards.
+- Added deterministic review evidence that immediately blocks when safety prerequisites degrade.
+- Added operator-facing integrated safety-review diagnostics and sensor evidence.
+- Proved that complete safeguards can become review-eligible without automatic commissioning or authorization.
+- Preserved disabled controller dispatch and all three hard-false Live-control flags.
+
 ## 1.0.30 — Manual Override Preservation
 
 - Added deterministic fail-closed preservation of observed watering not confidently attributed to IrrigationOS.
