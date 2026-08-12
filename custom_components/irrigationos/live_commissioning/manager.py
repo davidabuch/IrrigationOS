@@ -28,6 +28,7 @@ class LiveCommissioningManager:
     def approve_trial(
         self,
         *,
+        controller_id: str,
         controller_slot: int,
         area_slot: int,
         requested_runtime_seconds: int,
@@ -39,6 +40,7 @@ class LiveCommissioningManager:
         if approved_at.tzinfo is None or approved_at.utcoffset() is None:
             raise ValueError("approved_at must be timezone-aware")
         self._approval = FirstLiveTrialApproval(
+            controller_id=controller_id,
             controller_slot=controller_slot,
             area_slot=area_slot,
             requested_runtime_seconds=requested_runtime_seconds,

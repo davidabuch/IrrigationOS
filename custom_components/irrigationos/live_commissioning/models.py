@@ -37,6 +37,7 @@ class LiveCommissioningStatus(StrEnum):
 class FirstLiveTrialApproval:
     """Ephemeral single-use operator approval for one bounded trial target."""
 
+    controller_id: str
     controller_slot: int
     area_slot: int
     requested_runtime_seconds: int
@@ -52,10 +53,12 @@ class LiveCommissioningSummary:
 
     status: LiveCommissioningStatus
     integrated_review_status: str
+    evaluated_at: datetime
     blocker_codes: tuple[str, ...]
     operator_approval_present: bool
     approval_expires_at: datetime | None
     approval_consumed: bool
+    target_controller_id: str | None
     target_controller_slot: int | None
     target_area_slot: int | None
     requested_runtime_seconds: int | None
@@ -80,6 +83,7 @@ class LiveCommissioningSummary:
 
         payload = asdict(self)
         payload["status"] = self.status.value
+        payload["evaluated_at"] = self.evaluated_at.isoformat()
         payload["approval_expires_at"] = (
             None if self.approval_expires_at is None else self.approval_expires_at.isoformat()
         )

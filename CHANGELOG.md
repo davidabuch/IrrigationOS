@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.34 — Commissioned First-Live Watering Trial Executor
+
+- Added a one-shot supervised executor gated by current `first_live_trial_eligible` commissioning evidence.
+- Bound trial approval to a canonical controller identity, controller slot, area slot, and runtime.
+- Re-resolved native Rachio target identifiers from a fresh observed snapshot immediately before dispatch.
+- Required a durable privacy-safe dispatch-intent audit record before actuation, consumed the single-use approval before transport, and prohibited automatic retries after ambiguous outcomes.
+- Preserved the 120-second ceiling and kept HA services, buttons, scheduler callbacks, coordinator dispatch, general Live authorization, and autonomous scheduling disabled.
+
+
 ## 1.0.33 — First-Live Command Delivery Foundation
 
 - Added a narrow Rachio physical transport primitive for one bounded zone start and device-wide emergency stop.

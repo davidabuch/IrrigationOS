@@ -1,6 +1,17 @@
 """First-live physical delivery foundation with a hard-disabled release gate."""
 
+from .audit import (
+    FirstLiveTrialAuditEvent,
+    FirstLiveTrialAuditSink,
+    JsonlFirstLiveTrialAuditSink,
+)
 from .engine import FIRST_LIVE_DELIVERY_POLICY_REVISION, build_first_live_delivery_summary
+from .executor import (
+    FIRST_LIVE_TRIAL_EXECUTOR_REVISION,
+    FirstLiveTrialExecutionResult,
+    FirstLiveTrialExecutionStatus,
+    FirstLiveTrialExecutor,
+)
 from .manager import FirstLiveDeliveryManager
 from .models import (
     FIRST_LIVE_DELIVERY_SCHEMA_VERSION,
@@ -15,6 +26,7 @@ from .rachio import FirstLiveTransportError, RachioFirstLiveTransport
 __all__ = [
     "FIRST_LIVE_DELIVERY_POLICY_REVISION",
     "FIRST_LIVE_DELIVERY_SCHEMA_VERSION",
+    "FIRST_LIVE_TRIAL_EXECUTOR_REVISION",
     "MAX_FIRST_LIVE_DELIVERY_RUNTIME_SECONDS",
     "PHYSICAL_FIRST_LIVE_DELIVERY_ENABLED",
     "FirstLiveDeliveryManager",
@@ -22,6 +34,12 @@ __all__ = [
     "FirstLiveDeliveryStatus",
     "FirstLiveDeliverySummary",
     "FirstLiveTransportError",
+    "FirstLiveTrialAuditEvent",
+    "FirstLiveTrialAuditSink",
+    "FirstLiveTrialExecutionResult",
+    "FirstLiveTrialExecutionStatus",
+    "FirstLiveTrialExecutor",
+    "JsonlFirstLiveTrialAuditSink",
     "RachioFirstLiveTransport",
     "build_first_live_delivery_summary",
 ]

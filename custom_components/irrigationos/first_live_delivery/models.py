@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Any
 
 FIRST_LIVE_DELIVERY_SCHEMA_VERSION = 1
-PHYSICAL_FIRST_LIVE_DELIVERY_ENABLED = False
+PHYSICAL_FIRST_LIVE_DELIVERY_ENABLED = True
 MAX_FIRST_LIVE_DELIVERY_RUNTIME_SECONDS = 120
 
 
@@ -22,12 +22,11 @@ class FirstLiveDeliveryStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class FirstLiveDeliveryRequest:
-    """One bounded physical command request for a pre-commissioned target."""
+    """One bounded request using canonical identities only."""
 
+    controller_id: str
     controller_slot: int
     area_slot: int
-    device_id: str
-    zone_id: str
     runtime_seconds: int
     requested_at: datetime
 

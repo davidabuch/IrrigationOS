@@ -19,10 +19,12 @@ def _commissioning_summary(**overrides: object) -> Any:
     values: dict[str, object] = {
         "status": LiveCommissioningStatus.FIRST_LIVE_TRIAL_ELIGIBLE,
         "integrated_review_status": "validated_review_eligible",
+        "evaluated_at": datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
         "blocker_codes": (),
         "operator_approval_present": True,
         "approval_expires_at": datetime(2026, 8, 12, 20, 10, tzinfo=UTC),
         "approval_consumed": False,
+        "target_controller_id": "controller-canonical",
         "target_controller_slot": 1,
         "target_area_slot": 1,
         "requested_runtime_seconds": 120,
@@ -41,13 +43,13 @@ def _commissioning_summary(**overrides: object) -> Any:
     return LiveCommissioningSummary(**values)
 
 
-def test_release_gate_remains_hard_disabled_for_eligible_trial() -> None:
+def test_release_gate_is_enabled_only_for_eligible_trial_foundation() -> None:
     summary = delivery.build_first_live_delivery_summary(_commissioning_summary())
-    assert summary.status is delivery.FirstLiveDeliveryStatus.RELEASE_GATE_DISABLED
-    assert summary.blocker_codes == ("physical_delivery_release_gate_disabled",)
+    assert summary.status is delivery.FirstLiveDeliveryStatus.READY_FOR_FUTURE_ENABLEMENT
+    assert summary.blocker_codes == ()
     assert summary.physical_transport_implemented is True
     assert summary.emergency_stop_implemented is True
-    assert summary.physical_delivery_release_gate_enabled is False
+    assert summary.physical_delivery_release_gate_enabled is True
     assert summary.autonomous_scheduling_enabled is False
     assert summary.ha_service_registered is False
     assert summary.live_control_authorized is False
