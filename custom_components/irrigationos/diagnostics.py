@@ -135,6 +135,9 @@ async def async_get_config_entry_diagnostics(
             "execution_authorization": entry.runtime_data.execution_authorization.diagnostics(),
             "ownership_commissioning": entry.runtime_data.ownership_commissioning.diagnostics(),
             "live_mode_safety": entry.runtime_data.live_mode_safety.diagnostics(),
+            "integrated_safety_review": (
+                entry.runtime_data.integrated_safety_review.diagnostics()
+            ),
             "manual_override_preservation": (
                 entry.runtime_data.manual_override_preservation.diagnostics()
             ),
