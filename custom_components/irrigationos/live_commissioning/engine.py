@@ -53,6 +53,8 @@ def build_live_commissioning_summary(
             blockers.add("operator_approval_already_consumed")
         if evaluated_at > approval.expires_at:
             blockers.add("operator_approval_expired")
+        if not approval.controller_id.strip():
+            blockers.add("target_controller_id_invalid")
         if approval.controller_slot <= 0:
             blockers.add("target_controller_slot_invalid")
         if approval.area_slot <= 0:
@@ -72,10 +74,12 @@ def build_live_commissioning_summary(
     return LiveCommissioningSummary(
         status=status,
         integrated_review_status=integrated_review_status,
+        evaluated_at=evaluated_at,
         blocker_codes=tuple(sorted(blockers)),
         operator_approval_present=approval is not None,
         approval_expires_at=None if approval is None else approval.expires_at,
         approval_consumed=False if approval is None else approval.consumed,
+        target_controller_id=None if approval is None else approval.controller_id,
         target_controller_slot=None if approval is None else approval.controller_slot,
         target_area_slot=None if approval is None else approval.area_slot,
         requested_runtime_seconds=(

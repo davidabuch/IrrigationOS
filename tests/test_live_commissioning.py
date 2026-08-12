@@ -13,6 +13,7 @@ NOW = datetime(2026, 8, 12, 4, 30, tzinfo=UTC)
 
 def _approval(**overrides: object) -> Any:
     values = {
+        "controller_id": "controller-canonical",
         "controller_slot": 1,
         "area_slot": 2,
         "requested_runtime_seconds": 120,
@@ -96,6 +97,7 @@ def test_approval_expires_and_consumed_approval_cannot_be_reused() -> None:
 def test_manager_approval_is_single_use_and_restart_unsafe() -> None:
     manager = commissioning.LiveCommissioningManager()
     manager.approve_trial(
+        controller_id="controller-canonical",
         controller_slot=1,
         area_slot=2,
         requested_runtime_seconds=60,

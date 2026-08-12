@@ -2,7 +2,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.33
+- **Installable Home Assistant release:** v1.0.34
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation commissioned; physical first-live transport exists but its release gate is hard-disabled
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
@@ -351,7 +351,7 @@ Delivered deterministic synthetic acknowledgement, rejection, and timeout semant
 - Can produce `first_live_trial_eligible` evidence only; command dispatch and Live authorization remain disabled.
 
 
-## v1.0.33 — First-Live Command Delivery Foundation
+## v1.0.34 — First-Live Command Delivery Foundation
 
 **Status: Complete**
 
@@ -361,3 +361,16 @@ Delivered deterministic synthetic acknowledgement, rejection, and timeout semant
 - Adds no HA service, button, scheduler callback, or coordinator execution entrypoint.
 - Keeps autonomous scheduling and all Live authorization flags false.
 - Defers native target binding, operator execution action, approval consumption, live acknowledgement, and post-run reconciliation to the next commissioning milestone.
+
+## v1.0.34 — Commissioned First-Live Watering Trial Executor
+
+**Status: Complete**
+
+- Adds one one-shot executor for an explicitly commissioned supervised trial.
+- Binds approval to a canonical controller identity plus controller/area slots and runtime.
+- Re-resolves native Rachio identifiers from a fresh observed snapshot immediately before dispatch.
+- Requires the controller and area to remain present, enabled, correctly bound, and safe to start.
+- Consumes the ephemeral approval before the single network attempt and prohibits automatic retry.
+- Treats ambiguous transport outcomes as unknown rather than success.
+- Adds no HA service, button, scheduler callback, or coordinator execution path.
+- Keeps general Live authorization and autonomous scheduling disabled.
