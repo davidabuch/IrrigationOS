@@ -94,6 +94,8 @@ REQUIRED_FILES = (
     "custom_components/irrigationos/live_commissioning/models.py",
     "docs/V1_0_33_FIRST_LIVE_COMMAND_DELIVERY_FOUNDATION.md",
     "docs/V1_0_34_COMMISSIONED_FIRST_LIVE_WATERING_TRIAL_EXECUTOR.md",
+    "docs/V1_0_35_SUPERVISED_FIRST_LIVE_OPERATOR_INTERFACE.md",
+    "custom_components/irrigationos/first_live_delivery/operator.py",
     "custom_components/irrigationos/first_live_delivery/executor.py",
     "custom_components/irrigationos/first_live_delivery/audit.py",
     "custom_components/irrigationos/first_live_delivery/engine.py",
@@ -150,8 +152,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.34":
-        raise SystemExit("manifest.json version must be 1.0.34")
+    if manifest.get("version") != "1.0.35":
+        raise SystemExit("manifest.json version must be 1.0.35")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")
@@ -164,8 +166,10 @@ def main() -> int:
     current_release_marker = f"**v{manifest.get('version')} —"
     if current_release_marker not in readme:
         raise SystemExit("README.md current release must match manifest.json version")
-    if "Observation remains the default and only commissioned operating mode" not in readme:
+    if "Observation remains the default commissioned operating mode" not in readme:
         raise SystemExit("README.md must state the commissioned operating boundary")
+    if "No irrigation command service or button is registered" not in readme:
+        raise SystemExit("README.md must preserve the supervised operator-only boundary")
     if "live_control_authorized` hard-coded `false`" not in readme:
         raise SystemExit("README.md must state that live control authorization remains false")
 

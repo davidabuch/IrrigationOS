@@ -43,10 +43,10 @@
   "options": {
     "step": {
       "init": {
-        "title": "Landscape Digital Twin",
-        "description": "Select an irrigation area to review or edit.",
+        "title": "IrrigationOS options",
+        "description": "Choose a supervised operator workflow. The first-live trial path is interactive and single-use; it does not create a Home Assistant service or button.",
         "data": {
-          "area_id": "Irrigation area"
+          "action": "Action"
         }
       },
       "area": {
@@ -67,13 +67,35 @@
           "distribution_efficiency": "Distribution efficiency (0-1)",
           "profile_confidence_percent": "Confidence for edited values (%)"
         }
+      },
+      "landscape": {
+        "title": "Landscape Digital Twin",
+        "description": "Select an irrigation area to review or edit.",
+        "data": {
+          "area_id": "Irrigation area"
+        }
+      },
+      "first_live_trial": {
+        "title": "Supervised first-live watering trial",
+        "description": "Current commissioning status: {commissioning_status}. Select exactly one observed Rachio zone and a runtime of 1-120 seconds. To authorize this single supervised attempt, type exactly: {confirmation_phrase}",
+        "data": {
+          "first_live_target": "Controller and irrigation zone",
+          "first_live_runtime_seconds": "Trial runtime (seconds)",
+          "first_live_confirmation": "Exact confirmation phrase"
+        }
       }
     },
     "error": {
-      "invalid_profile": "One or more landscape profile values are outside the allowed range."
+      "invalid_profile": "One or more landscape profile values are outside the allowed range.",
+      "first_live_confirmation_mismatch": "The exact supervised-trial confirmation phrase was not entered.",
+      "first_live_trial_invalid": "The selected trial target or request is no longer valid."
     },
     "abort": {
-      "no_areas": "No irrigation areas are currently available."
+      "no_areas": "No irrigation areas are currently available.",
+      "no_first_live_targets": "No configured irrigation zones are currently available for a supervised trial.",
+      "first_live_trial_start_dispatched": "The one-shot start command was accepted for {runtime_seconds} seconds. Blockers: {blockers}. The approval and commissioning window are now closed.",
+      "first_live_trial_blocked": "The supervised trial was blocked. Blockers: {blockers}. No watering command was dispatched.",
+      "first_live_trial_transport_outcome_unknown": "The transport outcome could not be confirmed. Blockers: {blockers}. Approval was consumed and automatic retry is prohibited."
     }
   }
 }
