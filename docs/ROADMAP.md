@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.29
+- **Installable Home Assistant release:** v1.0.30
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** implement manual override preservation behind the disabled Live-mode boundary; live control remains deferred
+- **Next milestone:** perform integrated six-safeguard Live-mode safety review and commissioning validation; live control remains deferred
 
 ## Delivery model
 
