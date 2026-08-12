@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.32 — Live Commissioning Protocol & First-Live Acceptance Criteria
+
+- Added a non-actuating manual commissioning protocol after the integrated six-safeguard review.
+- Defined one-controller-slot, one-area-slot first-live scope with a strict 120-second runtime ceiling.
+- Added ephemeral single-use operator approval with a ten-minute expiry and intentional restart invalidation.
+- Required healthy fresh observations, zero external watering, and an explicitly open supervised commissioning window.
+- Defined mandatory post-trial acceptance evidence for acknowledgement, observed watering, runtime, safety, and reconciliation.
+- Preserved zero controller dispatch capability and all hard-false Live-control authorization flags.
+
 ## 1.0.31 — Integrated Live Safety Review & Commissioning Validation
 
 - Added integrated validation across all six pre-Live safeguards.

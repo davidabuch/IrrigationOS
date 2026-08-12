@@ -53,6 +53,7 @@ from .health import (
 )
 from .integrated_safety_review.manager import IntegratedSafetyReviewManager
 from .landscape import LandscapeProfile, build_landscape_profile
+from .live_commissioning.manager import LiveCommissioningManager
 from .live_mode_safety.manager import LiveModeSafetyManager
 from .manual_override_preservation.manager import ManualOverridePreservationManager
 from .observation_history import (
@@ -154,6 +155,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.integrated_safety_review = IntegratedSafetyReviewManager(
             self.live_mode_safety.summary
         )
+        self.live_commissioning = LiveCommissioningManager()
         self.manual_override_preservation = ManualOverridePreservationManager(
             hass, log_root, self.command_acknowledgements
         )
@@ -440,6 +442,13 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             ),
         )
         self.integrated_safety_review.consider(self.live_mode_safety.summary)
+        self.live_commissioning.consider(
+            integrated_review_status=self.integrated_safety_review.summary.status.value,
+            evaluated_at=now,
+            health_state=assessment.state.value,
+            observation_age_seconds=assessment.observation_age_seconds,
+            active_external_watering_count=len(self.observation_history.active_sessions),
+        )
         incident_changed = await self._apply_incident_transition(previous, assessment, now)
         state_changed = assessment != previous
         if notify_listeners and (state_changed or incident_changed):

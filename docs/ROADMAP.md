@@ -2,11 +2,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.31
+- **Installable Home Assistant release:** v1.0.32
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation and simulation only
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** define the explicit manual commissioning protocol and bounded first-live acceptance criteria; live control remains deferred
+- **Next milestone:** validate and design the minimal supervised first-live command-delivery boundary behind the v1.0.32 protocol; live control remains disabled by default
 
 ## Delivery model
 
@@ -336,3 +336,16 @@ Delivered deterministic synthetic acknowledgement, rejection, and timeout semant
 - Treats malformed persisted evidence as a fail-closed reconciliation failure.
 - Marks restart-safe command reconciliation as Live-mode safeguard 3 of 6.
 - Does not add a controller dispatch path or authorize Live mode.
+
+
+## v1.0.32 — Live Commissioning Protocol & First-Live Acceptance Criteria
+
+**Status: Complete**
+
+- Defines an explicit non-actuating manual commissioning protocol after integrated safety review.
+- Requires one canonical controller slot and one canonical area slot for a supervised first-live trial.
+- Caps the requested first-live runtime at 120 seconds.
+- Uses single-use operator approval that expires after ten minutes and is never persisted across restart.
+- Requires a deliberately open supervised commissioning window, healthy fresh observations, and no external watering.
+- Defines mandatory acceptance evidence for future start/stop acknowledgement, observed watering, runtime compliance, safety, and post-run reconciliation.
+- Can produce `first_live_trial_eligible` evidence only; command dispatch and Live authorization remain disabled.

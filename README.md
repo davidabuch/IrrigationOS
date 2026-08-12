@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.31 — Integrated Live Safety Review & Commissioning Validation**
+**v1.0.32 — Live Commissioning Protocol & First-Live Acceptance Criteria**
 
 The current release:
 
@@ -25,11 +25,14 @@ The current release:
 - exposes commissioning, replay/readiness, execution-authorization, controller-ownership, Live-mode-safety, and integrated-safety-review evidence in Home Assistant;
 - implements all six pre-Live safeguards: command attribution/receipts, acknowledgement/timeouts, restart-safe reconciliation, safety preemption, sunrise hard stop, and manual override preservation;
 - validates those safeguards together through the integrated Live safety review;
-- may reach `validated_review_eligible` only after all integrated review criteria are satisfied;
+- defines a non-actuating manual commissioning protocol for one supervised first-live trial;
+- limits any future first-live trial to one controller slot, one area slot, and at most 120 seconds;
+- requires ephemeral single-use operator approval, a supervised daytime window, healthy fresh observations, and zero external watering;
+- may reach `first_live_trial_eligible` only while every commissioning gate remains satisfied;
 - keeps `live_mode_commissionable`, `live_control_feature_enabled`, and `live_control_authorized` hard-coded `false`;
 - does not start, stop, enable, disable, reschedule, or otherwise actuate irrigation hardware.
 
-See [`docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md`](docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/OPERATING_MODES.md`](docs/OPERATING_MODES.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+See [`docs/V1_0_32_LIVE_COMMISSIONING_PROTOCOL.md`](docs/V1_0_32_LIVE_COMMISSIONING_PROTOCOL.md), [`docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md`](docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/OPERATING_MODES.md`](docs/OPERATING_MODES.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
 
 Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can reach. Home Assistant Cloud is optional. If no suitable URL is configured, IrrigationOS reports a repair warning and continues observing through polling.
 
@@ -44,6 +47,7 @@ The repository is currently private, so HACS publication and validation are defe
 Key documents:
 
 - [`docs/IRRIGATIONOS_ARCHITECTURE_V1.md`](docs/IRRIGATIONOS_ARCHITECTURE_V1.md)
+- [`docs/V1_0_32_LIVE_COMMISSIONING_PROTOCOL.md`](docs/V1_0_32_LIVE_COMMISSIONING_PROTOCOL.md)
 - [`docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md`](docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - [`INSTALL_FROM_ZIP.md`](INSTALL_FROM_ZIP.md)
@@ -71,7 +75,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation remains the default and only commissioned operating mode in v1.0.31. Simulation, shadow evaluation, commissioning evidence, and integrated safety review remain non-actuating. Completion of all six pre-Live safeguards does not authorize Live control: a fully satisfied safety architecture can become review-eligible only, and a separate explicit manual commissioning protocol and bounded first-live acceptance criteria are still required before any future actuation work.
+Observation remains the default and only commissioned operating mode in v1.0.32. Simulation, shadow evaluation, commissioning evidence, integrated safety review, and the first-live commissioning protocol remain non-actuating. Completion of all six safeguards and satisfaction of the manual commissioning protocol can produce `first_live_trial_eligible` evidence only. Operator approval is single-use, expires after ten minutes, is never persisted across restart, and cannot enable command delivery. A later dedicated milestone is still required before any Rachio actuation path exists.
 
 Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
 
