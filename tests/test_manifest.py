@@ -8,21 +8,30 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INTEGRATION = ROOT / "custom_components" / "irrigationos"
+CURRENT_VERSION = "1.0.31"
 
 
 def test_manifest_is_valid() -> None:
     manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["domain"] == "irrigationos"
     assert manifest["config_flow"] is True
-    assert manifest["version"] == "1.0.31"
+    assert manifest["version"] == CURRENT_VERSION
 
 
 def test_python_project_version_matches_manifest() -> None:
     with (ROOT / "pyproject.toml").open("rb") as handle:
         pyproject = tomllib.load(handle)
     manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
-    assert pyproject["project"]["version"] == "1.0.31"
+    assert pyproject["project"]["version"] == CURRENT_VERSION
     assert pyproject["project"]["version"] == manifest["version"]
+
+
+def test_readme_current_release_matches_manifest() -> None:
+    manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert f"**v{manifest['version']} —" in readme
+    assert "Observation remains the default and only commissioned operating mode" in readme
+    assert "live_control_authorized` hard-coded `false`" in readme
 
 
 def test_hacs_metadata_is_valid() -> None:

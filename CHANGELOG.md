@@ -1,3 +1,5 @@
+# Changelog
+
 ## 1.0.31 — Integrated Live Safety Review & Commissioning Validation
 
 - Added integrated validation across all six pre-Live safeguards.
@@ -38,8 +40,6 @@
 - Fails closed when persisted acknowledgement evidence is malformed.
 - Marks restart-safe command reconciliation as the third implemented Live-mode safeguard.
 - Keeps controller dispatch and Live-mode authorization disabled.
-
-# Changelog
 
 ## 1.0.26 — Command Acknowledgement and Timeout Foundation
 

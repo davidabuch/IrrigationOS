@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.17 — Observation History and Watering Session Recorder**
+**v1.0.31 — Integrated Live Safety Review & Commissioning Validation**
 
 The current release:
 
@@ -17,24 +17,19 @@ The current release:
 - creates controller and zone observation entities;
 - assigns persisted provider-neutral controller identities and permanent numbered slots;
 - exposes timestamps, freshness, source quality, and safe partial-failure metadata;
-- distinguishes confirmed idle from unavailable watering status;
 - normalizes the single available Home Assistant weather entity into canonical units;
 - resolves landscape plant identities against the curated Plant Knowledge library;
-- executes evidence-backed Plant Water Requirement, aggregate Plant Stress, Plant Health, advisory Recommendations, machine-readable Planning, conservative proposed Scheduling, and simulation-only Execution and conservative Runtime Monitoring in the synchronized pipeline;
-- exposes stable per-stage and per-zone pipeline output sensors plus redacted pipeline diagnostics;
-- freezes the v1.0 domain and pipeline public API contracts with machine-readable compatibility tests;
-- synchronizes Python package and Home Assistant integration release metadata at v1.0.17;
-- reconciles the architecture, operating-mode, release-strategy, and v1.0 audit documents with the shipped observation/simulation runtime;
-- exposes aggregate HEALTHY / DEGRADED / UNHEALTHY operational health;
-- persistently latches genuine unhealthy incidents with a non-actuating reset button;
-- writes 30 days of safe daily JSONL operational evidence under `/config/irrigationos_logs/`;
+- executes the synchronized Water Requirement, Plant Stress, Plant Health, Recommendations, Planning, Scheduling, simulation-only Execution, and Runtime Monitoring pipeline;
 - reconstructs canonical watering sessions across polling, realtime refreshes, controller gaps, and Home Assistant restarts;
-- persists active and recent completed session evidence with conservative external-unknown attribution;
-- writes a separate 30-day `irrigationos_sessions_YYYY-MM-DD.jsonl` evidence stream and exposes three compact session sensors;
-- exports redacted diagnostics;
-- does not start, stop, enable, disable, or reschedule irrigation.
+- retains shadow evaluations and actual-vs-shadow reconciliation evidence for commissioning review;
+- exposes commissioning, replay/readiness, execution-authorization, controller-ownership, Live-mode-safety, and integrated-safety-review evidence in Home Assistant;
+- implements all six pre-Live safeguards: command attribution/receipts, acknowledgement/timeouts, restart-safe reconciliation, safety preemption, sunrise hard stop, and manual override preservation;
+- validates those safeguards together through the integrated Live safety review;
+- may reach `validated_review_eligible` only after all integrated review criteria are satisfied;
+- keeps `live_mode_commissionable`, `live_control_feature_enabled`, and `live_control_authorized` hard-coded `false`;
+- does not start, stop, enable, disable, reschedule, or otherwise actuate irrigation hardware.
 
-See [`docs/V1_0_17_OBSERVATION_HISTORY.md`](docs/V1_0_17_OBSERVATION_HISTORY.md), [`docs/V1_0_16_HEALTH_MONITORING.md`](docs/V1_0_16_HEALTH_MONITORING.md), [`docs/V1_0_ARCHITECTURE_AUDIT.md`](docs/V1_0_ARCHITECTURE_AUDIT.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+See [`docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md`](docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), [`docs/OPERATING_MODES.md`](docs/OPERATING_MODES.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
 
 Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can reach. Home Assistant Cloud is optional. If no suitable URL is configured, IrrigationOS reports a repair warning and continues observing through polling.
 
@@ -49,6 +44,8 @@ The repository is currently private, so HACS publication and validation are defe
 Key documents:
 
 - [`docs/IRRIGATIONOS_ARCHITECTURE_V1.md`](docs/IRRIGATIONOS_ARCHITECTURE_V1.md)
+- [`docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md`](docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md)
+- [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - [`INSTALL_FROM_ZIP.md`](INSTALL_FROM_ZIP.md)
 - [`SECURITY.md`](SECURITY.md)
 
@@ -74,7 +71,9 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation mode remains the default and only commissioned operating mode in v1.0.17; startup, unload/setup, config-entry reload, migration, persistence, session reconstruction, and pipeline entity identity are regression-tested while live execution remains disabled. Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
+Observation remains the default and only commissioned operating mode in v1.0.31. Simulation, shadow evaluation, commissioning evidence, and integrated safety review remain non-actuating. Completion of all six pre-Live safeguards does not authorize Live control: a fully satisfied safety architecture can become review-eligible only, and a separate explicit manual commissioning protocol and bounded first-live acceptance criteria are still required before any future actuation work.
+
+Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
 
 ## Landscape Digital Twin
 
