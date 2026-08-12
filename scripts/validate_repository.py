@@ -150,6 +150,15 @@ def main() -> int:
     if project.get("version") != manifest.get("version"):
         raise SystemExit("pyproject.toml and manifest.json versions must match")
 
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    current_release_marker = f"**v{manifest.get('version')} —"
+    if current_release_marker not in readme:
+        raise SystemExit("README.md current release must match manifest.json version")
+    if "Observation remains the default and only commissioned operating mode" not in readme:
+        raise SystemExit("README.md must state the commissioned operating boundary")
+    if "live_control_authorized` hard-coded `false`" not in readme:
+        raise SystemExit("README.md must state that live control authorization remains false")
+
     hacs = load_json("hacs.json")
     if not isinstance(hacs, dict) or hacs.get("name") != "IrrigationOS":
         raise SystemExit("hacs.json must identify IrrigationOS")
