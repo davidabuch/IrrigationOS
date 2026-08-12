@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INTEGRATION = ROOT / "custom_components" / "irrigationos"
-CURRENT_VERSION = "1.0.34"
+CURRENT_VERSION = "1.0.35"
 
 
 def test_manifest_is_valid() -> None:
@@ -30,7 +30,8 @@ def test_readme_current_release_matches_manifest() -> None:
     manifest = json.loads((INTEGRATION / "manifest.json").read_text(encoding="utf-8"))
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert f"**v{manifest['version']} —" in readme
-    assert "Observation remains the default and only commissioned operating mode" in readme
+    assert "Observation remains the default commissioned operating mode" in readme
+    assert "No irrigation command service or button is registered" in readme
     assert "live_control_authorized` hard-coded `false`" in readme
 
 

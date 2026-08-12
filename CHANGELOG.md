@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.35 — Supervised First-Live Operator Interface
+
+- Added an interactive Home Assistant options-flow path for one supervised first-live watering trial.
+- Requires one currently observed Rachio target, a bounded 1–120 second runtime, and the exact typed confirmation phrase.
+- Forces a fresh coordinator refresh before invoking the v1.0.34 one-shot executor and always closes the ephemeral commissioning window afterward.
+- Registers no irrigation command service or button and adds no scheduler/coordinator-loop dispatch path.
+
 ## 1.0.34 — Commissioned First-Live Watering Trial Executor
 
 - Added a one-shot supervised executor gated by current `first_live_trial_eligible` commissioning evidence.

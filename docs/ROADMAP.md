@@ -2,9 +2,9 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.34
+- **Installable Home Assistant release:** v1.0.35
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
-- **Current operating boundary:** Observation and simulation commissioned; physical first-live transport exists but its release gate is hard-disabled
+- **Current operating boundary:** Observation remains the default commissioned mode; one explicitly confirmed supervised first-live trial can be launched only through the interactive options flow; general Live mode and autonomous scheduling remain disabled
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
 - **Next milestone:** bind canonical slots to exact native Rachio targets and design the explicit supervised execution action; physical delivery remains hard-disabled by default
 
@@ -351,7 +351,7 @@ Delivered deterministic synthetic acknowledgement, rejection, and timeout semant
 - Can produce `first_live_trial_eligible` evidence only; command dispatch and Live authorization remain disabled.
 
 
-## v1.0.34 — First-Live Command Delivery Foundation
+## v1.0.33 — First-Live Command Delivery Foundation
 
 **Status: Complete**
 
@@ -374,3 +374,15 @@ Delivered deterministic synthetic acknowledgement, rejection, and timeout semant
 - Treats ambiguous transport outcomes as unknown rather than success.
 - Adds no HA service, button, scheduler callback, or coordinator execution path.
 - Keeps general Live authorization and autonomous scheduling disabled.
+
+
+## v1.0.35 — Supervised First-Live Operator Interface
+
+**Status: Complete**
+
+- Adds an interactive Home Assistant options-flow action for one supervised physical watering trial.
+- Requires one observed Rachio target, a 1–120 second runtime, and an exact typed confirmation phrase.
+- Forces a fresh coordinator refresh before delegating to the v1.0.34 executor.
+- Closes the ephemeral commissioning window and revokes any remaining approval after every attempt.
+- Registers no irrigation command service or button and adds no scheduler/coordinator-loop dispatch path.
+- Keeps general Live mode and autonomous scheduling disabled.

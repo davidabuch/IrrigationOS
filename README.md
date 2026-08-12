@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.34 — Commissioned First-Live Watering Trial Executor**
+**v1.0.35 — Supervised First-Live Operator Interface**
 
 The current release:
 
@@ -75,10 +75,14 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation remains the default and only commissioned operating mode in v1.0.34. The release contains a deliberately narrow one-shot executor for a supervised first-live watering trial, but no Home Assistant service, button, scheduler callback, or coordinator execution entrypoint invokes it. A trial must retain `first_live_trial_eligible` evidence, match the explicitly approved canonical controller and area, use a fresh healthy Rachio snapshot, remain within 120 seconds, and consume its restart-unsafe approval before the single transport attempt. Ambiguous transport outcomes are never retried automatically. General Live mode, autonomous scheduling, and `live_control_authorized` remain disabled.
+Observation remains the default commissioned operating mode in v1.0.35. A deliberately narrow Home Assistant options-flow action can invoke one supervised first-live watering trial after explicit target selection, a bounded 1–120 second runtime, and an exact typed confirmation phrase. The v1.0.34 fresh commissioning preflight, durable audit intent, single-use approval consumption, confirmed-idle target checks, and no-retry handling remain authoritative. No irrigation command service or button is registered, no scheduler or coordinator loop dispatches commands, and general Live mode, autonomous scheduling, and `live_control_authorized` remain disabled.
 
 Credentials, webhook URLs and identifiers, signatures, vendor bindings, serial numbers, MAC addresses, and exact property coordinates are redacted from diagnostics and must never be committed.
 
 ## Landscape Digital Twin
 
 IrrigationOS separates controller facts from landscape facts. Each irrigation area has a canonical profile for plants, soil, sun exposure, slope, root depth, irrigation method, application rate, and efficiency. Every value records its source and confidence.
+
+## v1.0.35 supervised first-live operator interface
+
+The Home Assistant options flow can now perform one explicitly confirmed supervised first-live watering trial. No irrigation command service or button is registered, and autonomous scheduling remains disabled.

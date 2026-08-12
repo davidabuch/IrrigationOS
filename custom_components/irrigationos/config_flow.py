@@ -31,6 +31,10 @@ from .controllers import (
     ControllerProviderError,
     ControllerRateLimitError,
 )
+from .first_live_delivery.operator import (
+    FIRST_LIVE_OPERATOR_CONFIRMATION,
+    async_run_supervised_first_live_trial,
+)
 from .landscape import (
     EstablishmentStage,
     IrrigationMethod,
@@ -52,6 +56,10 @@ CONF_ROOT_DEPTH_INCHES = "root_depth_inches"
 CONF_APPLICATION_RATE = "application_rate_inches_per_hour"
 CONF_DISTRIBUTION_EFFICIENCY = "distribution_efficiency"
 CONF_PROFILE_CONFIDENCE = "profile_confidence_percent"
+CONF_OPTIONS_ACTION = "action"
+CONF_FIRST_LIVE_TARGET = "first_live_target"
+CONF_FIRST_LIVE_RUNTIME = "first_live_runtime_seconds"
+CONF_FIRST_LIVE_CONFIRMATION = "first_live_confirmation"
 
 STEP_USER_SCHEMA = vol.Schema(
     {
@@ -185,7 +193,7 @@ class IrrigationOSConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
-    """Edit one Landscape Digital Twin area profile at a time."""
+    """Edit landscape profiles or run one supervised first-live trial."""
 
     def __init__(self) -> None:
         self._selected_area_id: str | None = None
@@ -193,7 +201,32 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
+        """Choose the interactive options workflow."""
+
+        if user_input is not None:
+            action = str(user_input[CONF_OPTIONS_ACTION])
+            if action == "landscape":
+                return await self.async_step_landscape()
+            return await self.async_step_first_live_trial()
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_OPTIONS_ACTION): vol.In(
+                        {
+                            "landscape": "Edit Landscape Digital Twin",
+                            "first_live_trial": "Run supervised first-live watering trial",
+                        }
+                    )
+                }
+            ),
+        )
+
+    async def async_step_landscape(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
         """Select the irrigation area to edit."""
+
         coordinator = self.config_entry.runtime_data
         area_choices = {
             area.area_id: area.vendor_name or area.name
@@ -201,14 +234,73 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
         }
         if not area_choices:
             return self.async_abort(reason="no_areas")
-
         if user_input is not None:
             self._selected_area_id = str(user_input[CONF_AREA_ID])
             return await self.async_step_area()
+        return self.async_show_form(
+            step_id="landscape",
+            data_schema=vol.Schema({vol.Required(CONF_AREA_ID): vol.In(area_choices)}),
+        )
+
+    async def async_step_first_live_trial(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Run one explicitly confirmed supervised physical watering trial."""
+
+        coordinator = self.config_entry.runtime_data
+        choices: dict[str, str] = {}
+        for controller in coordinator.data.controllers:
+            for area in controller.areas:
+                if area.configured and area.enabled and area.binding is not None:
+                    key = f"{controller.controller_id}|{area.slot_number}"
+                    choices[key] = f"{controller.name} - {area.vendor_name or area.name}"
+        if not choices:
+            return self.async_abort(reason="no_first_live_targets")
+
+        errors: dict[str, str] = {}
+        placeholders = {
+            "confirmation_phrase": FIRST_LIVE_OPERATOR_CONFIRMATION,
+            "commissioning_status": coordinator.live_commissioning.summary.status.value,
+        }
+        if user_input is not None:
+            confirmation = str(user_input[CONF_FIRST_LIVE_CONFIRMATION])
+            if confirmation.strip() != FIRST_LIVE_OPERATOR_CONFIRMATION:
+                errors["base"] = "first_live_confirmation_mismatch"
+            else:
+                target = str(user_input[CONF_FIRST_LIVE_TARGET])
+                controller_id, area_slot_text = target.rsplit("|", 1)
+                try:
+                    result = await async_run_supervised_first_live_trial(
+                        coordinator,
+                        controller_id=controller_id,
+                        area_slot=int(area_slot_text),
+                        runtime_seconds=int(user_input[CONF_FIRST_LIVE_RUNTIME]),
+                        confirmation=confirmation,
+                    )
+                except ValueError:
+                    errors["base"] = "first_live_trial_invalid"
+                else:
+                    return self.async_abort(
+                        reason=f"first_live_trial_{result.status.value}",
+                        description_placeholders={
+                            "blockers": ", ".join(result.blocker_codes) or "none",
+                            "runtime_seconds": str(result.runtime_seconds),
+                        },
+                    )
 
         return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema({vol.Required(CONF_AREA_ID): vol.In(area_choices)}),
+            step_id="first_live_trial",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_FIRST_LIVE_TARGET): vol.In(choices),
+                    vol.Required(CONF_FIRST_LIVE_RUNTIME, default=30): vol.All(
+                        vol.Coerce(int), vol.Range(min=1, max=120)
+                    ),
+                    vol.Required(CONF_FIRST_LIVE_CONFIRMATION): str,
+                }
+            ),
+            errors=errors,
+            description_placeholders=placeholders,
         )
 
     async def async_step_area(
@@ -216,7 +308,7 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
     ) -> config_entries.ConfigFlowResult:
         """Edit the selected area profile."""
         if self._selected_area_id is None:
-            return await self.async_step_init()
+            return await self.async_step_landscape()
 
         errors: dict[str, str] = {}
         existing_profiles = self.config_entry.options.get(CONF_AREA_PROFILES, {})
@@ -246,7 +338,6 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
             errors=errors,
             description_placeholders={"area_name": profile.display_name.value},
         )
-
 
 def _area_schema(existing: dict[str, Any], profile: Any) -> vol.Schema:
     """Return the editable Landscape Digital Twin schema."""
