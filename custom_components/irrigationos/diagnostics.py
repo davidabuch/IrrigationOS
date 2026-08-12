@@ -138,6 +138,7 @@ async def async_get_config_entry_diagnostics(
             "integrated_safety_review": (
                 entry.runtime_data.integrated_safety_review.diagnostics()
             ),
+            "live_commissioning": entry.runtime_data.live_commissioning.diagnostics(),
             "manual_override_preservation": (
                 entry.runtime_data.manual_override_preservation.diagnostics()
             ),

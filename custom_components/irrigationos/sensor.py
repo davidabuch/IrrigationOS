@@ -56,6 +56,7 @@ async def async_setup_entry(
         IrrigationOSControllerOwnershipSensor(coordinator),
         IrrigationOSLiveModeSafetySensor(coordinator),
         IrrigationOSIntegratedSafetyReviewSensor(coordinator),
+        IrrigationOSLiveCommissioningSensor(coordinator),
         *(
             IrrigationOSPipelineStageStatusSensor(coordinator, stage)
             for stage in PipelineStage
@@ -248,6 +249,27 @@ class IrrigationOSIntegratedSafetyReviewSensor(IrrigationOSEntity, SensorEntity)
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return self.coordinator.integrated_safety_review.summary.to_dict()
+
+
+class IrrigationOSLiveCommissioningSensor(IrrigationOSEntity, SensorEntity):
+    """Expose bounded first-live commissioning eligibility without actuation."""
+
+    _attr_name = "Live commissioning protocol"
+    _attr_unique_id = "irrigationos_live_commissioning_protocol"
+    entity_id = "sensor.irrigationos_live_commissioning_protocol"
+    _attr_icon = "mdi:clipboard-check-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.live_commissioning.summary.status.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self.coordinator.live_commissioning.summary.to_dict()
 
 
 class IrrigationOSCurrentWateringSessionSensor(IrrigationOSEntity, SensorEntity):
