@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.33 — First-Live Command Delivery Foundation
+
+- Added a narrow Rachio physical transport primitive for one bounded zone start and device-wide emergency stop.
+- Preserved the 120-second first-live runtime ceiling at the transport boundary.
+- Added explicit release-gate evidence with `PHYSICAL_FIRST_LIVE_DELIVERY_ENABLED = False`.
+- Added no Home Assistant execution service, button, scheduler callback, or coordinator dispatch path.
+- Kept autonomous scheduling and all Live authorization flags disabled.
+- Added unit coverage for endpoint allowlisting, payload shape, runtime rejection, transport failures, and privacy-safe diagnostics.
+
 ## 1.0.32 — Live Commissioning Protocol & First-Live Acceptance Criteria
 
 - Added a non-actuating manual commissioning protocol after the integrated six-safeguard review.
