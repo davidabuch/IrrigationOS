@@ -41,9 +41,9 @@ def test_release_versions_are_consistent() -> None:
     with (ROOT / "pyproject.toml").open("rb") as handle:
         pyproject = tomllib.load(handle)
     const_text = (ROOT / "custom_components/irrigationos/const.py").read_text(encoding="utf-8")
-    assert manifest["version"] == "1.0.36"
+    assert manifest["version"] == "1.0.37"
     assert pyproject["project"]["version"] == manifest["version"]
-    assert 'VERSION: Final = "1.0.36"' in const_text
+    assert 'VERSION: Final = "1.0.37"' in const_text
     assert manifest["domain"] == "irrigationos"
 
 

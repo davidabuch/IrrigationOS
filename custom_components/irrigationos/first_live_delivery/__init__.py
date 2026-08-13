@@ -21,9 +21,11 @@ from .models import (
     FirstLiveDeliveryStatus,
     FirstLiveDeliverySummary,
 )
+from .monitor import FIRST_LIVE_ACCEPTANCE_MONITOR_REVISION
 from .rachio import FirstLiveTransportError, RachioFirstLiveTransport
 
 __all__ = [
+    "FIRST_LIVE_ACCEPTANCE_MONITOR_REVISION",
     "FIRST_LIVE_DELIVERY_POLICY_REVISION",
     "FIRST_LIVE_DELIVERY_SCHEMA_VERSION",
     "FIRST_LIVE_TRIAL_EXECUTOR_REVISION",
