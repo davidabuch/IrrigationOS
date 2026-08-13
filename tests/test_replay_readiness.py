@@ -18,7 +18,7 @@ replay_reconciliation_record = replay_readiness.replay_reconciliation_record
 run_golden_scenarios = replay_readiness.run_golden_scenarios
 
 
-def _commissioning(*, evidence_day_count: int = 14) -> Any:
+def _commissioning(*, evidence_day_count: int = 10) -> Any:
     base = CommissioningSummary(
         status=CommissioningEvidenceStatus.EVIDENCE_AVAILABLE,
         shadow_evaluation_count=20,
@@ -115,6 +115,16 @@ def test_insufficient_evidence_never_authorizes_live_control() -> None:
     assert summary.replay_status is ReplayEvidenceStatus.NO_EVIDENCE
     assert summary.live_control_authorized is False
     assert summary.promotion_assessment == "not_ready"
+
+
+def test_ten_days_meets_evidence_day_threshold_but_nine_does_not() -> None:
+    records = tuple(_planned(f"record-{index}") for index in range(20))
+    ten_days = build_replay_readiness_summary(_commissioning(evidence_day_count=10), records)
+    nine_days = build_replay_readiness_summary(_commissioning(evidence_day_count=9), records)
+
+    assert ten_days.criteria["minimum_evidence_days"] is True
+    assert ten_days.thresholds["minimum_evidence_days"] == 10
+    assert nine_days.criteria["minimum_evidence_days"] is False
 
 
 def test_explicit_criteria_can_be_met_but_still_require_manual_review() -> None:

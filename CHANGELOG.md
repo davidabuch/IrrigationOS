@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.36 — First Supervised Live Trial Acceptance
+
+- Separated supervised commissioning eligibility from long-horizon autonomous promotion maturity.
+- Reduced the autonomous evidence-day threshold from 14 to 10 days.
+- Fixed supervised health evaluation to accept Home Assistant's canonical `HEALTHY` state.
+- Preserved all fail-closed supervised safety gates, all six live-mode safeguards, integrated validation scenarios, and the 120-second one-shot runtime ceiling.
+
+
 ## 1.0.35 — Supervised First-Live Operator Interface
 
 - Added an interactive Home Assistant options-flow path for one supervised first-live watering trial.

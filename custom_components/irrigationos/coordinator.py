@@ -53,6 +53,7 @@ from .health import (
 )
 from .integrated_safety_review.manager import IntegratedSafetyReviewManager
 from .landscape import LandscapeProfile, build_landscape_profile
+from .live_commissioning.engine import supervised_trial_safety_prerequisites_met
 from .live_commissioning.manager import LiveCommissioningManager
 from .live_mode_safety.manager import LiveModeSafetyManager
 from .manual_override_preservation.manager import ManualOverridePreservationManager
@@ -442,8 +443,14 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             ),
         )
         self.integrated_safety_review.consider(self.live_mode_safety.summary)
+        supervised_safety_prerequisites_met = supervised_trial_safety_prerequisites_met(
+            execution_gates=self.execution_authorization.summary.gates,
+            safeguard_gates=self.live_mode_safety.summary.safeguard_gates,
+            validation_scenarios=self.integrated_safety_review.summary.validation_scenarios,
+        )
         self.live_commissioning.consider(
             integrated_review_status=self.integrated_safety_review.summary.status.value,
+            supervised_safety_prerequisites_met=supervised_safety_prerequisites_met,
             evaluated_at=now,
             health_state=assessment.state.value,
             observation_age_seconds=assessment.observation_age_seconds,

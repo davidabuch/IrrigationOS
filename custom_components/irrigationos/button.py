@@ -86,8 +86,11 @@ class IrrigationOSAcknowledgeExecutionBoundaryReviewButton(
 
     @property
     def available(self) -> bool:
-        summary = self.coordinator.execution_authorization.summary
-        return summary.blocker_codes == ("execution_boundary_review_acknowledged",)
+        commissioning = self.coordinator.ownership_commissioning.summary
+        return (
+            commissioning.ownership_confirmed
+            and not commissioning.boundary_review_acknowledged
+        )
 
     async def async_press(self) -> None:
         await self.coordinator.acknowledge_execution_boundary_review()

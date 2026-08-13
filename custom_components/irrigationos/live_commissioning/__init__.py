@@ -4,6 +4,7 @@ from .engine import (
     LIVE_COMMISSIONING_PROTOCOL_REVISION,
     MAX_COMMISSIONING_OBSERVATION_AGE_SECONDS,
     build_live_commissioning_summary,
+    supervised_trial_safety_prerequisites_met,
 )
 from .manager import LiveCommissioningManager
 from .models import (
@@ -26,4 +27,5 @@ __all__ = [
     "LiveCommissioningStatus",
     "LiveCommissioningSummary",
     "build_live_commissioning_summary",
+    "supervised_trial_safety_prerequisites_met",
 ]

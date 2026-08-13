@@ -53,6 +53,7 @@ class LiveCommissioningSummary:
 
     status: LiveCommissioningStatus
     integrated_review_status: str
+    supervised_safety_prerequisites_met: bool
     evaluated_at: datetime
     blocker_codes: tuple[str, ...]
     operator_approval_present: bool

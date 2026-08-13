@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
 
 from .models import (
@@ -17,9 +18,32 @@ LIVE_COMMISSIONING_PROTOCOL_REVISION = 1
 MAX_COMMISSIONING_OBSERVATION_AGE_SECONDS = 120.0
 
 
+def supervised_trial_safety_prerequisites_met(
+    *,
+    execution_gates: Mapping[str, bool],
+    safeguard_gates: Mapping[str, bool],
+    validation_scenarios: Mapping[str, bool],
+) -> bool:
+    """Allow supervised trials to bypass only long-horizon readiness maturity."""
+
+    short_horizon_execution_gates = {
+        gate: passed
+        for gate, passed in execution_gates.items()
+        if gate != "control_readiness_criteria_met"
+    }
+    return bool(short_horizon_execution_gates) and all(
+        (
+            all(short_horizon_execution_gates.values()),
+            bool(safeguard_gates) and all(safeguard_gates.values()),
+            bool(validation_scenarios) and all(validation_scenarios.values()),
+        )
+    )
+
+
 def build_live_commissioning_summary(
     *,
     integrated_review_status: str,
+    supervised_safety_prerequisites_met: bool = False,
     approval: FirstLiveTrialApproval | None,
     evaluated_at: datetime,
     health_state: str,
@@ -33,9 +57,12 @@ def build_live_commissioning_summary(
         raise ValueError("evaluated_at must be timezone-aware")
 
     blockers: set[str] = set()
-    if integrated_review_status != "validated_review_eligible":
-        blockers.add("integrated_safety_review_not_eligible")
-    if health_state != "healthy":
+    if (
+        integrated_review_status != "validated_review_eligible"
+        and not supervised_safety_prerequisites_met
+    ):
+        blockers.add("supervised_safety_prerequisites_not_met")
+    if health_state.lower() != "healthy":
         blockers.add("system_not_healthy")
     if observation_age_seconds is None:
         blockers.add("observation_freshness_unknown")
@@ -74,6 +101,7 @@ def build_live_commissioning_summary(
     return LiveCommissioningSummary(
         status=status,
         integrated_review_status=integrated_review_status,
+        supervised_safety_prerequisites_met=supervised_safety_prerequisites_met,
         evaluated_at=evaluated_at,
         blocker_codes=tuple(sorted(blockers)),
         operator_approval_present=approval is not None,

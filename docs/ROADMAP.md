@@ -2,7 +2,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.35
+- **Installable Home Assistant release:** v1.0.36
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; one explicitly confirmed supervised first-live trial can be launched only through the interactive options flow; general Live mode and autonomous scheduling remain disabled
 - **Current epic:** v1.0 architecture freeze and Home Assistant product integration
@@ -386,3 +386,15 @@ Delivered deterministic synthetic acknowledgement, rejection, and timeout semant
 - Closes the ephemeral commissioning window and revokes any remaining approval after every attempt.
 - Registers no irrigation command service or button and adds no scheduler/coordinator-loop dispatch path.
 - Keeps general Live mode and autonomous scheduling disabled.
+
+
+## v1.0.36 — First Supervised Live Trial Acceptance
+
+**Status: Complete**
+
+- Separates bounded supervised commissioning eligibility from long-horizon autonomous promotion evidence.
+- Reduces the autonomous promotion evidence-day threshold from 14 to 10 days while retaining the remaining promotion criteria.
+- Allows a supervised trial to proceed before promotion maturity only when all non-readiness execution gates, all six live-mode safeguards, and all integrated validation scenarios pass.
+- Accepts the canonical Home Assistant `HEALTHY` health-state representation during supervised commissioning.
+- Makes execution-boundary acknowledgement available after ownership confirmation even while autonomous readiness remains immature.
+- Preserves explicit single-use approval, fresh observations, no active watering conflict, the 120-second runtime ceiling, audit-before-dispatch, no automatic retry, and disabled autonomous Live control.
