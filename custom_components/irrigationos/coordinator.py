@@ -72,6 +72,8 @@ from .scientific_inputs import build_scientific_input_snapshot
 from .shadow_evaluation import ShadowEvaluationReason
 from .shadow_evaluation.manager import ShadowEvaluationManager
 from .sunrise_hard_stop.manager import SunriseHardStopManager
+from .supervised_operation.acceptance import SupervisedOperationAcceptanceManager
+from .supervised_operation.manager import SupervisedOperationManager
 
 if TYPE_CHECKING:
     from .realtime import RealtimeObservationManager
@@ -159,6 +161,10 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         )
         self.live_commissioning = LiveCommissioningManager()
         self.first_live_acceptance = FirstLiveAcceptanceManager(hass, entry.entry_id)
+        self.supervised_operation = SupervisedOperationManager()
+        self.supervised_operation_acceptance = SupervisedOperationAcceptanceManager(
+            hass, entry.entry_id
+        )
         self.manual_override_preservation = ManualOverridePreservationManager(
             hass, log_root, self.command_acknowledgements
         )
@@ -209,6 +215,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
 
         await self.command_acknowledgements.async_initialize(now=datetime.now(UTC))
         await self.first_live_acceptance.async_initialize()
+        await self.supervised_operation_acceptance.async_initialize()
         await self.observation_history.async_initialize()
         await self.shadow_evaluations.async_initialize()
         shadow_records = await self.shadow_evaluations.async_load_records()

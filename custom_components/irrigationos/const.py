@@ -6,7 +6,7 @@ from typing import Final
 
 DOMAIN: Final = "irrigationos"
 NAME: Final = "IrrigationOS"
-VERSION: Final = "1.0.39"
+VERSION: Final = "1.0.40"
 
 CONF_API_KEY: Final = "api_key"
 CONF_PERSON_ID: Final = "person_id"

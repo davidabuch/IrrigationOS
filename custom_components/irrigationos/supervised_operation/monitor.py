@@ -12,7 +12,11 @@ from ..controllers.models import (
     ObservationQuality,
 )
 from ..first_live_delivery.acceptance import build_acceptance_record
-from .acceptance import JsonlSupervisedOperationAcceptanceSink
+from .acceptance import (
+    JsonlSupervisedOperationAcceptanceSink,
+    SupervisedOperationAcceptanceManager,
+    async_record_terminal_acceptance,
+)
 from .audit import SupervisedOperationAuditSink, build_audit_event
 from .manager import SupervisedOperationManager
 
@@ -31,6 +35,10 @@ class SupervisedOperationSnapshotRefresher(Protocol):
         """Request one canonical controller refresh."""
         ...
 
+    def async_update_listeners(self) -> None:
+        """Publish transient and persistent state changes to entities."""
+        ...
+
 
 async def async_monitor_supervised_operation(
     *,
@@ -38,6 +46,7 @@ async def async_monitor_supervised_operation(
     manager: SupervisedOperationManager,
     audit_sink: SupervisedOperationAuditSink,
     acceptance_sink: JsonlSupervisedOperationAcceptanceSink,
+    acceptance: SupervisedOperationAcceptanceManager,
     operation_id: str,
     controller_id: str,
     controller_slot: int,
@@ -102,6 +111,7 @@ async def async_monitor_supervised_operation(
                 await _record_terminal(
                     audit_sink=audit_sink,
                     acceptance_sink=acceptance_sink,
+                    acceptance=acceptance,
                     operation_id=operation_id,
                     controller_slot=controller_slot,
                     area_slot=area_slot,
@@ -122,6 +132,7 @@ async def async_monitor_supervised_operation(
                 await _record_terminal(
                     audit_sink=audit_sink,
                     acceptance_sink=acceptance_sink,
+                    acceptance=acceptance,
                     operation_id=operation_id,
                     controller_slot=controller_slot,
                     area_slot=area_slot,
@@ -139,6 +150,7 @@ async def async_monitor_supervised_operation(
         await _record_terminal(
             audit_sink=audit_sink,
             acceptance_sink=acceptance_sink,
+            acceptance=acceptance,
             operation_id=operation_id,
             controller_slot=controller_slot,
             area_slot=area_slot,
@@ -155,12 +167,14 @@ async def async_monitor_supervised_operation(
         )
     finally:
         manager.mark_complete(operation_id)
+        coordinator.async_update_listeners()
 
 
 async def _record_terminal(
     *,
     audit_sink: SupervisedOperationAuditSink,
     acceptance_sink: JsonlSupervisedOperationAcceptanceSink,
+    acceptance: SupervisedOperationAcceptanceManager,
     operation_id: str,
     controller_slot: int,
     area_slot: int,
@@ -195,7 +209,11 @@ async def _record_terminal(
         terminal_detail_code=detail_code,
         terminal_audit_recorded=terminal_audit_recorded,
     )
-    await acceptance_sink.async_record(record)
+    await async_record_terminal_acceptance(
+        record,
+        history=acceptance_sink,
+        latest=acceptance,
+    )
 
 
 def _target_state(

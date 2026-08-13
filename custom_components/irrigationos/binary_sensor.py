@@ -35,6 +35,7 @@ async def async_setup_entry(
         IrrigationOSRealtimeHealthySensor(coordinator),
         IrrigationOSPollingFallbackHealthySensor(coordinator),
         IrrigationOSWateringActiveSensor(coordinator),
+        IrrigationOSSupervisedOperationInProgressSensor(coordinator),
     ]
     inventory = EntityInventory()
     entities.extend(_new_dynamic_entities(coordinator, inventory))
@@ -222,6 +223,35 @@ class IrrigationOSWateringActiveSensor(IrrigationOSEntity, BinarySensorEntity):
         if profile.display_name.source.value == "user":
             return profile.display_name.value
         return f"Zone {area.slot_number}"
+
+
+class IrrigationOSSupervisedOperationInProgressSensor(
+    IrrigationOSEntity, BinarySensorEntity
+):
+    """Expose only coordinator-owned transient supervised-operation state."""
+
+    _attr_name = "Supervised operation in progress"
+    _attr_unique_id = "irrigationos_supervised_operation_in_progress"
+    entity_id = "binary_sensor.irrigationos_supervised_operation_in_progress"
+    _attr_icon = "mdi:timer-sand"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.supervised_operation.in_progress
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        manager = self.coordinator.supervised_operation
+        return {
+            "active_operation_id": manager.active_operation_id,
+            "controller_slot": manager.active_controller_slot,
+            "area_slot": manager.active_area_slot,
+            "requested_runtime_seconds": manager.active_runtime_seconds,
+        }
 
 
 class IrrigationOSControllerOnlineSensor(IrrigationOSControllerEntity, BinarySensorEntity):
