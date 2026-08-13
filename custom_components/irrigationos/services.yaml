@@ -1,0 +1,53 @@
+run_supervised_operation:
+  name: Run supervised operational watering
+  description: >-
+    Manually starts one bounded, previously validated irrigation target after
+    fail-closed health, ownership, observation, and watering-conflict checks.
+  fields:
+    config_entry_id:
+      name: IrrigationOS instance
+      description: The loaded IrrigationOS config entry to use.
+      required: true
+      selector:
+        config_entry:
+          integration: irrigationos
+    controller_slot:
+      name: Controller slot
+      description: Canonical IrrigationOS controller slot previously commissioned.
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 32
+          step: 1
+          mode: box
+    area_slot:
+      name: Area slot
+      description: Canonical area slot that passed the latest first-live acceptance.
+      required: true
+      example: 2
+      selector:
+        number:
+          min: 1
+          max: 64
+          step: 1
+          mode: box
+    runtime_seconds:
+      name: Runtime
+      description: Bounded watering runtime in seconds.
+      required: true
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 120
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    confirmation:
+      name: Confirmation phrase
+      description: Type RUN SUPERVISED OPERATIONAL WATERING exactly.
+      required: true
+      selector:
+        text:

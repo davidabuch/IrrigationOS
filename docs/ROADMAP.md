@@ -1,19 +1,21 @@
 # IrrigationOS Roadmap
 
-## v1.0.38 — Structured Live Trial Acceptance Record
+## v1.0.39 — Bounded Supervised Operational Command Path
 
-- Persists the latest supervised physical trial as an explicit `pass`, `fail`, or `indeterminate` record across Home Assistant restarts.
-- Exposes individual acceptance criteria, observed watering/idle boundaries, polling-bounded runtime evidence, concurrent-watering evidence, and refresh-error count through a dedicated Home Assistant sensor and diagnostics.
-- Keeps the result privacy-safe by using canonical slots and the IrrigationOS attempt ID rather than native provider identifiers.
-- Adds no autonomous scheduling, automatic retries, broader command surface, or general Live authorization.
+- Adds one explicit Home Assistant supervised operational watering service after a successful first-live acceptance.
+- Restricts the service to the exact controller and area slots from the latest persisted first-live `pass` and to a 1–120 second runtime.
+- Revalidates health, fresh confirmed observation, integrated supervised-safety prerequisites, ownership, boundary acknowledgement, target availability/idle state, and zero active watering before every dispatch.
+- Requires durable privacy-safe audit intent before the single Rachio start request and never retries a failed or ambiguous transport request automatically.
+- Observes accepted operations asynchronously for `WATERING` then `IDLE` and writes separate operational audit and structured acceptance JSONL evidence.
+- Keeps command buttons, scheduler/coordinator-loop actuation, general Live mode, autonomous scheduling, and `live_control_authorized` disabled.
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.38
+- **Installable Home Assistant release:** v1.0.39
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
-- **Current operating boundary:** Observation remains the default commissioned mode; one explicitly confirmed supervised first-live trial can be launched only through the interactive options flow; general Live mode and autonomous scheduling remain disabled
-- **Current epic:** supervised physical commissioning with structured acceptance evidence
-- **Next milestone:** accumulate and review supervised acceptance results before considering any broader live-control authority; autonomous scheduling remains disabled
+- **Current operating boundary:** Observation remains the default commissioned mode; supervised first-live commissioning remains available, and one tightly bounded manual operational service may run only the exact previously accepted first-live target; general Live mode and autonomous scheduling remain disabled
+- **Current epic:** supervised physical commissioning transitioning into bounded manual operational validation
+- **Next milestone:** accumulate supervised operational evidence and expose richer operator-facing operational acceptance before considering any broader target scope or autonomous authority
 
 ## Delivery model
 
@@ -405,3 +407,13 @@ Delivered deterministic synthetic acknowledgement, rejection, and timeout semant
 - Accepts the canonical Home Assistant `HEALTHY` health-state representation during supervised commissioning.
 - Makes execution-boundary acknowledgement available after ownership confirmation even while autonomous readiness remains immature.
 - Preserves explicit single-use approval, fresh observations, no active watering conflict, the 120-second runtime ceiling, audit-before-dispatch, no automatic retry, and disabled autonomous Live control.
+
+## v1.0.39 — Bounded Supervised Operational Command Path
+
+**Status: Current milestone**
+
+- Adds one manual Home Assistant service for repeated physical validation of the exact first-live accepted target.
+- Requires the accepted first-live result plus a fresh healthy fail-closed preflight on every call.
+- Requires current integrated supervised-safety prerequisites before every dispatch.
+- Persists separate operational audit and structured JSONL acceptance evidence.
+- Keeps all autonomous execution paths disabled.

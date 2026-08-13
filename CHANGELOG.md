@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.39 — Bounded Supervised Operational Command Path
+
+- Added one explicitly invoked Home Assistant service for bounded supervised operational watering after a persisted successful first-live acceptance.
+- Restricts every command to the exact previously accepted controller and area slots, a 1–120 second runtime, and an exact typed confirmation phrase.
+- Forces a fresh canonical preflight and requires healthy confirmed observations, commissioned ownership, boundary acknowledgement, an idle eligible target, and zero active watering before dispatch.
+- Requires durable privacy-safe intent evidence before the single Rachio start request, prevents overlapping IrrigationOS operations, and never retries failed or ambiguous transport requests automatically.
+- Observes accepted operations through canonical WATERING-to-IDLE completion and writes separate operational audit and structured acceptance JSONL evidence.
+- Keeps command buttons, scheduler/coordinator-loop actuation, general Live mode, autonomous scheduling, and `live_control_authorized` disabled.
+
 ## 1.0.38 — Structured Live Trial Acceptance Record
 
 - Added a persistent structured `pass`, `fail`, or `indeterminate` result for the latest supervised first-live trial.
