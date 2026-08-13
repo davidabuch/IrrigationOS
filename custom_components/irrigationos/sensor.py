@@ -62,6 +62,7 @@ async def async_setup_entry(
         IrrigationOSLiveCommissioningSensor(coordinator),
         IrrigationOSFirstLiveAcceptanceSensor(coordinator),
         IrrigationOSValidatedTargetsSensor(coordinator),
+        IrrigationOSProductionReadinessSensor(coordinator),
         IrrigationOSSupervisedOperationAcceptanceSensor(coordinator),
         *(
             IrrigationOSPipelineStageStatusSensor(coordinator, stage)
@@ -356,6 +357,27 @@ class IrrigationOSValidatedTargetsSensor(IrrigationOSEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return self.coordinator.validated_targets.diagnostics()
+
+
+class IrrigationOSProductionReadinessSensor(IrrigationOSEntity, SensorEntity):
+    """Expose fail-closed advisory production readiness without authority."""
+
+    _attr_name = "Production readiness"
+    _attr_unique_id = "irrigationos_production_readiness"
+    entity_id = "sensor.irrigationos_production_readiness"
+    _attr_icon = "mdi:shield-check-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.production_readiness.summary.state.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self.coordinator.production_readiness.summary.to_dict()
 
 
 class IrrigationOSCurrentWateringSessionSensor(IrrigationOSEntity, SensorEntity):

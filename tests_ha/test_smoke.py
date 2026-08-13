@@ -58,6 +58,10 @@ from custom_components.irrigationos.first_live_delivery.acceptance import (
     build_acceptance_record,
 )
 from custom_components.irrigationos.health import IrrigationOSHealthState
+from custom_components.irrigationos.production_readiness import (
+    ProductionReadinessInputs,
+    ProductionTarget,
+)
 
 
 def _area(
@@ -145,6 +149,24 @@ def _snapshot(
         account_name="Test Account",
         controllers=(controller,),
         observation=observation,
+    )
+
+
+def _production_snapshot() -> ControllerRegistrySnapshot:
+    snapshot = _snapshot(slots=16)
+    controller = snapshot.controllers[0]
+    configured_slots = {1, 2, 4, 5}
+    areas = tuple(
+        _area(
+            controller.controller_id,
+            slot,
+            configured=slot in configured_slots,
+        )
+        for slot in range(1, 17)
+    )
+    return replace(
+        snapshot,
+        controllers=(replace(controller, areas=areas),),
     )
 
 
@@ -554,6 +576,87 @@ async def test_validated_targets_backfill_multiple_restore_and_revoke(
     assert await entry.runtime_data.validated_targets.async_revoke(1, 1)
     assert not entry.runtime_data.validated_targets.contains(1, 1)
     assert entry.runtime_data.validated_targets.contains(1, 2)
+
+
+@pytest.mark.asyncio
+async def test_production_readiness_entities_use_only_configured_targets_and_restart_safe(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = MutableAdapter(_production_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    coordinator = entry.runtime_data
+    coordinator.update_production_readiness()
+    summary = coordinator.production_readiness.summary
+    assert [target.area_slot for target in summary.production_targets] == [1, 2, 4, 5]
+    assert summary.state.value == "not_ready"
+
+    targets = tuple(ProductionTarget(1, slot) for slot in (1, 2, 4, 5))
+    coordinator.production_readiness.consider(
+        ProductionReadinessInputs(
+            evaluated_at=datetime.now(UTC),
+            health_state="HEALTHY",
+            observation_age_seconds=1,
+            cloud_connection_healthy=True,
+            realtime_observation_healthy=True,
+            ownership_confirmed=True,
+            boundary_review_acknowledged=True,
+            topology_matches=True,
+            ownership_persistence_healthy=True,
+            production_targets=targets,
+            validated_targets=targets,
+            validated_target_persistence_healthy=True,
+            first_live_persistence_healthy=True,
+            supervised_operation_persistence_healthy=True,
+            aggregate_persistence_healthy=True,
+            operational_log_healthy=True,
+            active_external_watering_count=0,
+            supervised_operation_in_progress=False,
+            safety_prerequisites_met=True,
+        )
+    )
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+    sensor = hass.states.get("sensor.irrigationos_production_readiness")
+    binary = hass.states.get("binary_sensor.irrigationos_production_ready")
+    assert sensor is not None
+    assert sensor.state == "ready_for_supervised_production"
+    assert sensor.attributes["production_target_count"] == 4
+    assert sensor.attributes["validated_production_target_count"] == 4
+    assert [item["area_slot"] for item in sensor.attributes["production_targets"]] == [
+        1,
+        2,
+        4,
+        5,
+    ]
+    assert "native-zone" not in repr(sensor.attributes)
+    assert binary is not None
+    assert binary.state == "on"
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    readiness_diagnostics = diagnostics["coordinator"]["production_readiness"]
+    assert "native-zone" not in repr(readiness_diagnostics)
+    assert readiness_diagnostics["live_control_authorized"] is False
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get("sensor.irrigationos_production_readiness").state == (
+        "not_ready"
+    )
+    assert hass.states.get("binary_sensor.irrigationos_production_ready").state == "off"
+    assert entry.runtime_data.supervised_operation.in_progress is False
 
 
 @pytest.mark.asyncio

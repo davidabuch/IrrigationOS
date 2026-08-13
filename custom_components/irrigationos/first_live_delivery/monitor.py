@@ -38,6 +38,10 @@ class FirstLiveSnapshotRefresher(Protocol):
         """Publish updated acceptance evidence to Home Assistant entities."""
         ...
 
+    def update_production_readiness(self, evaluated_at: datetime | None = None) -> None:
+        """Recompute advisory readiness after terminal commissioning evidence."""
+        ...
+
 
 async def async_monitor_first_live_acceptance(
     *,
@@ -214,6 +218,7 @@ async def _record_terminal(
     acceptance_recorded = await acceptance.async_record(record)
     if acceptance_recorded and record.status is FirstLiveAcceptanceStatus.PASS:
         await validated_targets.async_register(record)
+    coordinator.update_production_readiness(now)
     coordinator.async_update_listeners()
 
 

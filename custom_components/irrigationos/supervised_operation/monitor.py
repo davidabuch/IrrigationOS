@@ -39,6 +39,10 @@ class SupervisedOperationSnapshotRefresher(Protocol):
         """Publish transient and persistent state changes to entities."""
         ...
 
+    def update_production_readiness(self, evaluated_at: datetime | None = None) -> None:
+        """Recompute advisory readiness after operation state changes."""
+        ...
+
 
 async def async_monitor_supervised_operation(
     *,
@@ -167,6 +171,7 @@ async def async_monitor_supervised_operation(
         )
     finally:
         manager.mark_complete(operation_id)
+        coordinator.update_production_readiness()
         coordinator.async_update_listeners()
 
 
