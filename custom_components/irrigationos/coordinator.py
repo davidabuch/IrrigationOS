@@ -42,6 +42,7 @@ from .controllers import (
     ControllerProviderError,
     ControllerRateLimitError,
     ControllerRegistrySnapshot,
+    IrrigationAreaState,
 )
 from .execution_authorization.manager import ExecutionAuthorizationManager
 from .first_live_delivery.acceptance import FirstLiveAcceptanceManager
@@ -67,6 +68,11 @@ from .observation_history.manager import WateringSessionHistoryManager
 from .operational_log import DailyOperationalLog
 from .ownership_commissioning.manager import OwnershipCommissioningManager
 from .pipeline import PipelineEvaluation, build_pipeline_evaluation
+from .production_readiness import (
+    ProductionReadinessInputs,
+    ProductionReadinessManager,
+    ProductionTarget,
+)
 from .replay_readiness.manager import ReplayReadinessManager
 from .safety_preemption.manager import SafetyPreemptionManager
 from .scientific_inputs import build_scientific_input_snapshot
@@ -193,6 +199,9 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self._last_incident_duration_seconds: int | None = None
         self._incident_reason_codes: tuple[str, ...] = ()
         self._incident_affected_components: tuple[str, ...] = ()
+        self.production_readiness = ProductionReadinessManager(
+            self._production_readiness_inputs(self._started_at)
+        )
 
     async def async_initialize_health(self) -> None:
         """Restore persistent health incident history and initialize daily logging."""
@@ -469,6 +478,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             observation_age_seconds=assessment.observation_age_seconds,
             active_external_watering_count=len(self.observation_history.active_sessions),
         )
+        self.update_production_readiness(now)
         incident_changed = await self._apply_incident_transition(previous, assessment, now)
         state_changed = assessment != previous
         if notify_listeners and (state_changed or incident_changed):
@@ -479,6 +489,78 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
                 extra={"previous_health_state": previous.state.value, "trigger": trigger},
             )
         return assessment
+
+    def update_production_readiness(self, evaluated_at: datetime | None = None) -> None:
+        """Recompute advisory readiness from current evidence; never persist authority."""
+
+        self.production_readiness.consider(
+            self._production_readiness_inputs(evaluated_at or datetime.now(UTC))
+        )
+
+    def _production_readiness_inputs(
+        self, evaluated_at: datetime
+    ) -> ProductionReadinessInputs:
+        snapshot = self._health_snapshot
+        production_targets: list[ProductionTarget] = []
+        watering_count = len(self.observation_history.active_sessions)
+        if snapshot is not None:
+            watering_count = max(
+                watering_count,
+                sum(
+                    area.state is IrrigationAreaState.WATERING
+                    for controller in snapshot.controllers
+                    for area in controller.areas
+                ),
+            )
+            for controller_slot, controller in enumerate(snapshot.controllers, start=1):
+                production_targets.extend(
+                    ProductionTarget(controller_slot, area.slot_number)
+                    for area in controller.areas
+                    if area.configured and area.enabled and area.binding is not None
+                )
+        validated_targets = tuple(
+            ProductionTarget(target.controller_slot, target.area_slot)
+            for target in self.validated_targets.targets
+        )
+        ownership = self.ownership_commissioning.summary
+        health = self._health_assessment
+        realtime_healthy = bool(
+            self.realtime is not None
+            and self.realtime.enabled
+            and self.realtime.remote_health.healthy
+        )
+        return ProductionReadinessInputs(
+            evaluated_at=evaluated_at,
+            health_state=health.state.value,
+            observation_age_seconds=health.observation_age_seconds,
+            cloud_connection_healthy=health.polling_healthy,
+            realtime_observation_healthy=realtime_healthy,
+            ownership_confirmed=ownership.ownership_confirmed,
+            boundary_review_acknowledged=ownership.boundary_review_acknowledged,
+            topology_matches=ownership.topology_matches,
+            ownership_persistence_healthy=(
+                self.ownership_commissioning.last_error is None
+            ),
+            production_targets=tuple(production_targets),
+            validated_targets=validated_targets,
+            validated_target_persistence_healthy=(
+                self.validated_targets.last_persistence_error is None
+            ),
+            first_live_persistence_healthy=(
+                self.first_live_acceptance.last_persistence_error is None
+            ),
+            supervised_operation_persistence_healthy=(
+                self.supervised_operation_acceptance.last_persistence_error is None
+            ),
+            aggregate_persistence_healthy=health.persistence_healthy,
+            operational_log_healthy=health.operational_log_healthy,
+            active_external_watering_count=watering_count,
+            supervised_operation_in_progress=self.supervised_operation.in_progress,
+            safety_prerequisites_met=(
+                self.live_commissioning.summary.supervised_safety_prerequisites_met
+            ),
+            unattended_canary_approval_present=False,
+        )
 
     async def confirm_controller_ownership(self) -> bool:
         """Persist explicit ownership commissioning without actuating equipment."""

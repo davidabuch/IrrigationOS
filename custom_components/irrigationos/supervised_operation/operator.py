@@ -123,6 +123,7 @@ async def async_run_supervised_operation(
                 start_acknowledged=False,
                 terminal_audit_recorded=False,
             )
+            coordinator.update_production_readiness()
             coordinator.async_update_listeners()
             return SupervisedOperationResult(
                 status=SupervisedOperationStatus.AUDIT_FAILED,
@@ -171,6 +172,7 @@ async def async_run_supervised_operation(
                 start_acknowledged=False,
                 terminal_audit_recorded=terminal_recorded,
             )
+            coordinator.update_production_readiness()
             coordinator.async_update_listeners()
             return SupervisedOperationResult(
                 status=SupervisedOperationStatus.TRANSPORT_FAILED,
@@ -187,6 +189,7 @@ async def async_run_supervised_operation(
             area_slot=area_slot,
             runtime_seconds=runtime_seconds,
         )
+        coordinator.update_production_readiness()
         coordinator.async_update_listeners()
         await audit_sink.async_record(
             build_audit_event(

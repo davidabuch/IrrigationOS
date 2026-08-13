@@ -1,20 +1,20 @@
 # IrrigationOS Roadmap
 
-## v1.0.41 — Multi-Zone Commissioning & Validated Target Registry
+## v1.0.42 — Production Readiness Gate
 
-- Adds durable canonical target eligibility only after an exact first-live PASS.
-- Supports multiple independently validated targets without allowing later commissioning to invalidate earlier PASS evidence.
-- Backfills the latest v1.0.40 PASS once and exposes the privacy-safe registry through Home Assistant and diagnostics.
-- Preserves exact confirmation, ownership, boundary-review, health, observation, conflict, target-state, and 120-second runtime gates.
-- Adds no autonomous scheduling, unattended commands, command retries, or general Live authority.
+- Evaluates configured, enabled, bound canonical targets rather than total controller capacity.
+- Requires all production targets to be validated along with healthy current ownership, topology, observation, connectivity, persistence, conflict, and safety evidence.
+- Distinguishes supervised-production readiness from a future unattended canary using an explicit additional prerequisite.
+- Recomputes after restart and fails closed during initialization without persisting stale authority.
+- Adds no autonomous scheduling, canary execution, unattended commands, retries, or general Live authority.
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.41
+- **Installable Home Assistant release:** v1.0.42
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; supervised first-live commissioning remains available, and one tightly bounded manual operational service may run only the exact previously accepted first-live target; general Live mode and autonomous scheduling remain disabled
 - **Current epic:** supervised physical commissioning transitioning into bounded manual operational validation
-- **Next milestone:** locally validate multi-zone first-live commissioning and independent operational eligibility before considering any broader authority
+- **Next milestone:** validate the production-readiness gate on HAOS before designing any bounded unattended canary
 
 ## Delivery model
 

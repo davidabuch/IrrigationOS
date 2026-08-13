@@ -36,6 +36,7 @@ async def async_setup_entry(
         IrrigationOSPollingFallbackHealthySensor(coordinator),
         IrrigationOSWateringActiveSensor(coordinator),
         IrrigationOSSupervisedOperationInProgressSensor(coordinator),
+        IrrigationOSProductionReadySensor(coordinator),
     ]
     inventory = EntityInventory()
     entities.extend(_new_dynamic_entities(coordinator, inventory))
@@ -251,6 +252,31 @@ class IrrigationOSSupervisedOperationInProgressSensor(
             "controller_slot": manager.active_controller_slot,
             "area_slot": manager.active_area_slot,
             "requested_runtime_seconds": manager.active_runtime_seconds,
+        }
+
+
+class IrrigationOSProductionReadySensor(IrrigationOSEntity, BinarySensorEntity):
+    """Report advisory readiness for supervised production or higher."""
+
+    _attr_name = "Production ready"
+    _attr_unique_id = "irrigationos_production_ready"
+    entity_id = "binary_sensor.irrigationos_production_ready"
+    _attr_icon = "mdi:shield-check-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.production_readiness.summary.production_ready
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        summary = self.coordinator.production_readiness.summary
+        return {
+            "readiness_state": summary.state.value,
+            "blocker_codes": list(summary.blocker_codes),
         }
 
 

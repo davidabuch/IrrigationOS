@@ -69,6 +69,9 @@ class _Coordinator:
     def async_update_listeners(self) -> None:
         self.listener_updates += 1
 
+    def update_production_readiness(self, _evaluated_at: datetime | None = None) -> None:
+        return None
+
 
 class _Recorder:
     def __init__(self) -> None:

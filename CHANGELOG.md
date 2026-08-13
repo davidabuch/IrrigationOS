@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.42 — Production Readiness Gate
+
+- Added a deterministic, recomputed, fail-closed production-readiness engine and coordinator-owned manager.
+- Defines production targets only as configured, enabled, bound canonical areas, so unused controller-capacity slots do not block readiness.
+- Requires every production target to have its own durable validated-target evidence plus healthy ownership, topology, observations, connectivity, persistence, conflicts, and integrated safety prerequisites.
+- Distinguishes supervised-production readiness from a future unattended canary through an explicit additional approval prerequisite.
+- Added advisory readiness sensor, compact binary sensor, and privacy-safe diagnostics without persisting stale readiness authority.
+- Added no actuation path, autonomous watering, scheduling, retry, target expansion, or official Home Assistant Rachio dependency.
+
 ## 1.0.41 — Multi-Zone Commissioning & Validated Target Registry
 
 - Added a durable privacy-safe registry keyed only by canonical controller and area slots.

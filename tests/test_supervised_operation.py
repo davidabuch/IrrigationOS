@@ -74,6 +74,9 @@ class _DispatchCoordinator(SimpleNamespace):
     def async_update_listeners(self) -> None:
         self.listener_updates += 1
 
+    def update_production_readiness(self, _evaluated_at: datetime | None = None) -> None:
+        return None
+
 
 def _dispatch_coordinator(tmp_path: Path, monkeypatch: Any) -> Any:
     base = _coordinator()
