@@ -12,6 +12,7 @@ from ..coordinator import IrrigationOSCoordinator
 from .audit import JsonlFirstLiveTrialAuditSink
 from .executor import FirstLiveTrialExecutionResult, FirstLiveTrialExecutor
 from .models import FirstLiveDeliveryRequest
+from .monitor import async_monitor_first_live_acceptance
 from .rachio import RachioFirstLiveTransport
 
 FIRST_LIVE_OPERATOR_CONFIRMATION = "RUN SUPERVISED FIRST LIVE TRIAL"
@@ -65,7 +66,22 @@ async def async_run_supervised_first_live_trial(
             ),
             audit_sink=JsonlFirstLiveTrialAuditSink(log_path),
         )
-        return await executor.async_execute(request=request, snapshot=coordinator.data)
+        result = await executor.async_execute(request=request, snapshot=coordinator.data)
+        if result.status.value == "start_dispatched" and result.attempt_id is not None:
+            coordinator.hass.async_create_task(
+                async_monitor_first_live_acceptance(
+                    coordinator=coordinator,
+                    audit_sink=JsonlFirstLiveTrialAuditSink(log_path),
+                    attempt_id=result.attempt_id,
+                    controller_id=controller_id,
+                    controller_slot=controller_slot,
+                    area_slot=area_slot,
+                    runtime_seconds=runtime_seconds,
+                    dispatched_at=request.requested_at,
+                ),
+                "IrrigationOS supervised first-live acceptance monitor",
+            )
+        return result
     finally:
         coordinator.live_commissioning.revoke_approval()
 

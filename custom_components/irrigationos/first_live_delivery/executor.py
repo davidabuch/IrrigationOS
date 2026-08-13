@@ -40,6 +40,7 @@ class FirstLiveTrialExecutionResult:
     approval_consumed_before_dispatch: bool
     durable_outcome_recorded: bool
     retry_permitted: bool = False
+    attempt_id: str | None = None
 
 
 class FirstLiveTrialExecutor:
@@ -128,6 +129,7 @@ class FirstLiveTrialExecutor:
                 runtime_seconds=request.runtime_seconds,
                 approval_consumed_before_dispatch=True,
                 durable_outcome_recorded=outcome_recorded,
+                attempt_id=attempt_id,
             )
 
         outcome_recorded = await self._audit_sink.async_record(
@@ -147,6 +149,7 @@ class FirstLiveTrialExecutor:
             runtime_seconds=request.runtime_seconds,
             approval_consumed_before_dispatch=True,
             durable_outcome_recorded=outcome_recorded,
+            attempt_id=attempt_id,
         )
 
 

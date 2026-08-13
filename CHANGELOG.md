@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.37 — Supervised Live Trial Completion & Acceptance Evidence
+
+- Added a bounded asynchronous acceptance monitor after an accepted supervised first-live start.
+- Reuses canonical controller refreshes to observe the approved area enter `WATERING` and return to `IDLE`.
+- Correlates dispatch, physical observation, and terminal acceptance evidence with one privacy-safe attempt ID.
+- Records explicit fail-closed terminal evidence when watering or completion cannot be observed within bounded grace periods.
+- Adds no automatic command retry, additional actuation path, autonomous scheduling, or general Live authorization.
+
 ## 1.0.36 — First Supervised Live Trial Acceptance
 
 - Separated supervised commissioning eligibility from long-horizon autonomous promotion maturity.
