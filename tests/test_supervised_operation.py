@@ -2,36 +2,63 @@
 
 from __future__ import annotations
 
-import asyncio
+import subprocess
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from custom_components.irrigationos.controllers.models import (
-    ControllerAvailability,
-    ControllerCapabilities,
-    ControllerRegistrySnapshot,
-    IrrigationArea,
-    IrrigationAreaState,
-    IrrigationController,
-    ObservationMetadata,
-    ObservationQuality,
-    VendorBinding,
-)
-from custom_components.irrigationos.first_live_delivery.acceptance import (
-    FirstLiveAcceptanceStatus,
-)
-from custom_components.irrigationos.health import IrrigationOSHealthState
-from custom_components.irrigationos.supervised_operation.audit import (
-    JsonlSupervisedOperationAuditSink,
-    build_audit_event,
-    new_operation_id,
-)
-from custom_components.irrigationos.supervised_operation.operator import (
-    SUPERVISED_OPERATION_CONFIRMATION,
-    evaluate_supervised_operation_blockers,
-)
+from tests.helpers import load_integration_module
+
+controller_models = load_integration_module("controllers.models")
+acceptance = load_integration_module("first_live_delivery.acceptance")
+health = load_integration_module("health")
+audit = load_integration_module("supervised_operation.audit")
+operator = load_integration_module("supervised_operation.operator")
+
+ControllerAvailability = controller_models.ControllerAvailability
+ControllerCapabilities = controller_models.ControllerCapabilities
+ControllerRegistrySnapshot = controller_models.ControllerRegistrySnapshot
+IrrigationArea = controller_models.IrrigationArea
+IrrigationAreaState = controller_models.IrrigationAreaState
+IrrigationController = controller_models.IrrigationController
+ObservationMetadata = controller_models.ObservationMetadata
+ObservationQuality = controller_models.ObservationQuality
+VendorBinding = controller_models.VendorBinding
+FirstLiveAcceptanceStatus = acceptance.FirstLiveAcceptanceStatus
+IrrigationOSHealthState = health.IrrigationOSHealthState
+JsonlSupervisedOperationAuditSink = audit.JsonlSupervisedOperationAuditSink
+build_audit_event = audit.build_audit_event
+new_operation_id = audit.new_operation_id
+SUPERVISED_OPERATION_CONFIRMATION = operator.SUPERVISED_OPERATION_CONFIRMATION
+evaluate_supervised_operation_blockers = operator.evaluate_supervised_operation_blockers
+
+
+def test_operator_module_import_does_not_require_home_assistant() -> None:
+    """Keep pure safety-gate tests runnable without Home Assistant installed."""
+
+    script = """
+import builtins
+
+original_import = builtins.__import__
+
+def import_without_home_assistant(name, *args, **kwargs):
+    if name == "homeassistant" or name.startswith("homeassistant."):
+        raise ModuleNotFoundError("Home Assistant intentionally unavailable")
+    return original_import(name, *args, **kwargs)
+
+builtins.__import__ = import_without_home_assistant
+from tests.helpers import load_integration_module
+load_integration_module("supervised_operation.operator")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def _coordinator(*, accepted_slot: int = 2, active_sessions: tuple[object, ...] = ()) -> Any:
@@ -104,7 +131,7 @@ def _blockers(coordinator: Any, **overrides: object) -> tuple[str, ...]:
         "confirmation": SUPERVISED_OPERATION_CONFIRMATION,
     }
     values.update(overrides)
-    return evaluate_supervised_operation_blockers(coordinator, **values)  # type: ignore[arg-type]
+    return evaluate_supervised_operation_blockers(coordinator, **values)
 
 
 def test_supervised_operation_happy_path_has_no_blockers() -> None:
@@ -128,19 +155,19 @@ def test_supervised_operation_is_limited_to_validated_target() -> None:
     assert "target_not_first_live_validated" in blockers
 
 
-
 def test_supervised_operation_requires_current_integrated_safety() -> None:
     coordinator = _coordinator()
     coordinator.live_commissioning.summary.supervised_safety_prerequisites_met = False
     blockers = _blockers(coordinator)
     assert "supervised_safety_prerequisites_not_met" in blockers
 
+
 def test_supervised_operation_blocks_existing_watering() -> None:
     blockers = _blockers(_coordinator(active_sessions=(object(),)))
     assert "active_watering_conflict" in blockers
 
 
-def test_supervised_operation_audit_is_privacy_safe(tmp_path: Path) -> None:
+async def test_supervised_operation_audit_is_privacy_safe(tmp_path: Path) -> None:
     path = tmp_path / "supervised_operation_audit.jsonl"
     operation_id = new_operation_id()
     sink = JsonlSupervisedOperationAuditSink(path)
@@ -153,7 +180,7 @@ def test_supervised_operation_audit_is_privacy_safe(tmp_path: Path) -> None:
         runtime_seconds=30,
         detail_code="supervised_operational_start",
     )
-    assert asyncio.run(sink.async_record(event)) is True
+    assert await sink.async_record(event) is True
     content = path.read_text(encoding="utf-8")
     assert operation_id in content
     assert "native-zone-secret" not in content
