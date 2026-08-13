@@ -6,8 +6,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
 from ..const import CONF_API_KEY
 from ..controllers import (
     ControllerAvailability,
@@ -131,6 +129,12 @@ async def async_run_supervised_operation(
             )
 
         manager.mark_dispatched(operation_id)
+
+        # Home Assistant is only required when this live actuation path executes.
+        # Keeping the import local preserves the repository's HA-independent unit
+        # test boundary while production still uses HA's managed aiohttp session.
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
         transport = RachioFirstLiveTransport(
             async_get_clientsession(coordinator.hass),
             str(coordinator.entry.data[CONF_API_KEY]),
