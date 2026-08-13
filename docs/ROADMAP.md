@@ -1,20 +1,20 @@
 # IrrigationOS Roadmap
 
-## v1.0.40 — Supervised Operational State & Acceptance Visibility
+## v1.0.41 — Multi-Zone Commissioning & Validated Target Registry
 
-- Makes supervised operational progress coordinator-owned and fail-closed to off after restart.
-- Persists the latest completed supervised operational acceptance separately in Home Assistant storage while preserving append-only JSONL history.
-- Exposes latest `pass`, `fail`, or `indeterminate` acceptance and transient in-progress state through privacy-safe Home Assistant entities and diagnostics.
-- Preserves the exact v1.0.39 confirmation, first-live, ownership, boundary-review, health, observation, conflict, target, and 120-second runtime gates.
-- Adds no autonomous scheduling, command retries, target expansion, or general Live authority.
+- Adds durable canonical target eligibility only after an exact first-live PASS.
+- Supports multiple independently validated targets without allowing later commissioning to invalidate earlier PASS evidence.
+- Backfills the latest v1.0.40 PASS once and exposes the privacy-safe registry through Home Assistant and diagnostics.
+- Preserves exact confirmation, ownership, boundary-review, health, observation, conflict, target-state, and 120-second runtime gates.
+- Adds no autonomous scheduling, unattended commands, command retries, or general Live authority.
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.40
+- **Installable Home Assistant release:** v1.0.41
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; supervised first-live commissioning remains available, and one tightly bounded manual operational service may run only the exact previously accepted first-live target; general Live mode and autonomous scheduling remain disabled
 - **Current epic:** supervised physical commissioning transitioning into bounded manual operational validation
-- **Next milestone:** locally validate supervised operational state and acceptance visibility before considering any broader target scope or autonomous authority
+- **Next milestone:** locally validate multi-zone first-live commissioning and independent operational eligibility before considering any broader authority
 
 ## Delivery model
 

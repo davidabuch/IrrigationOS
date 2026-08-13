@@ -24,7 +24,7 @@ run_supervised_operation:
           mode: box
     area_slot:
       name: Area slot
-      description: Canonical area slot that passed the latest first-live acceptance.
+      description: Canonical area slot present in the validated-target registry.
       required: true
       example: 2
       selector:

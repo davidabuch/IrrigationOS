@@ -45,6 +45,7 @@ from .controllers import (
 )
 from .execution_authorization.manager import ExecutionAuthorizationManager
 from .first_live_delivery.acceptance import FirstLiveAcceptanceManager
+from .first_live_delivery.validated_targets import ValidatedTargetRegistry
 from .health import (
     HEALTH_REEVALUATION_INTERVAL,
     HEALTH_STORE_VERSION,
@@ -161,6 +162,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         )
         self.live_commissioning = LiveCommissioningManager()
         self.first_live_acceptance = FirstLiveAcceptanceManager(hass, entry.entry_id)
+        self.validated_targets = ValidatedTargetRegistry(hass, entry.entry_id)
         self.supervised_operation = SupervisedOperationManager()
         self.supervised_operation_acceptance = SupervisedOperationAcceptanceManager(
             hass, entry.entry_id
@@ -215,6 +217,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
 
         await self.command_acknowledgements.async_initialize(now=datetime.now(UTC))
         await self.first_live_acceptance.async_initialize()
+        await self.validated_targets.async_initialize(self.first_live_acceptance.latest)
         await self.supervised_operation_acceptance.async_initialize()
         await self.observation_history.async_initialize()
         await self.shadow_evaluations.async_initialize()

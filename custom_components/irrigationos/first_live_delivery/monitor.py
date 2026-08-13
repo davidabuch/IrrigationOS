@@ -11,8 +11,13 @@ from ..controllers.models import (
     IrrigationAreaState,
     ObservationQuality,
 )
-from .acceptance import FirstLiveAcceptanceManager, build_acceptance_record
+from .acceptance import (
+    FirstLiveAcceptanceManager,
+    FirstLiveAcceptanceStatus,
+    build_acceptance_record,
+)
 from .audit import FirstLiveTrialAuditSink, build_audit_event
+from .validated_targets import ValidatedTargetRegistry
 
 FIRST_LIVE_ACCEPTANCE_MONITOR_REVISION = 2
 FIRST_LIVE_OBSERVATION_INTERVAL_SECONDS = 5
@@ -39,6 +44,7 @@ async def async_monitor_first_live_acceptance(
     coordinator: FirstLiveSnapshotRefresher,
     audit_sink: FirstLiveTrialAuditSink,
     acceptance: FirstLiveAcceptanceManager,
+    validated_targets: ValidatedTargetRegistry,
     attempt_id: str,
     controller_id: str,
     controller_slot: int,
@@ -102,6 +108,7 @@ async def async_monitor_first_live_acceptance(
             await _record_terminal(
                 coordinator=coordinator,
                 acceptance=acceptance,
+                validated_targets=validated_targets,
                 audit_sink=audit_sink,
                 attempt_id=attempt_id,
                 controller_id=controller_id,
@@ -124,6 +131,7 @@ async def async_monitor_first_live_acceptance(
             await _record_terminal(
                 coordinator=coordinator,
                 acceptance=acceptance,
+                validated_targets=validated_targets,
                 audit_sink=audit_sink,
                 attempt_id=attempt_id,
                 controller_id=controller_id,
@@ -142,6 +150,7 @@ async def async_monitor_first_live_acceptance(
     await _record_terminal(
         coordinator=coordinator,
         acceptance=acceptance,
+        validated_targets=validated_targets,
         audit_sink=audit_sink,
         attempt_id=attempt_id,
         controller_id=controller_id,
@@ -164,6 +173,7 @@ async def _record_terminal(
     *,
     coordinator: FirstLiveSnapshotRefresher,
     acceptance: FirstLiveAcceptanceManager,
+    validated_targets: ValidatedTargetRegistry,
     audit_sink: FirstLiveTrialAuditSink,
     attempt_id: str,
     controller_id: str,
@@ -201,7 +211,9 @@ async def _record_terminal(
         terminal_detail_code=detail_code,
         terminal_audit_recorded=terminal_audit_recorded,
     )
-    await acceptance.async_record(record)
+    acceptance_recorded = await acceptance.async_record(record)
+    if acceptance_recorded and record.status is FirstLiveAcceptanceStatus.PASS:
+        await validated_targets.async_register(record)
     coordinator.async_update_listeners()
 
 
