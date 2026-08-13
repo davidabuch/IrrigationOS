@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.40 — Supervised Operational State & Acceptance Visibility
+
+- Made transient supervised-operation state coordinator-owned and restart-fail-closed.
+- Added Home Assistant storage for the latest completed supervised operational acceptance while retaining append-only audit and acceptance JSONL history.
+- Added a structured acceptance sensor and an in-progress binary sensor using only privacy-safe canonical state.
+- Added redacted supervised-operation diagnostics and restart restoration for completed `pass`, `fail`, and `indeterminate` evidence.
+- Preserved every v1.0.39 safety gate, the 120-second limit, manual-only dispatch, and the prohibition on automatic actuation retries.
+
 ## 1.0.39 — Bounded Supervised Operational Command Path
 
 - Added one explicitly invoked Home Assistant service for bounded supervised operational watering after a persisted successful first-live acceptance.

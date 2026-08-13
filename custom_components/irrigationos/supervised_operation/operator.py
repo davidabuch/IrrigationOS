@@ -15,9 +15,12 @@ from ..controllers import (
 from ..first_live_delivery.acceptance import FirstLiveAcceptanceStatus, build_acceptance_record
 from ..first_live_delivery.rachio import FirstLiveTransportError, RachioFirstLiveTransport
 from ..health import IrrigationOSHealthState
-from .acceptance import JsonlSupervisedOperationAcceptanceSink
+from .acceptance import (
+    JsonlSupervisedOperationAcceptanceSink,
+    SupervisedOperationAcceptanceManager,
+    async_record_terminal_acceptance,
+)
 from .audit import JsonlSupervisedOperationAuditSink, build_audit_event, new_operation_id
-from .manager import SupervisedOperationManager
 from .models import SupervisedOperationResult, SupervisedOperationStatus
 from .monitor import async_monitor_supervised_operation
 
@@ -36,7 +39,7 @@ async def async_run_supervised_operation(
 ) -> SupervisedOperationResult:
     """Dispatch one manually confirmed operation after strict live-state preflight."""
 
-    manager = _operation_manager(coordinator)
+    manager = coordinator.supervised_operation
     async with manager.dispatch_lock:
         try:
             await coordinator.async_request_refresh()
@@ -110,6 +113,7 @@ async def async_run_supervised_operation(
         if not intent_recorded:
             await _record_pre_dispatch_failure(
                 acceptance_sink=acceptance_sink,
+                acceptance=coordinator.supervised_operation_acceptance,
                 operation_id=operation_id,
                 controller_slot=controller_slot,
                 area_slot=area_slot,
@@ -119,6 +123,7 @@ async def async_run_supervised_operation(
                 start_acknowledged=False,
                 terminal_audit_recorded=False,
             )
+            coordinator.async_update_listeners()
             return SupervisedOperationResult(
                 status=SupervisedOperationStatus.AUDIT_FAILED,
                 blocker_codes=("dispatch_intent_not_durable",),
@@ -128,18 +133,15 @@ async def async_run_supervised_operation(
                 runtime_seconds=runtime_seconds,
             )
 
-        manager.mark_dispatched(operation_id)
-
-        # Home Assistant is only required when this live actuation path executes.
-        # Keeping the import local preserves the repository's HA-independent unit
-        # test boundary while production still uses HA's managed aiohttp session.
-        from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
-        transport = RachioFirstLiveTransport(
-            async_get_clientsession(coordinator.hass),
-            str(coordinator.entry.data[CONF_API_KEY]),
-        )
         try:
+            # Home Assistant is required only when this live path executes.
+            # The local import preserves the HA-independent unit-test boundary.
+            from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+            transport = RachioFirstLiveTransport(
+                async_get_clientsession(coordinator.hass),
+                str(coordinator.entry.data[CONF_API_KEY]),
+            )
             await transport.async_start_zone(
                 zone_id=area.binding.native_id,
                 runtime_seconds=runtime_seconds,
@@ -159,6 +161,7 @@ async def async_run_supervised_operation(
             )
             await _record_pre_dispatch_failure(
                 acceptance_sink=acceptance_sink,
+                acceptance=coordinator.supervised_operation_acceptance,
                 operation_id=operation_id,
                 controller_slot=controller_slot,
                 area_slot=area_slot,
@@ -168,6 +171,7 @@ async def async_run_supervised_operation(
                 start_acknowledged=False,
                 terminal_audit_recorded=terminal_recorded,
             )
+            coordinator.async_update_listeners()
             return SupervisedOperationResult(
                 status=SupervisedOperationStatus.TRANSPORT_FAILED,
                 blocker_codes=("transport_failed_no_retry",),
@@ -177,6 +181,13 @@ async def async_run_supervised_operation(
                 runtime_seconds=runtime_seconds,
             )
 
+        manager.mark_dispatched(
+            operation_id,
+            controller_slot=controller_slot,
+            area_slot=area_slot,
+            runtime_seconds=runtime_seconds,
+        )
+        coordinator.async_update_listeners()
         await audit_sink.async_record(
             build_audit_event(
                 operation_id=operation_id,
@@ -194,6 +205,7 @@ async def async_run_supervised_operation(
                 manager=manager,
                 audit_sink=audit_sink,
                 acceptance_sink=acceptance_sink,
+                acceptance=coordinator.supervised_operation_acceptance,
                 operation_id=operation_id,
                 controller_id=controller.controller_id,
                 controller_slot=controller_slot,
@@ -228,7 +240,7 @@ def evaluate_supervised_operation_blockers(
         blockers.add("operator_confirmation_mismatch")
     if not 1 <= runtime_seconds <= SUPERVISED_OPERATION_MAX_RUNTIME_SECONDS:
         blockers.add("runtime_out_of_range")
-    if _operation_manager(coordinator).in_progress:
+    if coordinator.supervised_operation.in_progress:
         blockers.add("supervised_operation_in_progress")
 
     acceptance = coordinator.first_live_acceptance
@@ -303,6 +315,7 @@ def evaluate_supervised_operation_blockers(
 async def _record_pre_dispatch_failure(
     *,
     acceptance_sink: JsonlSupervisedOperationAcceptanceSink,
+    acceptance: SupervisedOperationAcceptanceManager,
     operation_id: str,
     controller_slot: int,
     area_slot: int,
@@ -328,15 +341,8 @@ async def _record_pre_dispatch_failure(
         start_acknowledged=start_acknowledged,
         terminal_audit_recorded=terminal_audit_recorded,
     )
-    await acceptance_sink.async_record(record)
-
-
-def _operation_manager(coordinator: Any) -> SupervisedOperationManager:
-    """Return the entry-local transient operation manager."""
-
-    manager = getattr(coordinator, "_supervised_operation_manager", None)
-    if isinstance(manager, SupervisedOperationManager):
-        return manager
-    manager = SupervisedOperationManager()
-    coordinator._supervised_operation_manager = manager
-    return manager
+    await async_record_terminal_acceptance(
+        record,
+        history=acceptance_sink,
+        latest=acceptance,
+    )

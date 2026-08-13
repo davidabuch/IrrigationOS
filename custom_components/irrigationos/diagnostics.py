@@ -140,6 +140,10 @@ async def async_get_config_entry_diagnostics(
             ),
             "live_commissioning": entry.runtime_data.live_commissioning.diagnostics(),
             "first_live_acceptance": entry.runtime_data.first_live_acceptance.diagnostics(),
+            "supervised_operation": entry.runtime_data.supervised_operation.diagnostics(),
+            "supervised_operation_acceptance": (
+                entry.runtime_data.supervised_operation_acceptance.diagnostics()
+            ),
             "manual_override_preservation": (
                 entry.runtime_data.manual_override_preservation.diagnostics()
             ),

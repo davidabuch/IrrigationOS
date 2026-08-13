@@ -6,7 +6,7 @@ import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any
 
 from tests.helpers import load_integration_module
@@ -15,6 +15,7 @@ controller_models = load_integration_module("controllers.models")
 acceptance = load_integration_module("first_live_delivery.acceptance")
 health = load_integration_module("health")
 audit = load_integration_module("supervised_operation.audit")
+supervised_manager = load_integration_module("supervised_operation.manager")
 operator = load_integration_module("supervised_operation.operator")
 
 ControllerAvailability = controller_models.ControllerAvailability
@@ -28,11 +29,58 @@ ObservationQuality = controller_models.ObservationQuality
 VendorBinding = controller_models.VendorBinding
 FirstLiveAcceptanceStatus = acceptance.FirstLiveAcceptanceStatus
 IrrigationOSHealthState = health.IrrigationOSHealthState
+SupervisedOperationManager = supervised_manager.SupervisedOperationManager
 JsonlSupervisedOperationAuditSink = audit.JsonlSupervisedOperationAuditSink
 build_audit_event = audit.build_audit_event
 new_operation_id = audit.new_operation_id
 SUPERVISED_OPERATION_CONFIRMATION = operator.SUPERVISED_OPERATION_CONFIRMATION
 evaluate_supervised_operation_blockers = operator.evaluate_supervised_operation_blockers
+SupervisedOperationStatus = operator.SupervisedOperationStatus
+
+
+class _LatestAcceptance:
+    def __init__(self) -> None:
+        self.records: list[Any] = []
+
+    async def async_record(self, record: Any) -> bool:
+        self.records.append(record)
+        return True
+
+
+class _Hass:
+    def __init__(self, root: Path) -> None:
+        self.config = SimpleNamespace(path=lambda *parts: str(root.joinpath(*parts)))
+        self.created_tasks: list[Any] = []
+
+    def async_create_task(self, coroutine: Any, _name: str) -> None:
+        self.created_tasks.append(coroutine)
+
+
+class _DispatchCoordinator(SimpleNamespace):
+    async def async_request_refresh(self) -> None:
+        return None
+
+    def async_update_listeners(self) -> None:
+        self.listener_updates += 1
+
+
+def _dispatch_coordinator(tmp_path: Path, monkeypatch: Any) -> Any:
+    base = _coordinator()
+    coordinator = _DispatchCoordinator(**base.__dict__)
+    coordinator.hass = _Hass(tmp_path)
+    coordinator.entry = SimpleNamespace(data={"api_key": "secret"})
+    coordinator.last_update_success = True
+    coordinator.listener_updates = 0
+    coordinator.supervised_operation_acceptance = _LatestAcceptance()
+
+    aiohttp_client = ModuleType("homeassistant.helpers.aiohttp_client")
+    aiohttp_client.__dict__["async_get_clientsession"] = lambda _hass: object()
+    monkeypatch.setitem(sys.modules, "homeassistant", ModuleType("homeassistant"))
+    monkeypatch.setitem(sys.modules, "homeassistant.helpers", ModuleType("homeassistant.helpers"))
+    monkeypatch.setitem(
+        sys.modules, "homeassistant.helpers.aiohttp_client", aiohttp_client
+    )
+    return coordinator
 
 
 def test_operator_module_import_does_not_require_home_assistant() -> None:
@@ -120,6 +168,7 @@ def _coordinator(*, accepted_slot: int = 2, active_sessions: tuple[object, ...] 
             latest=SimpleNamespace(controller_slot=1, area_slot=accepted_slot),
             last_persistence_error=None,
         ),
+        supervised_operation=SupervisedOperationManager(),
     )
 
 
@@ -167,6 +216,42 @@ def test_supervised_operation_blocks_existing_watering() -> None:
     assert "active_watering_conflict" in blockers
 
 
+def test_supervised_operation_manager_exposes_and_clears_safe_state() -> None:
+    manager = SupervisedOperationManager()
+    manager.mark_dispatched(
+        "supervised_operation_test",
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=30,
+    )
+    assert manager.diagnostics() == {
+        "in_progress": True,
+        "active_operation_id": "supervised_operation_test",
+        "controller_slot": 1,
+        "area_slot": 2,
+        "requested_runtime_seconds": 30,
+    }
+    manager.mark_complete("supervised_operation_test")
+    assert manager.in_progress is False
+    assert manager.active_operation_id is None
+    assert manager.active_controller_slot is None
+    assert manager.active_area_slot is None
+    assert manager.active_runtime_seconds is None
+
+
+def test_new_supervised_operation_manager_never_restores_in_progress() -> None:
+    previous = SupervisedOperationManager()
+    previous.mark_dispatched(
+        "supervised_operation_before_restart",
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=30,
+    )
+    restarted = SupervisedOperationManager()
+    assert previous.in_progress is True
+    assert restarted.in_progress is False
+
+
 async def test_supervised_operation_audit_is_privacy_safe(tmp_path: Path) -> None:
     path = tmp_path / "supervised_operation_audit.jsonl"
     operation_id = new_operation_id()
@@ -185,3 +270,99 @@ async def test_supervised_operation_audit_is_privacy_safe(tmp_path: Path) -> Non
     assert operation_id in content
     assert "native-zone-secret" not in content
     assert "native-controller-secret" not in content
+
+
+async def test_successful_dispatch_sets_coordinator_owned_in_progress_state(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+
+    class _Transport:
+        def __init__(self, _session: object, _api_key: str) -> None:
+            return None
+
+        async def async_start_zone(self, *, zone_id: str, runtime_seconds: int) -> None:
+            assert zone_id == "native-zone-secret"
+            assert runtime_seconds == 30
+
+    monkeypatch.setattr(operator, "RachioFirstLiveTransport", _Transport)
+    result = await operator.async_run_supervised_operation(
+        coordinator,
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=30,
+        confirmation=SUPERVISED_OPERATION_CONFIRMATION,
+    )
+
+    assert result.status is SupervisedOperationStatus.START_DISPATCHED
+    assert coordinator.supervised_operation.in_progress is True
+    assert coordinator.supervised_operation.active_controller_slot == 1
+    assert coordinator.supervised_operation.active_area_slot == 2
+    assert coordinator.supervised_operation.active_runtime_seconds == 30
+    assert coordinator.listener_updates == 1
+    assert len(coordinator.hass.created_tasks) == 1
+    coordinator.hass.created_tasks[0].close()
+
+
+async def test_transport_failure_records_fail_and_clears_in_progress(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+
+    class _FailingTransport:
+        def __init__(self, _session: object, _api_key: str) -> None:
+            return None
+
+        async def async_start_zone(self, *, zone_id: str, runtime_seconds: int) -> None:
+            raise operator.FirstLiveTransportError("ambiguous transport failure")
+
+    monkeypatch.setattr(operator, "RachioFirstLiveTransport", _FailingTransport)
+    result = await operator.async_run_supervised_operation(
+        coordinator,
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=30,
+        confirmation=SUPERVISED_OPERATION_CONFIRMATION,
+    )
+
+    assert result.status is SupervisedOperationStatus.TRANSPORT_FAILED
+    assert coordinator.supervised_operation.in_progress is False
+    assert coordinator.listener_updates == 1
+    assert len(coordinator.supervised_operation_acceptance.records) == 1
+    assert (
+        coordinator.supervised_operation_acceptance.records[0].status
+        is FirstLiveAcceptanceStatus.FAIL
+    )
+    assert coordinator.hass.created_tasks == []
+
+
+async def test_audit_failure_persists_fail_without_setting_in_progress(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+
+    class _FailingAudit:
+        def __init__(self, _path: Path) -> None:
+            return None
+
+        async def async_record(self, _event: Any) -> bool:
+            return False
+
+    monkeypatch.setattr(operator, "JsonlSupervisedOperationAuditSink", _FailingAudit)
+    result = await operator.async_run_supervised_operation(
+        coordinator,
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=30,
+        confirmation=SUPERVISED_OPERATION_CONFIRMATION,
+    )
+
+    assert result.status is SupervisedOperationStatus.AUDIT_FAILED
+    assert coordinator.supervised_operation.in_progress is False
+    assert coordinator.listener_updates == 1
+    assert len(coordinator.supervised_operation_acceptance.records) == 1
+    assert (
+        coordinator.supervised_operation_acceptance.records[0].status
+        is FirstLiveAcceptanceStatus.FAIL
+    )
+    assert coordinator.hass.created_tasks == []

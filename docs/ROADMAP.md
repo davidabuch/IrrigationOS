@@ -1,21 +1,20 @@
 # IrrigationOS Roadmap
 
-## v1.0.39 — Bounded Supervised Operational Command Path
+## v1.0.40 — Supervised Operational State & Acceptance Visibility
 
-- Adds one explicit Home Assistant supervised operational watering service after a successful first-live acceptance.
-- Restricts the service to the exact controller and area slots from the latest persisted first-live `pass` and to a 1–120 second runtime.
-- Revalidates health, fresh confirmed observation, integrated supervised-safety prerequisites, ownership, boundary acknowledgement, target availability/idle state, and zero active watering before every dispatch.
-- Requires durable privacy-safe audit intent before the single Rachio start request and never retries a failed or ambiguous transport request automatically.
-- Observes accepted operations asynchronously for `WATERING` then `IDLE` and writes separate operational audit and structured acceptance JSONL evidence.
-- Keeps command buttons, scheduler/coordinator-loop actuation, general Live mode, autonomous scheduling, and `live_control_authorized` disabled.
+- Makes supervised operational progress coordinator-owned and fail-closed to off after restart.
+- Persists the latest completed supervised operational acceptance separately in Home Assistant storage while preserving append-only JSONL history.
+- Exposes latest `pass`, `fail`, or `indeterminate` acceptance and transient in-progress state through privacy-safe Home Assistant entities and diagnostics.
+- Preserves the exact v1.0.39 confirmation, first-live, ownership, boundary-review, health, observation, conflict, target, and 120-second runtime gates.
+- Adds no autonomous scheduling, command retries, target expansion, or general Live authority.
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.39
+- **Installable Home Assistant release:** v1.0.40
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; supervised first-live commissioning remains available, and one tightly bounded manual operational service may run only the exact previously accepted first-live target; general Live mode and autonomous scheduling remain disabled
 - **Current epic:** supervised physical commissioning transitioning into bounded manual operational validation
-- **Next milestone:** accumulate supervised operational evidence and expose richer operator-facing operational acceptance before considering any broader target scope or autonomous authority
+- **Next milestone:** locally validate supervised operational state and acceptance visibility before considering any broader target scope or autonomous authority
 
 ## Delivery model
 

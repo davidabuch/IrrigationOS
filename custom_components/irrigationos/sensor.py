@@ -22,6 +22,9 @@ from .entity import (
 from .observation_history.models import safe_session_summary
 from .pipeline import PIPELINE_ALGORITHM_VERSION, PipelineStage
 from .reconciliation import EntityInventory, controller_first
+from .supervised_operation.acceptance import (
+    SUPERVISED_OPERATION_ACCEPTANCE_RECORD_SCHEMA_VERSION,
+)
 
 
 async def async_setup_entry(
@@ -58,6 +61,7 @@ async def async_setup_entry(
         IrrigationOSIntegratedSafetyReviewSensor(coordinator),
         IrrigationOSLiveCommissioningSensor(coordinator),
         IrrigationOSFirstLiveAcceptanceSensor(coordinator),
+        IrrigationOSSupervisedOperationAcceptanceSensor(coordinator),
         *(
             IrrigationOSPipelineStageStatusSensor(coordinator, stage)
             for stage in PipelineStage
@@ -300,6 +304,36 @@ class IrrigationOSFirstLiveAcceptanceSensor(IrrigationOSEntity, SensorEntity):
                 ),
             }
         return latest.to_dict()
+
+
+class IrrigationOSSupervisedOperationAcceptanceSensor(IrrigationOSEntity, SensorEntity):
+    """Expose the latest persistent supervised operational result."""
+
+    _attr_name = "Supervised operation acceptance"
+    _attr_unique_id = "irrigationos_supervised_operation_acceptance"
+    entity_id = "sensor.irrigationos_supervised_operation_acceptance"
+    _attr_icon = "mdi:clipboard-check-multiple-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.supervised_operation_acceptance.status.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        manager = self.coordinator.supervised_operation_acceptance
+        latest = manager.latest
+        if latest is None:
+            return {
+                "schema_version": SUPERVISED_OPERATION_ACCEPTANCE_RECORD_SCHEMA_VERSION,
+                "last_persistence_error": manager.last_persistence_error,
+            }
+        attributes = latest.to_dict()
+        attributes["last_persistence_error"] = manager.last_persistence_error
+        return attributes
 
 
 class IrrigationOSCurrentWateringSessionSensor(IrrigationOSEntity, SensorEntity):

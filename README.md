@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.39 — Bounded Supervised Operational Command Path**
+**v1.0.40 — Supervised Operational State & Acceptance Visibility**
 
 The current release:
 
@@ -33,9 +33,11 @@ The current release:
 - requires a durable privacy-safe dispatch-intent audit record before any operational command is sent;
 - never retries a failed or ambiguous operational transport request automatically;
 - observes each accepted supervised operation through canonical refreshes and records privacy-safe terminal audit and structured JSONL acceptance evidence;
+- exposes the latest supervised operational `pass`, `fail`, or `indeterminate` acceptance as a persistent Home Assistant sensor;
+- exposes coordinator-owned, restart-fail-closed supervised operation progress as a privacy-safe binary sensor;
 - keeps scheduler/coordinator-loop actuation, general Live mode, autonomous scheduling, and `live_control_authorized` hard-coded `false`.
 
-See [`docs/V1_0_39_BOUNDED_SUPERVISED_OPERATIONAL_COMMAND_PATH.md`](docs/V1_0_39_BOUNDED_SUPERVISED_OPERATIONAL_COMMAND_PATH.md), [`docs/V1_0_38_STRUCTURED_LIVE_TRIAL_ACCEPTANCE_RECORD.md`](docs/V1_0_38_STRUCTURED_LIVE_TRIAL_ACCEPTANCE_RECORD.md), [`docs/V1_0_37_SUPERVISED_LIVE_TRIAL_COMPLETION_ACCEPTANCE.md`](docs/V1_0_37_SUPERVISED_LIVE_TRIAL_COMPLETION_ACCEPTANCE.md), [`docs/V1_0_36_FIRST_SUPERVISED_LIVE_TRIAL_ACCEPTANCE.md`](docs/V1_0_36_FIRST_SUPERVISED_LIVE_TRIAL_ACCEPTANCE.md), [`docs/V1_0_35_SUPERVISED_FIRST_LIVE_OPERATOR_INTERFACE.md`](docs/V1_0_35_SUPERVISED_FIRST_LIVE_OPERATOR_INTERFACE.md), [`docs/V1_0_34_COMMISSIONED_FIRST_LIVE_WATERING_TRIAL_EXECUTOR.md`](docs/V1_0_34_COMMISSIONED_FIRST_LIVE_WATERING_TRIAL_EXECUTOR.md), [`docs/V1_0_33_FIRST_LIVE_COMMAND_DELIVERY_FOUNDATION.md`](docs/V1_0_33_FIRST_LIVE_COMMAND_DELIVERY_FOUNDATION.md), [`docs/V1_0_32_LIVE_COMMISSIONING_PROTOCOL.md`](docs/V1_0_32_LIVE_COMMISSIONING_PROTOCOL.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+See [`docs/V1_0_40_SUPERVISED_OPERATIONAL_STATE_VISIBILITY.md`](docs/V1_0_40_SUPERVISED_OPERATIONAL_STATE_VISIBILITY.md), [`docs/V1_0_39_BOUNDED_SUPERVISED_OPERATIONAL_COMMAND_PATH.md`](docs/V1_0_39_BOUNDED_SUPERVISED_OPERATIONAL_COMMAND_PATH.md), [`docs/V1_0_38_STRUCTURED_LIVE_TRIAL_ACCEPTANCE_RECORD.md`](docs/V1_0_38_STRUCTURED_LIVE_TRIAL_ACCEPTANCE_RECORD.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
 
 Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can reach. Home Assistant Cloud is optional. If no suitable URL is configured, IrrigationOS reports a repair warning and continues observing through polling.
 
@@ -50,6 +52,7 @@ The repository is currently private, so HACS publication and validation are defe
 Key documents:
 
 - [`docs/IRRIGATIONOS_ARCHITECTURE_V1.md`](docs/IRRIGATIONOS_ARCHITECTURE_V1.md)
+- [`docs/V1_0_40_SUPERVISED_OPERATIONAL_STATE_VISIBILITY.md`](docs/V1_0_40_SUPERVISED_OPERATIONAL_STATE_VISIBILITY.md)
 - [`docs/V1_0_39_BOUNDED_SUPERVISED_OPERATIONAL_COMMAND_PATH.md`](docs/V1_0_39_BOUNDED_SUPERVISED_OPERATIONAL_COMMAND_PATH.md)
 - [`docs/V1_0_32_LIVE_COMMISSIONING_PROTOCOL.md`](docs/V1_0_32_LIVE_COMMISSIONING_PROTOCOL.md)
 - [`docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md`](docs/V1_0_31_INTEGRATED_LIVE_SAFETY_REVIEW.md)
@@ -79,9 +82,9 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation remains the default commissioned operating mode in v1.0.39. The supervised first-live options-flow path remains available for commissioning evidence. A separate `irrigationos.run_supervised_operation` Home Assistant service is now registered only as a tightly bounded manual operational path. It requires an explicit IrrigationOS config entry, the exact controller and area slots from the latest persisted first-live `pass`, a bounded 1–120 second runtime, and the exact typed phrase `RUN SUPERVISED OPERATIONAL WATERING`.
+Observation remains the default commissioned operating mode in v1.0.40. The supervised first-live options-flow path remains available for commissioning evidence. A separate `irrigationos.run_supervised_operation` Home Assistant service is registered only as a tightly bounded manual operational path. It requires an explicit IrrigationOS config entry, the exact controller and area slots from the latest persisted first-live `pass`, a bounded 1–120 second runtime, and the exact typed phrase `RUN SUPERVISED OPERATIONAL WATERING`.
 
-Before dispatch, v1.0.39 requires aggregate health `HEALTHY`, a fresh confirmed canonical observation, current integrated supervised-safety prerequisites, commissioned controller ownership, acknowledged execution-boundary review, zero active watering, an online Rachio controller, an idle configured target, and durable privacy-safe audit intent. A second IrrigationOS-supervised operation cannot overlap an operation that is still awaiting terminal observation. Transport failures are never retried automatically. Accepted starts are observed asynchronously for `WATERING` then `IDLE` and written to separate supervised-operation audit and structured acceptance JSONL files.
+Before dispatch, v1.0.40 retains the v1.0.39 requirement for aggregate health `HEALTHY`, a fresh confirmed canonical observation, current integrated supervised-safety prerequisites, commissioned controller ownership, acknowledged execution-boundary review, zero active watering, an online Rachio controller, an idle configured target, and durable privacy-safe audit intent. A second IrrigationOS-supervised operation cannot overlap an operation that is still awaiting terminal observation. Transport failures are never retried automatically. Accepted starts are observed asynchronously for `WATERING` then `IDLE`, written to separate supervised-operation audit and structured acceptance JSONL files, and exposed through restart-safe latest-result state.
 
 No irrigation command button is registered, no scheduler or coordinator loop dispatches operational commands, no target beyond the latest accepted first-live controller/area pair is eligible, and general Live mode, autonomous scheduling, and `live_control_authorized` remain disabled.
 
@@ -93,4 +96,4 @@ IrrigationOS separates controller facts from landscape facts. Each irrigation ar
 
 ## v1.0.35 supervised first-live operator interface
 
-The Home Assistant options flow can perform an explicitly confirmed supervised first-live watering trial. v1.0.39 adds a separate bounded operational service only after accepted first-live evidence exists; autonomous scheduling remains disabled.
+The Home Assistant options flow can perform an explicitly confirmed supervised first-live watering trial. The separate bounded operational service remains available only after accepted first-live evidence exists; v1.0.40 adds state visibility without adding authority, and autonomous scheduling remains disabled.

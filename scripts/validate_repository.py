@@ -100,6 +100,7 @@ REQUIRED_FILES = (
     "docs/V1_0_37_SUPERVISED_LIVE_TRIAL_COMPLETION_ACCEPTANCE.md",
     "docs/V1_0_38_STRUCTURED_LIVE_TRIAL_ACCEPTANCE_RECORD.md",
     "docs/V1_0_39_BOUNDED_SUPERVISED_OPERATIONAL_COMMAND_PATH.md",
+    "docs/V1_0_40_SUPERVISED_OPERATIONAL_STATE_VISIBILITY.md",
     "custom_components/irrigationos/first_live_delivery/acceptance.py",
     "custom_components/irrigationos/first_live_delivery/monitor.py",
     "custom_components/irrigationos/first_live_delivery/operator.py",
@@ -166,8 +167,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.39":
-        raise SystemExit("manifest.json version must be 1.0.39")
+    if manifest.get("version") != "1.0.40":
+        raise SystemExit("manifest.json version must be 1.0.40")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")

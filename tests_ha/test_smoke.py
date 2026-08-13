@@ -53,6 +53,9 @@ from custom_components.irrigationos.controllers import (
     VendorBinding,
 )
 from custom_components.irrigationos.diagnostics import async_get_config_entry_diagnostics
+from custom_components.irrigationos.first_live_delivery.acceptance import (
+    build_acceptance_record,
+)
 from custom_components.irrigationos.health import IrrigationOSHealthState
 
 
@@ -198,6 +201,23 @@ class MutableAdapter:
             if not item.startswith(external_id_prefix)
         }
         return RealtimeRegistrationHealth(True, 0, len(controller_native_ids))
+
+
+def _supervised_acceptance_record(status: str) -> Any:
+    now = datetime.now(UTC)
+    return build_acceptance_record(
+        attempt_id=f"supervised_operation_{status}",
+        controller_slot=1,
+        area_slot=1,
+        requested_runtime_seconds=30,
+        observed_watering_at=now,
+        observed_idle_at=(
+            None if status == "indeterminate" else now + timedelta(seconds=30)
+        ),
+        refresh_error_count=1,
+        concurrent_watering_observed=status == "fail",
+        terminal_detail_code=f"supervised_operation_{status}",
+    )
 
 
 def _mock_webhook_request(body: bytes, signature: str) -> MockRequest:
@@ -378,6 +398,88 @@ async def test_runtime_inventory_and_diagnostics(
     assert pipeline_summary["algorithm_version"] == "1.0.10"
     assert "runtime_monitoring" in pipeline_summary["stages"]
     assert pipeline_summary["output_counts"]["runtime_monitoring"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_supervised_operation_state_visibility_and_restart_restore(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    sensor_id = "sensor.irrigationos_supervised_operation_acceptance"
+    binary_id = "binary_sensor.irrigationos_supervised_operation_in_progress"
+    acceptance_state = hass.states.get(sensor_id)
+    progress_state = hass.states.get(binary_id)
+    assert acceptance_state is not None
+    assert acceptance_state.state == "not_available"
+    assert progress_state is not None
+    assert progress_state.state == "off"
+
+    for expected in ("fail", "indeterminate", "pass"):
+        record = _supervised_acceptance_record(expected)
+        assert record.status.value == expected
+        assert await entry.runtime_data.supervised_operation_acceptance.async_record(
+            record
+        )
+        entry.runtime_data.async_update_listeners()
+        await hass.async_block_till_done()
+        acceptance_state = hass.states.get(sensor_id)
+        assert acceptance_state is not None
+        assert acceptance_state.state == expected
+        assert acceptance_state.attributes["attempt_id"] == record.attempt_id
+        assert acceptance_state.attributes["controller_slot"] == 1
+        assert acceptance_state.attributes["area_slot"] == 1
+        assert acceptance_state.attributes["requested_runtime_seconds"] == 30
+        assert acceptance_state.attributes["criteria_total_count"] == 10
+        assert acceptance_state.attributes["schema_version"] == 1
+        assert acceptance_state.attributes["last_persistence_error"] is None
+
+    entry.runtime_data.supervised_operation.mark_dispatched(
+        "supervised_operation_active",
+        controller_slot=1,
+        area_slot=1,
+        runtime_seconds=30,
+    )
+    entry.runtime_data.async_update_listeners()
+    await hass.async_block_till_done()
+    progress_state = hass.states.get(binary_id)
+    assert progress_state is not None
+    assert progress_state.state == "on"
+    assert progress_state.attributes["active_operation_id"] == "supervised_operation_active"
+    assert progress_state.attributes["controller_slot"] == 1
+    assert progress_state.attributes["area_slot"] == 1
+    assert progress_state.attributes["requested_runtime_seconds"] == 30
+
+    entry.runtime_data.supervised_operation.mark_complete("supervised_operation_active")
+    entry.runtime_data.async_update_listeners()
+    await hass.async_block_till_done()
+    assert hass.states.get(binary_id).state == "off"
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    supervised_diagnostics = diagnostics["coordinator"][
+        "supervised_operation_acceptance"
+    ]
+    assert supervised_diagnostics["status"] == "pass"
+    assert "native-zone-1" not in repr(supervised_diagnostics)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(sensor_id).state == "pass"
+    assert hass.states.get(binary_id).state == "off"
+    assert entry.runtime_data.supervised_operation.in_progress is False
 
 
 @pytest.mark.asyncio
