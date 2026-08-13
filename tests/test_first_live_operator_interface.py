@@ -14,7 +14,8 @@ def test_operator_interface_is_options_flow_only() -> None:
     assert "async_run_supervised_first_live_trial" in config_flow
     assert "FirstLiveTrialExecutor" not in button
     assert "async_run_supervised_first_live_trial" not in button
-    assert "services.async_register" not in integration_setup
+    assert "async_run_supervised_first_live_trial" not in integration_setup
+    assert "SERVICE_RUN_SUPERVISED_OPERATION" in integration_setup
 
 
 def test_operator_interface_requires_exact_confirmation_and_bounded_runtime() -> None:

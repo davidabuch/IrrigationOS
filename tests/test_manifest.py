@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INTEGRATION = ROOT / "custom_components" / "irrigationos"
-CURRENT_VERSION = "1.0.38"
+CURRENT_VERSION = "1.0.39"
 
 
 def test_manifest_is_valid() -> None:
@@ -31,8 +31,9 @@ def test_readme_current_release_matches_manifest() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert f"**v{manifest['version']} —" in readme
     assert "Observation remains the default commissioned operating mode" in readme
-    assert "No irrigation command service or button is registered" in readme
-    assert "live_control_authorized` hard-coded `false`" in readme
+    assert "irrigationos.run_supervised_operation" in readme
+    assert "No irrigation command button is registered" in readme
+    assert "live_control_authorized` remain disabled" in readme
 
 
 def test_hacs_metadata_is_valid() -> None:
@@ -56,5 +57,7 @@ def test_required_files_exist() -> None:
         "observation_history",
         "diagnostics.py",
         "strings.json",
+        "services.yaml",
+        "supervised_operation",
     }
     assert required <= {path.name for path in INTEGRATION.iterdir()}

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import logging
 
+import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -24,10 +26,33 @@ from .controllers import ControllerIdentityRegistry
 from .coordinator import IrrigationOSCoordinator
 from .migration import build_v040_migration
 from .realtime import RealtimeObservationManager, async_delete_cloudhook
+from .supervised_operation import (
+    SERVICE_RUN_SUPERVISED_OPERATION,
+    SupervisedOperationStatus,
+    async_run_supervised_operation,
+)
 
 type IrrigationOSConfigEntry = ConfigEntry[IrrigationOSCoordinator]
 
 _LOGGER = logging.getLogger(__name__)
+
+ATTR_CONFIG_ENTRY_ID = "config_entry_id"
+ATTR_CONTROLLER_SLOT = "controller_slot"
+ATTR_AREA_SLOT = "area_slot"
+ATTR_RUNTIME_SECONDS = "runtime_seconds"
+ATTR_CONFIRMATION = "confirmation"
+
+SUPERVISED_OPERATION_SERVICE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_CONFIG_ENTRY_ID): str,
+        vol.Required(ATTR_CONTROLLER_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1)),
+        vol.Required(ATTR_AREA_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1)),
+        vol.Required(ATTR_RUNTIME_SECONDS, default=30): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=120)
+        ),
+        vol.Required(ATTR_CONFIRMATION): str,
+    }
+)
 
 GLOBAL_ENTITY_ID_MIGRATIONS = {
     "irrigationos_status": ("sensor.status", "sensor.irrigationos_status"),
@@ -86,6 +111,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry)
     await coordinator.async_start_health_monitoring()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _async_register_supervised_operation_service(hass)
     return True
 
 
@@ -158,6 +184,43 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _migrate_global_entity_ids(entity_registry, entry.entry_id)
     hass.config_entries.async_update_entry(entry, version=3)
     return True
+
+
+def _async_register_supervised_operation_service(hass: HomeAssistant) -> None:
+    """Register the explicit manual operational command boundary exactly once."""
+
+    if hass.services.has_service(DOMAIN, SERVICE_RUN_SUPERVISED_OPERATION):
+        return
+
+    async def _async_handle(call: ServiceCall) -> None:
+        entry_id = str(call.data[ATTR_CONFIG_ENTRY_ID])
+        target_entry = hass.config_entries.async_get_entry(entry_id)
+        if target_entry is None or target_entry.domain != DOMAIN:
+            raise HomeAssistantError("IrrigationOS config entry was not found")
+        try:
+            coordinator = target_entry.runtime_data
+        except RuntimeError as err:
+            raise HomeAssistantError("IrrigationOS config entry is not loaded") from err
+        if not isinstance(coordinator, IrrigationOSCoordinator):
+            raise HomeAssistantError("IrrigationOS runtime data is unavailable")
+
+        result = await async_run_supervised_operation(
+            coordinator,
+            controller_slot=int(call.data[ATTR_CONTROLLER_SLOT]),
+            area_slot=int(call.data[ATTR_AREA_SLOT]),
+            runtime_seconds=int(call.data[ATTR_RUNTIME_SECONDS]),
+            confirmation=str(call.data[ATTR_CONFIRMATION]),
+        )
+        if result.status is not SupervisedOperationStatus.START_DISPATCHED:
+            blockers = ", ".join(result.blocker_codes) or result.status.value
+            raise HomeAssistantError(f"Supervised operation blocked: {blockers}")
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_RUN_SUPERVISED_OPERATION,
+        _async_handle,
+        schema=SUPERVISED_OPERATION_SERVICE_SCHEMA,
+    )
 
 
 def _migrate_global_entity_ids(

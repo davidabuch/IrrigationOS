@@ -31,6 +31,7 @@ REQUIRED_FILES = (
     "custom_components/irrigationos/observation_history/session_log.py",
     "custom_components/irrigationos/strings.json",
     "custom_components/irrigationos/translations/en.json",
+    "custom_components/irrigationos/services.yaml",
     "docs/IRRIGATIONOS_ARCHITECTURE_V1.md",
     "docs/VISION.md",
     "docs/V0_4_2_ARCHITECTURE.md",
@@ -98,6 +99,7 @@ REQUIRED_FILES = (
     "docs/V1_0_36_FIRST_SUPERVISED_LIVE_TRIAL_ACCEPTANCE.md",
     "docs/V1_0_37_SUPERVISED_LIVE_TRIAL_COMPLETION_ACCEPTANCE.md",
     "docs/V1_0_38_STRUCTURED_LIVE_TRIAL_ACCEPTANCE_RECORD.md",
+    "docs/V1_0_39_BOUNDED_SUPERVISED_OPERATIONAL_COMMAND_PATH.md",
     "custom_components/irrigationos/first_live_delivery/acceptance.py",
     "custom_components/irrigationos/first_live_delivery/monitor.py",
     "custom_components/irrigationos/first_live_delivery/operator.py",
@@ -106,6 +108,13 @@ REQUIRED_FILES = (
     "custom_components/irrigationos/first_live_delivery/engine.py",
     "custom_components/irrigationos/first_live_delivery/models.py",
     "custom_components/irrigationos/first_live_delivery/rachio.py",
+    "custom_components/irrigationos/supervised_operation/__init__.py",
+    "custom_components/irrigationos/supervised_operation/acceptance.py",
+    "custom_components/irrigationos/supervised_operation/audit.py",
+    "custom_components/irrigationos/supervised_operation/manager.py",
+    "custom_components/irrigationos/supervised_operation/models.py",
+    "custom_components/irrigationos/supervised_operation/monitor.py",
+    "custom_components/irrigationos/supervised_operation/operator.py",
     "custom_components/irrigationos/integrated_safety_review/engine.py",
     "custom_components/irrigationos/integrated_safety_review/models.py",
     "custom_components/irrigationos/manual_override_preservation/engine.py",
@@ -157,8 +166,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.38":
-        raise SystemExit("manifest.json version must be 1.0.38")
+    if manifest.get("version") != "1.0.39":
+        raise SystemExit("manifest.json version must be 1.0.39")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")
@@ -173,10 +182,12 @@ def main() -> int:
         raise SystemExit("README.md current release must match manifest.json version")
     if "Observation remains the default commissioned operating mode" not in readme:
         raise SystemExit("README.md must state the commissioned operating boundary")
-    if "No irrigation command service or button is registered" not in readme:
-        raise SystemExit("README.md must preserve the supervised operator-only boundary")
-    if "live_control_authorized` hard-coded `false`" not in readme:
-        raise SystemExit("README.md must state that live control authorization remains false")
+    if "irrigationos.run_supervised_operation" not in readme:
+        raise SystemExit("README.md must document the supervised operational service")
+    if "No irrigation command button is registered" not in readme:
+        raise SystemExit("README.md must preserve the no-button execution boundary")
+    if "live_control_authorized` remain disabled" not in readme:
+        raise SystemExit("README.md must state that general live authorization remains disabled")
 
     hacs = load_json("hacs.json")
     if not isinstance(hacs, dict) or hacs.get("name") != "IrrigationOS":
