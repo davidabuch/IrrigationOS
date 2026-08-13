@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.38 — Structured Live Trial Acceptance Record
+
+- Added a persistent structured `pass`, `fail`, or `indeterminate` result for the latest supervised first-live trial.
+- Records explicit criterion states for durable intent, operator approval, preflight target observation, start acknowledgement, observed watering, bounded requested runtime, return to idle, concurrent watering, and post-run reconciliation.
+- Exposes polling-bounded observed runtime, refresh-error count, terminal detail, and criterion counts through a dedicated Home Assistant sensor and redacted diagnostics.
+- Restores the latest acceptance record after Home Assistant restart.
+- Preserves the one-shot supervised operator boundary with no autonomous scheduling, automatic retries, or general Live authorization.
+
 ## 1.0.37 — Supervised Live Trial Completion & Acceptance Evidence
 
 - Added a bounded asynchronous acceptance monitor after an accepted supervised first-live start.

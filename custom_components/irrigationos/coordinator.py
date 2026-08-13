@@ -44,6 +44,7 @@ from .controllers import (
     ControllerRegistrySnapshot,
 )
 from .execution_authorization.manager import ExecutionAuthorizationManager
+from .first_live_delivery.acceptance import FirstLiveAcceptanceManager
 from .health import (
     HEALTH_REEVALUATION_INTERVAL,
     HEALTH_STORE_VERSION,
@@ -157,6 +158,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             self.live_mode_safety.summary
         )
         self.live_commissioning = LiveCommissioningManager()
+        self.first_live_acceptance = FirstLiveAcceptanceManager(hass, entry.entry_id)
         self.manual_override_preservation = ManualOverridePreservationManager(
             hass, log_root, self.command_acknowledgements
         )
@@ -206,6 +208,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         """Restore restart-safe command and observation evidence before refresh."""
 
         await self.command_acknowledgements.async_initialize(now=datetime.now(UTC))
+        await self.first_live_acceptance.async_initialize()
         await self.observation_history.async_initialize()
         await self.shadow_evaluations.async_initialize()
         shadow_records = await self.shadow_evaluations.async_load_records()

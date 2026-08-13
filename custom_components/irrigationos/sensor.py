@@ -57,6 +57,7 @@ async def async_setup_entry(
         IrrigationOSLiveModeSafetySensor(coordinator),
         IrrigationOSIntegratedSafetyReviewSensor(coordinator),
         IrrigationOSLiveCommissioningSensor(coordinator),
+        IrrigationOSFirstLiveAcceptanceSensor(coordinator),
         *(
             IrrigationOSPipelineStageStatusSensor(coordinator, stage)
             for stage in PipelineStage
@@ -270,6 +271,35 @@ class IrrigationOSLiveCommissioningSensor(IrrigationOSEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return self.coordinator.live_commissioning.summary.to_dict()
+
+
+class IrrigationOSFirstLiveAcceptanceSensor(IrrigationOSEntity, SensorEntity):
+    """Expose the latest persistent structured supervised-trial result."""
+
+    _attr_name = "First live trial acceptance"
+    _attr_unique_id = "irrigationos_first_live_trial_acceptance"
+    entity_id = "sensor.irrigationos_first_live_trial_acceptance"
+    _attr_icon = "mdi:clipboard-check-multiple-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.first_live_acceptance.status.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        latest = self.coordinator.first_live_acceptance.latest
+        if latest is None:
+            return {
+                "status": self.coordinator.first_live_acceptance.status.value,
+                "last_persistence_error": (
+                    self.coordinator.first_live_acceptance.last_persistence_error
+                ),
+            }
+        return latest.to_dict()
 
 
 class IrrigationOSCurrentWateringSessionSensor(IrrigationOSEntity, SensorEntity):

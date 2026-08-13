@@ -9,6 +9,7 @@ from tests.helpers import load_integration_module
 
 controllers = load_integration_module("controllers.models")
 monitor = load_integration_module("first_live_delivery.monitor")
+acceptance = load_integration_module("first_live_delivery.acceptance")
 
 
 def _snapshot(state: Any) -> Any:
@@ -61,6 +62,9 @@ class _Coordinator:
     async def async_request_refresh(self) -> None:
         self.data = _snapshot(self._states.pop(0))
 
+    def async_update_listeners(self) -> None:
+        return None
+
 
 class _Audit:
     def __init__(self) -> None:
@@ -71,11 +75,21 @@ class _Audit:
         return True
 
 
+class _Acceptance:
+    def __init__(self) -> None:
+        self.records: list[Any] = []
+
+    async def async_record(self, record: Any) -> bool:
+        self.records.append(record)
+        return True
+
+
 async def test_monitor_records_watering_then_terminal_acceptance(monkeypatch: Any) -> None:
     coordinator = _Coordinator(
         [controllers.IrrigationAreaState.WATERING, controllers.IrrigationAreaState.IDLE]
     )
     audit = _Audit()
+    acceptance_sink = _Acceptance()
 
     async def _no_sleep(_seconds: float) -> None:
         return None
@@ -84,6 +98,7 @@ async def test_monitor_records_watering_then_terminal_acceptance(monkeypatch: An
     await monitor.async_monitor_first_live_acceptance(
         coordinator=coordinator,
         audit_sink=audit,
+        acceptance=acceptance_sink,
         attempt_id="first_live_attempt_test",
         controller_id="controller-canonical",
         controller_slot=1,
@@ -96,6 +111,11 @@ async def test_monitor_records_watering_then_terminal_acceptance(monkeypatch: An
         "first_live_trial_accepted",
     ]
     assert {event.attempt_id for event in audit.events} == {"first_live_attempt_test"}
+    assert len(acceptance_sink.records) == 1
+    record = acceptance_sink.records[0]
+    assert record.status is acceptance.FirstLiveAcceptanceStatus.PASS
+    assert record.observed_runtime_seconds is not None
+    assert all(criterion.status.value == "pass" for criterion in record.criteria)
     serialized = repr([event.to_dict() for event in audit.events])
     assert "native-zone-secret" not in serialized
     assert "native-device-secret" not in serialized

@@ -72,6 +72,7 @@ async def async_run_supervised_first_live_trial(
                 async_monitor_first_live_acceptance(
                     coordinator=coordinator,
                     audit_sink=JsonlFirstLiveTrialAuditSink(log_path),
+                    acceptance=coordinator.first_live_acceptance,
                     attempt_id=result.attempt_id,
                     controller_id=controller_id,
                     controller_slot=controller_slot,

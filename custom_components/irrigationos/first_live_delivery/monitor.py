@@ -6,10 +6,15 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from ..controllers.models import ControllerRegistrySnapshot, IrrigationAreaState
+from ..controllers.models import (
+    ControllerRegistrySnapshot,
+    IrrigationAreaState,
+    ObservationQuality,
+)
+from .acceptance import FirstLiveAcceptanceManager, build_acceptance_record
 from .audit import FirstLiveTrialAuditSink, build_audit_event
 
-FIRST_LIVE_ACCEPTANCE_MONITOR_REVISION = 1
+FIRST_LIVE_ACCEPTANCE_MONITOR_REVISION = 2
 FIRST_LIVE_OBSERVATION_INTERVAL_SECONDS = 5
 FIRST_LIVE_START_OBSERVATION_GRACE_SECONDS = 30
 FIRST_LIVE_COMPLETION_GRACE_SECONDS = 45
@@ -24,11 +29,16 @@ class FirstLiveSnapshotRefresher(Protocol):
         """Request one canonical controller refresh."""
         ...
 
+    def async_update_listeners(self) -> None:
+        """Publish updated acceptance evidence to Home Assistant entities."""
+        ...
+
 
 async def async_monitor_first_live_acceptance(
     *,
     coordinator: FirstLiveSnapshotRefresher,
     audit_sink: FirstLiveTrialAuditSink,
+    acceptance: FirstLiveAcceptanceManager,
     attempt_id: str,
     controller_id: str,
     controller_slot: int,
@@ -36,9 +46,11 @@ async def async_monitor_first_live_acceptance(
     runtime_seconds: int,
     dispatched_at: datetime,
 ) -> None:
-    """Observe WATERING then IDLE and persist terminal acceptance evidence."""
+    """Observe WATERING then IDLE and persist structured terminal evidence."""
 
-    saw_watering = False
+    observed_watering_at: datetime | None = None
+    refresh_error_count = 0
+    concurrent_watering_observed = False
     start_deadline = dispatched_at + timedelta(
         seconds=FIRST_LIVE_START_OBSERVATION_GRACE_SECONDS
     )
@@ -50,13 +62,26 @@ async def async_monitor_first_live_acceptance(
         try:
             await coordinator.async_request_refresh()
         except Exception:  # A later refresh may recover; terminal evidence remains fail-closed.
+            refresh_error_count += 1
             await asyncio.sleep(FIRST_LIVE_OBSERVATION_INTERVAL_SECONDS)
             continue
 
-        state = _target_state(coordinator.data, controller_id, area_slot)
+        snapshot = coordinator.data
+        state = _target_state(snapshot, controller_id, area_slot)
+        concurrent_watering_observed |= _other_watering_active(
+            snapshot, controller_id, area_slot
+        )
         now = datetime.now(UTC)
-        if state is IrrigationAreaState.WATERING and not saw_watering:
-            saw_watering = True
+        observation_confirmed = (
+            snapshot.observation.quality is ObservationQuality.CONFIRMED
+            and snapshot.observation.is_fresh(now)
+        )
+        if (
+            state is IrrigationAreaState.WATERING
+            and observed_watering_at is None
+            and observation_confirmed
+        ):
+            observed_watering_at = now
             await audit_sink.async_record(
                 build_audit_event(
                     attempt_id=attempt_id,
@@ -69,53 +94,115 @@ async def async_monitor_first_live_acceptance(
                     detail_code="target_watering_observed",
                 )
             )
-        elif saw_watering and state is IrrigationAreaState.IDLE:
-            await audit_sink.async_record(
-                build_audit_event(
-                    attempt_id=attempt_id,
-                    event_type="acceptance_terminal",
-                    recorded_at=now,
-                    controller_id=controller_id,
-                    controller_slot=controller_slot,
-                    area_slot=area_slot,
-                    runtime_seconds=runtime_seconds,
-                    detail_code="first_live_trial_accepted",
-                )
+        elif (
+            observed_watering_at is not None
+            and state is IrrigationAreaState.IDLE
+            and observation_confirmed
+        ):
+            await _record_terminal(
+                coordinator=coordinator,
+                acceptance=acceptance,
+                audit_sink=audit_sink,
+                attempt_id=attempt_id,
+                controller_id=controller_id,
+                controller_slot=controller_slot,
+                area_slot=area_slot,
+                runtime_seconds=runtime_seconds,
+                observed_watering_at=observed_watering_at,
+                observed_idle_at=now,
+                refresh_error_count=refresh_error_count,
+                concurrent_watering_observed=concurrent_watering_observed,
+                detail_code=(
+                    "first_live_trial_rejected_concurrent_watering"
+                    if concurrent_watering_observed
+                    else "first_live_trial_accepted"
+                ),
             )
             return
 
-        if not saw_watering and now > start_deadline:
-            await audit_sink.async_record(
-                build_audit_event(
-                    attempt_id=attempt_id,
-                    event_type="acceptance_terminal",
-                    recorded_at=now,
-                    controller_id=controller_id,
-                    controller_slot=controller_slot,
-                    area_slot=area_slot,
-                    runtime_seconds=runtime_seconds,
-                    detail_code="watering_not_observed_within_grace",
-                )
+        if observed_watering_at is None and now > start_deadline:
+            await _record_terminal(
+                coordinator=coordinator,
+                acceptance=acceptance,
+                audit_sink=audit_sink,
+                attempt_id=attempt_id,
+                controller_id=controller_id,
+                controller_slot=controller_slot,
+                area_slot=area_slot,
+                runtime_seconds=runtime_seconds,
+                observed_watering_at=None,
+                observed_idle_at=None,
+                refresh_error_count=refresh_error_count,
+                concurrent_watering_observed=concurrent_watering_observed,
+                detail_code="watering_not_observed_within_grace",
             )
             return
         await asyncio.sleep(FIRST_LIVE_OBSERVATION_INTERVAL_SECONDS)
 
-    await audit_sink.async_record(
+    await _record_terminal(
+        coordinator=coordinator,
+        acceptance=acceptance,
+        audit_sink=audit_sink,
+        attempt_id=attempt_id,
+        controller_id=controller_id,
+        controller_slot=controller_slot,
+        area_slot=area_slot,
+        runtime_seconds=runtime_seconds,
+        observed_watering_at=observed_watering_at,
+        observed_idle_at=None,
+        refresh_error_count=refresh_error_count,
+        concurrent_watering_observed=concurrent_watering_observed,
+        detail_code=(
+            "completion_not_observed_within_grace"
+            if observed_watering_at is not None
+            else "watering_not_observed_within_grace"
+        ),
+    )
+
+
+async def _record_terminal(
+    *,
+    coordinator: FirstLiveSnapshotRefresher,
+    acceptance: FirstLiveAcceptanceManager,
+    audit_sink: FirstLiveTrialAuditSink,
+    attempt_id: str,
+    controller_id: str,
+    controller_slot: int,
+    area_slot: int,
+    runtime_seconds: int,
+    observed_watering_at: datetime | None,
+    observed_idle_at: datetime | None,
+    refresh_error_count: int,
+    concurrent_watering_observed: bool,
+    detail_code: str,
+) -> None:
+    now = datetime.now(UTC)
+    terminal_audit_recorded = await audit_sink.async_record(
         build_audit_event(
             attempt_id=attempt_id,
             event_type="acceptance_terminal",
-            recorded_at=datetime.now(UTC),
+            recorded_at=now,
             controller_id=controller_id,
             controller_slot=controller_slot,
             area_slot=area_slot,
             runtime_seconds=runtime_seconds,
-            detail_code=(
-                "completion_not_observed_within_grace"
-                if saw_watering
-                else "watering_not_observed_within_grace"
-            ),
+            detail_code=detail_code,
         )
     )
+    record = build_acceptance_record(
+        attempt_id=attempt_id,
+        controller_slot=controller_slot,
+        area_slot=area_slot,
+        requested_runtime_seconds=runtime_seconds,
+        observed_watering_at=observed_watering_at,
+        observed_idle_at=observed_idle_at,
+        refresh_error_count=refresh_error_count,
+        concurrent_watering_observed=concurrent_watering_observed,
+        terminal_detail_code=detail_code,
+        terminal_audit_recorded=terminal_audit_recorded,
+    )
+    await acceptance.async_record(record)
+    coordinator.async_update_listeners()
 
 
 def _target_state(
@@ -128,3 +215,16 @@ def _target_state(
         return None
     area = next((item for item in controller.areas if item.slot_number == area_slot), None)
     return None if area is None else area.state
+
+
+def _other_watering_active(
+    snapshot: ControllerRegistrySnapshot, controller_id: str, area_slot: int
+) -> bool:
+    return any(
+        area.state is IrrigationAreaState.WATERING
+        and not (
+            controller.controller_id == controller_id and area.slot_number == area_slot
+        )
+        for controller in snapshot.controllers
+        for area in controller.areas
+    )
