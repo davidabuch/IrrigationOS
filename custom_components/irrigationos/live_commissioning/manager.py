@@ -17,6 +17,7 @@ class LiveCommissioningManager:
         self._commissioning_window_open = False
         self.summary: LiveCommissioningSummary = build_live_commissioning_summary(
             integrated_review_status="blocked",
+            supervised_safety_prerequisites_met=False,
             approval=None,
             evaluated_at=datetime.now(UTC),
             health_state="initializing",
@@ -70,6 +71,7 @@ class LiveCommissioningManager:
         self,
         *,
         integrated_review_status: str,
+        supervised_safety_prerequisites_met: bool = False,
         evaluated_at: datetime,
         health_state: str,
         observation_age_seconds: float | None,
@@ -79,6 +81,7 @@ class LiveCommissioningManager:
 
         self.summary = build_live_commissioning_summary(
             integrated_review_status=integrated_review_status,
+            supervised_safety_prerequisites_met=supervised_safety_prerequisites_met,
             approval=self._approval,
             evaluated_at=evaluated_at,
             health_state=health_state,

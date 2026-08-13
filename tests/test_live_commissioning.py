@@ -82,9 +82,22 @@ def test_health_and_freshness_degradation_fail_closed() -> None:
     assert "observation_not_fresh_enough_for_commissioning" in summary.blocker_codes
 
 
-def test_integrated_review_must_remain_eligible() -> None:
-    summary = _summary(integrated_review_status="blocked")
-    assert "integrated_safety_review_not_eligible" in summary.blocker_codes
+def test_supervised_trial_can_bypass_long_horizon_integrated_readiness() -> None:
+    summary = _summary(
+        integrated_review_status="blocked",
+        supervised_safety_prerequisites_met=True,
+        health_state="HEALTHY",
+    )
+    assert summary.status is commissioning.LiveCommissioningStatus.FIRST_LIVE_TRIAL_ELIGIBLE
+    assert "supervised_safety_prerequisites_not_met" not in summary.blocker_codes
+
+
+def test_supervised_trial_still_fails_closed_when_safety_prerequisites_fail() -> None:
+    summary = _summary(
+        integrated_review_status="blocked",
+        supervised_safety_prerequisites_met=False,
+    )
+    assert "supervised_safety_prerequisites_not_met" in summary.blocker_codes
 
 
 def test_approval_expires_and_consumed_approval_cannot_be_reused() -> None:
@@ -141,3 +154,47 @@ def test_acceptance_evidence_is_explicit_before_any_future_actuation() -> None:
         "post_run_reconciliation_passed",
     )
     assert summary.approval_persists_across_restart is False
+
+
+def test_supervised_safety_prerequisites_bypass_only_long_horizon_readiness() -> None:
+    assert commissioning.supervised_trial_safety_prerequisites_met(
+        execution_gates={
+            "control_readiness_criteria_met": False,
+            "system_health_healthy": True,
+            "observation_fresh": True,
+            "controllers_fully_available": True,
+            "pipeline_available": True,
+            "controller_ownership_confirmed": True,
+            "execution_boundary_review_acknowledged": True,
+            "no_active_watering_conflict": True,
+            "candidate_runtime_within_limit": True,
+        },
+        safeguard_gates={"safety_preemption_path": True, "sunrise_hard_stop": True},
+        validation_scenarios={"six_safeguards_compose": True},
+    )
+
+
+def test_supervised_safety_prerequisites_fail_if_any_safeguard_regresses() -> None:
+    assert not commissioning.supervised_trial_safety_prerequisites_met(
+        execution_gates={
+            "control_readiness_criteria_met": False,
+            "system_health_healthy": True,
+            "controller_ownership_confirmed": True,
+            "execution_boundary_review_acknowledged": True,
+        },
+        safeguard_gates={"safety_preemption_path": False},
+        validation_scenarios={"six_safeguards_compose": True},
+    )
+
+
+def test_supervised_safety_prerequisites_fail_if_integrated_validation_regresses() -> None:
+    assert not commissioning.supervised_trial_safety_prerequisites_met(
+        execution_gates={
+            "control_readiness_criteria_met": False,
+            "system_health_healthy": True,
+            "controller_ownership_confirmed": True,
+            "execution_boundary_review_acknowledged": True,
+        },
+        safeguard_gates={"safety_preemption_path": True},
+        validation_scenarios={"six_safeguards_compose": False},
+    )

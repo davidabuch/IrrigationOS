@@ -19,6 +19,7 @@ def _commissioning_summary(**overrides: object) -> Any:
     values: dict[str, object] = {
         "status": LiveCommissioningStatus.FIRST_LIVE_TRIAL_ELIGIBLE,
         "integrated_review_status": "validated_review_eligible",
+        "supervised_safety_prerequisites_met": True,
         "evaluated_at": datetime(2026, 8, 12, 20, 0, tzinfo=UTC),
         "blocker_codes": (),
         "operator_approval_present": True,
