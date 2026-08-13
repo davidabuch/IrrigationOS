@@ -12,7 +12,7 @@ from ..controllers import (
     IrrigationAreaState,
     ObservationQuality,
 )
-from ..first_live_delivery.acceptance import FirstLiveAcceptanceStatus, build_acceptance_record
+from ..first_live_delivery.acceptance import build_acceptance_record
 from ..first_live_delivery.rachio import FirstLiveTransportError, RachioFirstLiveTransport
 from ..health import IrrigationOSHealthState
 from .acceptance import (
@@ -243,14 +243,8 @@ def evaluate_supervised_operation_blockers(
     if coordinator.supervised_operation.in_progress:
         blockers.add("supervised_operation_in_progress")
 
-    acceptance = coordinator.first_live_acceptance
-    latest = acceptance.latest
-    if (
-        acceptance.status is not FirstLiveAcceptanceStatus.PASS
-        or latest is None
-        or acceptance.last_persistence_error is not None
-    ):
-        blockers.add("accepted_first_live_evidence_required")
+    if not coordinator.validated_targets.contains(controller_slot, area_slot):
+        blockers.add("target_not_validated")
 
     if coordinator.health_assessment.state is not IrrigationOSHealthState.HEALTHY:
         blockers.add("system_not_healthy")
@@ -303,11 +297,6 @@ def evaluate_supervised_operation_blockers(
             or area.state is not IrrigationAreaState.IDLE
         ):
             blockers.add("area_not_idle_and_eligible")
-
-    if latest is not None and (
-        latest.controller_slot != controller_slot or latest.area_slot != area_slot
-    ):
-        blockers.add("target_not_first_live_validated")
 
     return tuple(sorted(blockers))
 

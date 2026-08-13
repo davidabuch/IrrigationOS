@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.41 — Multi-Zone Commissioning & Validated Target Registry
+
+- Added a durable privacy-safe registry keyed only by canonical controller and area slots.
+- Registers a target only after its exact first-live PASS is durably persisted; FAIL and INDETERMINATE outcomes add nothing.
+- Backfills the latest persisted v1.0.40 PASS once, without parsing JSONL or recreating revoked evidence.
+- Replaced latest-first-live-target comparison with exact validated-registry membership while preserving every other supervised-operation gate.
+- Added a validated-target count sensor, redacted diagnostics, deterministic duplicate refresh, restart restoration, and internal durable revocation.
+- Added no autonomous watering, scheduling, broader control authority, command retry, or official Home Assistant Rachio dependency.
+
 ## 1.0.40 — Supervised Operational State & Acceptance Visibility
 
 - Made transient supervised-operation state coordinator-owned and restart-fail-closed.

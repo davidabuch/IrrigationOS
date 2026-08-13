@@ -61,6 +61,7 @@ async def async_setup_entry(
         IrrigationOSIntegratedSafetyReviewSensor(coordinator),
         IrrigationOSLiveCommissioningSensor(coordinator),
         IrrigationOSFirstLiveAcceptanceSensor(coordinator),
+        IrrigationOSValidatedTargetsSensor(coordinator),
         IrrigationOSSupervisedOperationAcceptanceSensor(coordinator),
         *(
             IrrigationOSPipelineStageStatusSensor(coordinator, stage)
@@ -334,6 +335,27 @@ class IrrigationOSSupervisedOperationAcceptanceSensor(IrrigationOSEntity, Sensor
         attributes = latest.to_dict()
         attributes["last_persistence_error"] = manager.last_persistence_error
         return attributes
+
+
+class IrrigationOSValidatedTargetsSensor(IrrigationOSEntity, SensorEntity):
+    """Expose durable privacy-safe first-live validated target evidence."""
+
+    _attr_name = "Validated targets"
+    _attr_unique_id = "irrigationos_validated_targets"
+    entity_id = "sensor.irrigationos_validated_targets"
+    _attr_icon = "mdi:check-decagram-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> int:
+        return len(self.coordinator.validated_targets.targets)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self.coordinator.validated_targets.diagnostics()
 
 
 class IrrigationOSCurrentWateringSessionSensor(IrrigationOSEntity, SensorEntity):

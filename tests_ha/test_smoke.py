@@ -54,6 +54,7 @@ from custom_components.irrigationos.controllers import (
 )
 from custom_components.irrigationos.diagnostics import async_get_config_entry_diagnostics
 from custom_components.irrigationos.first_live_delivery.acceptance import (
+    FirstLiveAcceptanceManager,
     build_acceptance_record,
 )
 from custom_components.irrigationos.health import IrrigationOSHealthState
@@ -480,6 +481,79 @@ async def test_supervised_operation_state_visibility_and_restart_restore(
     assert hass.states.get(sensor_id).state == "pass"
     assert hass.states.get(binary_id).state == "off"
     assert entry.runtime_data.supervised_operation.in_progress is False
+
+
+@pytest.mark.asyncio
+async def test_validated_targets_backfill_multiple_restore_and_revoke(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = MutableAdapter(_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    prior_acceptance = FirstLiveAcceptanceManager(hass, entry.entry_id)
+    zone_2 = build_acceptance_record(
+        attempt_id="first_live_zone_2",
+        controller_slot=1,
+        area_slot=2,
+        requested_runtime_seconds=30,
+        observed_watering_at=datetime.now(UTC),
+        observed_idle_at=datetime.now(UTC) + timedelta(seconds=30),
+        refresh_error_count=0,
+        concurrent_watering_observed=False,
+        terminal_detail_code="first_live_trial_accepted",
+    )
+    assert await prior_acceptance.async_record(zone_2)
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    sensor_id = "sensor.irrigationos_validated_targets"
+    state = hass.states.get(sensor_id)
+    assert state is not None
+    assert state.state == "1"
+    assert state.attributes["validated_targets"][0]["controller_slot"] == 1
+    assert state.attributes["validated_targets"][0]["area_slot"] == 2
+
+    zone_1 = build_acceptance_record(
+        attempt_id="first_live_zone_1",
+        controller_slot=1,
+        area_slot=1,
+        requested_runtime_seconds=30,
+        observed_watering_at=datetime.now(UTC),
+        observed_idle_at=datetime.now(UTC) + timedelta(seconds=30),
+        refresh_error_count=0,
+        concurrent_watering_observed=False,
+        terminal_detail_code="first_live_trial_accepted",
+    )
+    assert await entry.runtime_data.validated_targets.async_register(zone_1)
+    entry.runtime_data.async_update_listeners()
+    await hass.async_block_till_done()
+    state = hass.states.get(sensor_id)
+    assert state is not None
+    assert state.state == "2"
+    assert [
+        (item["controller_slot"], item["area_slot"])
+        for item in state.attributes["validated_targets"]
+    ] == [(1, 1), (1, 2)]
+    assert "native-zone" not in repr(state.attributes)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(sensor_id).state == "2"
+    assert entry.runtime_data.supervised_operation.in_progress is False
+    assert entry.runtime_data.live_commissioning.summary.operator_approval_present is False
+
+    assert await entry.runtime_data.validated_targets.async_revoke(1, 1)
+    assert not entry.runtime_data.validated_targets.contains(1, 1)
+    assert entry.runtime_data.validated_targets.contains(1, 2)
 
 
 @pytest.mark.asyncio

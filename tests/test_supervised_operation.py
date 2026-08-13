@@ -47,6 +47,17 @@ class _LatestAcceptance:
         return True
 
 
+class _ValidatedTargets:
+    def __init__(self, targets: set[tuple[int, int]] | None = None) -> None:
+        self.targets = {(1, 2)} if targets is None else targets
+
+    def contains(self, controller_slot: int, area_slot: int) -> bool:
+        return (controller_slot, area_slot) in self.targets
+
+    def revoke(self, controller_slot: int, area_slot: int) -> None:
+        self.targets.discard((controller_slot, area_slot))
+
+
 class _Hass:
     def __init__(self, root: Path) -> None:
         self.config = SimpleNamespace(path=lambda *parts: str(root.joinpath(*parts)))
@@ -111,16 +122,22 @@ load_integration_module("supervised_operation.operator")
 
 def _coordinator(*, accepted_slot: int = 2, active_sessions: tuple[object, ...] = ()) -> Any:
     now = datetime.now(UTC)
-    area = IrrigationArea(
-        area_id="canonical-area-2",
-        controller_id="canonical-controller-1",
-        slot_number=2,
-        name="Area 2",
-        enabled=True,
-        configured=True,
-        state=IrrigationAreaState.IDLE,
-        binding=VendorBinding(provider="rachio", native_id="native-zone-secret"),
-        vendor_name="Zone 2",
+    areas = tuple(
+        IrrigationArea(
+            area_id=f"canonical-area-{slot}",
+            controller_id="canonical-controller-1",
+            slot_number=slot,
+            name=f"Area {slot}",
+            enabled=True,
+            configured=True,
+            state=IrrigationAreaState.IDLE,
+            binding=VendorBinding(
+                provider="rachio",
+                native_id=("native-zone-secret" if slot == 2 else "native-zone-one"),
+            ),
+            vendor_name=f"Zone {slot}",
+        )
+        for slot in (1, 2)
     )
     controller = IrrigationController(
         controller_id="canonical-controller-1",
@@ -136,7 +153,7 @@ def _coordinator(*, accepted_slot: int = 2, active_sessions: tuple[object, ...] 
         capacity=16,
         watering_observation_quality=ObservationQuality.CONFIRMED,
         capabilities=ControllerCapabilities(observe_current_watering=True),
-        areas=(area,),
+        areas=areas,
     )
     snapshot = ControllerRegistrySnapshot(
         provider="rachio",
@@ -169,6 +186,7 @@ def _coordinator(*, accepted_slot: int = 2, active_sessions: tuple[object, ...] 
             last_persistence_error=None,
         ),
         supervised_operation=SupervisedOperationManager(),
+        validated_targets=_ValidatedTargets(),
     )
 
 
@@ -192,16 +210,34 @@ def test_supervised_operation_requires_exact_confirmation() -> None:
     assert "operator_confirmation_mismatch" in blockers
 
 
-def test_supervised_operation_requires_accepted_first_live_evidence() -> None:
+def test_supervised_operation_requires_validated_target_evidence() -> None:
     coordinator = _coordinator()
-    coordinator.first_live_acceptance.status = FirstLiveAcceptanceStatus.NOT_AVAILABLE
+    coordinator.validated_targets = _ValidatedTargets(set())
     blockers = _blockers(coordinator)
-    assert "accepted_first_live_evidence_required" in blockers
+    assert "target_not_validated" in blockers
 
 
-def test_supervised_operation_is_limited_to_validated_target() -> None:
-    blockers = _blockers(_coordinator(accepted_slot=3))
-    assert "target_not_first_live_validated" in blockers
+def test_operational_eligibility_does_not_follow_latest_first_live_target() -> None:
+    coordinator = _coordinator(accepted_slot=1)
+    coordinator.validated_targets = _ValidatedTargets({(1, 1), (1, 2)})
+    assert _blockers(coordinator) == ()
+
+
+def test_multiple_validated_targets_remain_independently_eligible() -> None:
+    coordinator = _coordinator()
+    coordinator.validated_targets = _ValidatedTargets({(1, 1), (1, 2)})
+    assert _blockers(coordinator, area_slot=1) == ()
+    assert _blockers(coordinator, area_slot=2) == ()
+    assert "target_not_validated" in _blockers(coordinator, area_slot=3)
+
+
+def test_revocation_removes_only_revoked_target_eligibility() -> None:
+    coordinator = _coordinator()
+    registry = _ValidatedTargets({(1, 1), (1, 2)})
+    coordinator.validated_targets = registry
+    registry.revoke(1, 1)
+    assert "target_not_validated" in _blockers(coordinator, area_slot=1)
+    assert _blockers(coordinator, area_slot=2) == ()
 
 
 def test_supervised_operation_requires_current_integrated_safety() -> None:
