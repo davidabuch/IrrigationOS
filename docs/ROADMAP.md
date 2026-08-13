@@ -1,12 +1,19 @@
 # IrrigationOS Roadmap
 
+## v1.0.38 — Structured Live Trial Acceptance Record
+
+- Persists the latest supervised physical trial as an explicit `pass`, `fail`, or `indeterminate` record across Home Assistant restarts.
+- Exposes individual acceptance criteria, observed watering/idle boundaries, polling-bounded runtime evidence, concurrent-watering evidence, and refresh-error count through a dedicated Home Assistant sensor and diagnostics.
+- Keeps the result privacy-safe by using canonical slots and the IrrigationOS attempt ID rather than native provider identifiers.
+- Adds no autonomous scheduling, automatic retries, broader command surface, or general Live authorization.
+
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.36
+- **Installable Home Assistant release:** v1.0.38
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; one explicitly confirmed supervised first-live trial can be launched only through the interactive options flow; general Live mode and autonomous scheduling remain disabled
-- **Current epic:** v1.0 architecture freeze and Home Assistant product integration
-- **Next milestone:** bind canonical slots to exact native Rachio targets and design the explicit supervised execution action; physical delivery remains hard-disabled by default
+- **Current epic:** supervised physical commissioning with structured acceptance evidence
+- **Next milestone:** accumulate and review supervised acceptance results before considering any broader live-control authority; autonomous scheduling remains disabled
 
 ## Delivery model
 
