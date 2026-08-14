@@ -41,9 +41,9 @@ def test_release_versions_are_consistent() -> None:
     with (ROOT / "pyproject.toml").open("rb") as handle:
         pyproject = tomllib.load(handle)
     const_text = (ROOT / "custom_components/irrigationos/const.py").read_text(encoding="utf-8")
-    assert manifest["version"] == "1.0.42"
+    assert manifest["version"] == "1.0.43"
     assert pyproject["project"]["version"] == manifest["version"]
-    assert 'VERSION: Final = "1.0.42"' in const_text
+    assert 'VERSION: Final = "1.0.43"' in const_text
     assert manifest["domain"] == "irrigationos"
 
 
@@ -97,11 +97,19 @@ def test_governance_documents_exist() -> None:
         "docs/V1_0_40_SUPERVISED_OPERATIONAL_STATE_VISIBILITY.md",
         "docs/V1_0_41_MULTI_ZONE_COMMISSIONING.md",
         "docs/V1_0_42_PRODUCTION_READINESS_GATE.md",
+        "docs/V1_0_43_FIRST_BOUNDED_UNATTENDED_CANARY.md",
         "custom_components/irrigationos/first_live_delivery/acceptance.py",
         "custom_components/irrigationos/first_live_delivery/validated_targets.py",
         "custom_components/irrigationos/production_readiness/engine.py",
         "custom_components/irrigationos/production_readiness/manager.py",
         "custom_components/irrigationos/production_readiness/models.py",
+        "custom_components/irrigationos/unattended_canary/acceptance.py",
+        "custom_components/irrigationos/unattended_canary/__init__.py",
+        "custom_components/irrigationos/unattended_canary/audit.py",
+        "custom_components/irrigationos/unattended_canary/manager.py",
+        "custom_components/irrigationos/unattended_canary/models.py",
+        "custom_components/irrigationos/unattended_canary/monitor.py",
+        "custom_components/irrigationos/unattended_canary/operator.py",
         "custom_components/irrigationos/first_live_delivery/monitor.py",
         "custom_components/irrigationos/first_live_delivery/operator.py",
         "custom_components/irrigationos/first_live_delivery/executor.py",
@@ -185,6 +193,6 @@ def test_v1_0_15_is_monotonic_stable_release_candidate() -> None:
     roadmap = (ROOT / "docs/ROADMAP.md").read_text(encoding="utf-8")
     notes = (ROOT / "V1_0_15_RELEASE_NOTES.md").read_text(encoding="utf-8")
     assert "first stable public release is **v1.0.15**" in strategy
-    assert "Installable Home Assistant release:** v1.0.42" in roadmap
+    assert "Installable Home Assistant release:** v1.0.43" in roadmap
     assert "first stable public release candidate" in notes
     assert "live execution remains disabled" in notes.lower()

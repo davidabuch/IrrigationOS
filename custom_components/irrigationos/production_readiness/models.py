@@ -7,8 +7,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-PRODUCTION_READINESS_SCHEMA_VERSION = 1
-PRODUCTION_READINESS_POLICY_VERSION = 1
+PRODUCTION_READINESS_SCHEMA_VERSION = 2
+PRODUCTION_READINESS_POLICY_VERSION = 2
 
 
 class ProductionReadinessState(StrEnum):
@@ -61,6 +61,8 @@ class ProductionReadinessInputs:
     supervised_operation_in_progress: bool
     safety_prerequisites_met: bool
     unattended_canary_approval_present: bool = False
+    unattended_canary_in_progress: bool = False
+    unattended_canary_persistence_healthy: bool = True
 
     def __post_init__(self) -> None:
         if self.evaluated_at.tzinfo is None or self.evaluated_at.utcoffset() is None:
@@ -85,6 +87,7 @@ class ProductionReadinessSummary:
     observation_age_seconds: int | None
     active_external_watering_count: int
     supervised_operation_in_progress: bool
+    unattended_canary_in_progress: bool
     ownership_confirmed: bool
     topology_matches: bool
     persistence_health: dict[str, bool]

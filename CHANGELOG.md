@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.43 — First Bounded Unattended Canary
+
+- Added separate explicit approval and one-shot execution services for one validated production target.
+- Approval is exact-target, exact-runtime, ten-minute, single-use, and restart-ephemeral.
+- Limits canary runtime to 15–60 seconds and consumes approval before the only transport attempt.
+- Requires fresh `ready_for_unattended_canary` evidence and every existing health, ownership, topology, persistence, observation, conflict, and integrated-safety gate.
+- Added privacy-safe JSONL audit history, structured terminal acceptance persistence, and Home Assistant visibility.
+- Added no scheduling, recurring execution, automatic retries, multi-zone unattended watering, or general autonomous authority.
+
 ## 1.0.42 — Production Readiness Gate
 
 - Added a deterministic, recomputed, fail-closed production-readiness engine and coordinator-owned manager.

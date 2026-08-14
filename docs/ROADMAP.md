@@ -1,20 +1,20 @@
 # IrrigationOS Roadmap
 
-## v1.0.42 — Production Readiness Gate
+## v1.0.43 — First Bounded Unattended Canary
 
-- Evaluates configured, enabled, bound canonical targets rather than total controller capacity.
-- Requires all production targets to be validated along with healthy current ownership, topology, observation, connectivity, persistence, conflict, and safety evidence.
-- Distinguishes supervised-production readiness from a future unattended canary using an explicit additional prerequisite.
-- Recomputes after restart and fails closed during initialization without persisting stale authority.
-- Adds no autonomous scheduling, canary execution, unattended commands, retries, or general Live authority.
+- Adds one exact-target, exact-runtime, ten-minute, single-use canary approval.
+- Requires current unattended-canary readiness and every existing fail-closed safety gate before one transport attempt.
+- Limits runtime to 15–60 seconds and never restores or retries consumed approval.
+- Persists privacy-safe audit and completed acceptance while keeping approval, progress, and monitoring restart-ephemeral.
+- Adds no scheduling, recurring canaries, multi-zone unattended watering, or general Live authority.
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.42
+- **Installable Home Assistant release:** v1.0.43
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
-- **Current operating boundary:** Observation remains the default commissioned mode; supervised first-live commissioning remains available, and one tightly bounded manual operational service may run only the exact previously accepted first-live target; general Live mode and autonomous scheduling remain disabled
-- **Current epic:** supervised physical commissioning transitioning into bounded manual operational validation
-- **Next milestone:** validate the production-readiness gate on HAOS before designing any bounded unattended canary
+- **Current operating boundary:** Observation remains the default commissioned mode; supervised first-live and bounded manual operation remain available, plus one exact single-use 15–60 second unattended canary on a validated production target; general Live mode, recurring operation, and autonomous scheduling remain disabled
+- **Current epic:** supervised physical commissioning transitioning through one bounded unattended validation canary
+- **Next milestone:** perform one explicitly approved bounded canary on HAOS and review its terminal evidence before considering any further authority
 
 ## Delivery model
 

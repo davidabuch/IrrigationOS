@@ -51,3 +51,102 @@ run_supervised_operation:
       required: true
       selector:
         text:
+
+authorize_unattended_canary:
+  name: Authorize one unattended canary
+  description: >-
+    Creates one restart-ephemeral, ten-minute, single-use approval for an exact
+    validated production target and 15–60 second runtime. This service does not
+    water and cannot authorize retries or another target.
+  fields:
+    config_entry_id:
+      name: IrrigationOS instance
+      description: The loaded IrrigationOS config entry to use.
+      required: true
+      selector:
+        config_entry:
+          integration: irrigationos
+    controller_slot:
+      name: Controller slot
+      description: Canonical commissioned controller slot.
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 32
+          step: 1
+          mode: box
+    area_slot:
+      name: Area slot
+      description: Canonical validated production area slot.
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 64
+          step: 1
+          mode: box
+    runtime_seconds:
+      name: Runtime
+      description: Exact single-use runtime, from 15 through 60 seconds.
+      required: true
+      default: 30
+      selector:
+        number:
+          min: 15
+          max: 60
+          step: 1
+          unit_of_measurement: seconds
+          mode: box
+    confirmation:
+      name: Confirmation phrase
+      description: Type AUTHORIZE ONE UNATTENDED CANARY exactly.
+      required: true
+      selector:
+        text:
+
+run_unattended_canary:
+  name: Run one unattended canary
+  description: >-
+    Consumes one exact matching approval and attempts one non-retrying bounded
+    start on an already validated production target. It never schedules or repeats.
+  fields:
+    config_entry_id:
+      name: IrrigationOS instance
+      description: The loaded IrrigationOS config entry to use.
+      required: true
+      selector:
+        config_entry:
+          integration: irrigationos
+    controller_slot:
+      name: Controller slot
+      description: Must exactly match the ephemeral approval.
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 32
+          step: 1
+          mode: box
+    area_slot:
+      name: Area slot
+      description: Must exactly match the validated production target approval.
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 64
+          step: 1
+          mode: box
+    runtime_seconds:
+      name: Runtime
+      description: Must exactly match the 15–60 second approved runtime.
+      required: true
+      default: 30
+      selector:
+        number:
+          min: 15
+          max: 60
+          step: 1
+          unit_of_measurement: seconds
+          mode: box

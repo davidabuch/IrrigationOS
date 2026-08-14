@@ -51,6 +51,10 @@ def evaluate_production_readiness(
         blockers.add("active_watering_conflict")
     if inputs.supervised_operation_in_progress:
         blockers.add("supervised_operation_in_progress")
+    if inputs.unattended_canary_in_progress:
+        blockers.add("unattended_canary_in_progress")
+    if not inputs.unattended_canary_persistence_healthy:
+        blockers.add("unattended_canary_persistence_unhealthy")
     if not inputs.safety_prerequisites_met:
         blockers.add("safety_prerequisites_not_met")
     if not inputs.production_targets:
@@ -80,6 +84,7 @@ def evaluate_production_readiness(
         observation_age_seconds=inputs.observation_age_seconds,
         active_external_watering_count=inputs.active_external_watering_count,
         supervised_operation_in_progress=inputs.supervised_operation_in_progress,
+        unattended_canary_in_progress=inputs.unattended_canary_in_progress,
         ownership_confirmed=inputs.ownership_confirmed,
         topology_matches=inputs.topology_matches,
         persistence_health={
@@ -91,5 +96,6 @@ def evaluate_production_readiness(
                 inputs.supervised_operation_persistence_healthy
             ),
             "operational_log": inputs.operational_log_healthy,
+            "unattended_canary": inputs.unattended_canary_persistence_healthy,
         },
     )
