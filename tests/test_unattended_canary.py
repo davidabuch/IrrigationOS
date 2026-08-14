@@ -20,6 +20,7 @@ readiness = load_integration_module("production_readiness")
 canary_models = load_integration_module("unattended_canary.models")
 canary_manager = load_integration_module("unattended_canary.manager")
 canary_audit = load_integration_module("unattended_canary.audit")
+canary_monitor = load_integration_module("unattended_canary.monitor")
 operator = load_integration_module("unattended_canary.operator")
 
 NOW = datetime(2026, 8, 13, 12, 0, tzinfo=UTC)
@@ -50,8 +51,18 @@ class _Hass:
         self.config = SimpleNamespace(path=lambda *parts: str(root.joinpath(*parts)))
         self.tasks: list[Any] = []
 
-    def async_create_task(self, coroutine: Any, _name: str) -> None:
-        self.tasks.append(coroutine)
+
+class _Entry:
+    def __init__(self, hass: _Hass) -> None:
+        self.data = {"api_key": "secret"}
+        self._hass = hass
+
+    def async_create_background_task(
+        self, hass: _Hass, coroutine: Any, name: str
+    ) -> None:
+        assert hass is self._hass
+        assert name
+        hass.tasks.append(coroutine)
 
 
 class _Coordinator(SimpleNamespace):
@@ -138,6 +149,7 @@ def _snapshot(
 
 def _coordinator(tmp_path: Path) -> Any:
     manager = canary_manager.UnattendedCanaryManager()
+    hass = _Hass(tmp_path)
     coordinator = _Coordinator(
         unattended_canary=manager,
         unattended_canary_acceptance=SimpleNamespace(
@@ -179,8 +191,8 @@ def _coordinator(tmp_path: Path) -> Any:
         refresh_error=None,
         refresh_count=0,
         listener_updates=0,
-        hass=_Hass(tmp_path),
-        entry=SimpleNamespace(data={"api_key": "secret"}),
+        hass=hass,
+        entry=_Entry(hass),
     )
     return coordinator
 
@@ -222,6 +234,45 @@ load_integration_module('unattended_canary.operator')
         [sys.executable, "-c", script], capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.asyncio
+async def test_monitor_cancellation_clears_transient_in_progress_state(
+    tmp_path: Path,
+) -> None:
+    coordinator = _coordinator(tmp_path)
+    manager = coordinator.unattended_canary
+    manager.mark_dispatched(
+        "unattended_canary_test",
+        "unattended_canary_approval_test",
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=30,
+    )
+    task = asyncio.create_task(
+        canary_monitor.async_monitor_unattended_canary(
+            coordinator=coordinator,
+            manager=manager,
+            audit_sink=_Recorder(),
+            acceptance_sink=_Recorder(),
+            acceptance=coordinator.unattended_canary_acceptance,
+            canary_id="unattended_canary_test",
+            approval_id="unattended_canary_approval_test",
+            controller_id="canonical-controller-1",
+            controller_slot=1,
+            area_slot=2,
+            runtime_seconds=30,
+            dispatched_at=datetime.now(UTC),
+            audit_chain_complete=True,
+        )
+    )
+    await asyncio.sleep(0)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert manager.in_progress is False
 
 
 def test_approval_is_exact_bounded_single_use_and_restart_ephemeral(

@@ -202,7 +202,8 @@ async def async_run_supervised_operation(
                 detail_code="start_http_accepted",
             )
         )
-        coordinator.hass.async_create_task(
+        coordinator.entry.async_create_background_task(
+            coordinator.hass,
             async_monitor_supervised_operation(
                 coordinator=coordinator,
                 manager=manager,

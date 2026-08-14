@@ -63,8 +63,18 @@ class _Hass:
         self.config = SimpleNamespace(path=lambda *parts: str(root.joinpath(*parts)))
         self.created_tasks: list[Any] = []
 
-    def async_create_task(self, coroutine: Any, _name: str) -> None:
-        self.created_tasks.append(coroutine)
+
+class _Entry:
+    def __init__(self, hass: _Hass) -> None:
+        self.data = {"api_key": "secret"}
+        self._hass = hass
+
+    def async_create_background_task(
+        self, hass: _Hass, coroutine: Any, name: str
+    ) -> None:
+        assert hass is self._hass
+        assert name
+        hass.created_tasks.append(coroutine)
 
 
 class _DispatchCoordinator(SimpleNamespace):
@@ -82,7 +92,7 @@ def _dispatch_coordinator(tmp_path: Path, monkeypatch: Any) -> Any:
     base = _coordinator()
     coordinator = _DispatchCoordinator(**base.__dict__)
     coordinator.hass = _Hass(tmp_path)
-    coordinator.entry = SimpleNamespace(data={"api_key": "secret"})
+    coordinator.entry = _Entry(coordinator.hass)
     coordinator.last_update_success = True
     coordinator.listener_updates = 0
     coordinator.supervised_operation_acceptance = _LatestAcceptance()
