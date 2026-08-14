@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import ipaddress
@@ -93,64 +94,72 @@ class RealtimeObservationManager:
 
     async def async_setup(self) -> None:
         """Register local delivery and reconcile remote observation subscriptions."""
+        if self._registered_locally:
+            return
+        if self._shutdown:
+            raise RuntimeError("realtime observation manager is shut down")
         self._ensure_credentials()
-        webhook.async_register(
-            self._hass,
-            DOMAIN,
-            "IrrigationOS realtime observation",
-            self._webhook_id,
-            self._async_handle_webhook,
-            local_only=False,
-            allowed_methods={"POST"},
-        )
-        self._registered_locally = True
-        self._controller_native_ids = self._controller_ids()
-        self._stop_unsubscribe = self._hass.bus.async_listen_once(
-            EVENT_HOMEASSISTANT_STOP, self._async_handle_stop
-        )
+        try:
+            webhook.async_register(
+                self._hass,
+                DOMAIN,
+                "IrrigationOS realtime observation",
+                self._webhook_id,
+                self._async_handle_webhook,
+                local_only=False,
+                allowed_methods={"POST"},
+            )
+            self._registered_locally = True
+            self._controller_native_ids = self._controller_ids()
+            self._stop_unsubscribe = self._hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STOP, self._async_handle_stop
+            )
 
-        callback_url, source = await self._url_resolver(
-            self._hass, self._entry, self._webhook_id
-        )
-        self.url_source = source
-        if callback_url is None:
-            adapter = self._coordinator.adapter
-            if isinstance(adapter, RealtimeObservationAdapter):
-                await adapter.async_cleanup_realtime(
-                    self._external_id_prefix, self._controller_native_ids
+            callback_url, source = await self._url_resolver(
+                self._hass, self._entry, self._webhook_id
+            )
+            self.url_source = source
+            if callback_url is None:
+                adapter = self._coordinator.adapter
+                if isinstance(adapter, RealtimeObservationAdapter):
+                    await adapter.async_cleanup_realtime(
+                        self._external_id_prefix, self._controller_native_ids
+                    )
+                self.remote_health = RealtimeRegistrationHealth(
+                    healthy=False,
+                    registered_controllers=0,
+                    expected_controllers=len(self._controller_ids()),
+                    error="no externally usable Home Assistant URL",
                 )
-            self.remote_health = RealtimeRegistrationHealth(
-                healthy=False,
-                registered_controllers=0,
-                expected_controllers=len(self._controller_ids()),
-                error="no externally usable Home Assistant URL",
-            )
-            self._create_issue(self.remote_health.error)
-            return
-        self._callback_url = callback_url
+                self._create_issue(self.remote_health.error)
+                return
+            self._callback_url = callback_url
 
-        adapter = self._coordinator.adapter
-        if not isinstance(adapter, RealtimeObservationAdapter):
-            self.remote_health = RealtimeRegistrationHealth(
-                healthy=False,
-                registered_controllers=0,
-                expected_controllers=len(self._controller_ids()),
-                error="provider does not support realtime observation",
-            )
-            self._create_issue(self.remote_health.error)
-            return
+            adapter = self._coordinator.adapter
+            if not isinstance(adapter, RealtimeObservationAdapter):
+                self.remote_health = RealtimeRegistrationHealth(
+                    healthy=False,
+                    registered_controllers=0,
+                    expected_controllers=len(self._controller_ids()),
+                    error="provider does not support realtime observation",
+                )
+                self._create_issue(self.remote_health.error)
+                return
 
-        self.remote_health = await adapter.async_reconcile_realtime(
-            callback_url,
-            self._external_id,
-            self._external_id_prefix,
-            self._controller_native_ids,
-        )
-        self.enabled = self.remote_health.healthy
-        if self.enabled:
-            ir.async_delete_issue(self._hass, DOMAIN, REMOTE_ISSUE_ID)
-        else:
-            self._create_issue(self.remote_health.error)
+            self.remote_health = await adapter.async_reconcile_realtime(
+                callback_url,
+                self._external_id,
+                self._external_id_prefix,
+                self._controller_native_ids,
+            )
+            self.enabled = self.remote_health.healthy
+            if self.enabled:
+                ir.async_delete_issue(self._hass, DOMAIN, REMOTE_ISSUE_ID)
+            else:
+                self._create_issue(self.remote_health.error)
+        except (Exception, asyncio.CancelledError):
+            await self.async_shutdown()
+            raise
 
     async def async_reconcile_controllers(
         self, controller_native_ids: tuple[str, ...]
@@ -201,19 +210,29 @@ class RealtimeObservationManager:
         if self._shutdown:
             return
         self._shutdown = True
-        if self._stop_unsubscribe is not None:
-            self._stop_unsubscribe()
+        try:
+            stop_unsubscribe = self._stop_unsubscribe
             self._stop_unsubscribe = None
-        adapter = self._coordinator.adapter
-        if isinstance(adapter, RealtimeObservationAdapter) and self._external_id_prefix:
-            self.remote_health = await adapter.async_cleanup_realtime(
-                self._external_id_prefix, self._controller_native_ids
-            )
-        if self._registered_locally:
-            webhook.async_unregister(self._hass, self._webhook_id)
-            self._registered_locally = False
-        self.enabled = False
-        ir.async_delete_issue(self._hass, DOMAIN, REMOTE_ISSUE_ID)
+            if stop_unsubscribe is not None:
+                stop_unsubscribe()
+            adapter = self._coordinator.adapter
+            if (
+                isinstance(adapter, RealtimeObservationAdapter)
+                and self._external_id_prefix
+            ):
+                self.remote_health = await adapter.async_cleanup_realtime(
+                    self._external_id_prefix, self._controller_native_ids
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            _LOGGER.exception("Failed to clean up IrrigationOS realtime observation")
+        finally:
+            if self._registered_locally:
+                webhook.async_unregister(self._hass, self._webhook_id)
+                self._registered_locally = False
+            self.enabled = False
+            ir.async_delete_issue(self._hass, DOMAIN, REMOTE_ISSUE_ID)
 
     def diagnostics(self) -> dict[str, Any]:
         """Return URL- and credential-free realtime health diagnostics."""
@@ -338,6 +357,8 @@ class RealtimeObservationManager:
 
     async def _async_handle_stop(self, event: Event) -> None:
         del event
+        # Home Assistant removes an async_listen_once listener before invoking it.
+        self._stop_unsubscribe = None
         await self.async_shutdown()
 
 

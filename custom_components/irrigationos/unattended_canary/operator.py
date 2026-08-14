@@ -391,7 +391,8 @@ async def async_run_unattended_canary(
         )
         coordinator.update_production_readiness()
         coordinator.async_update_listeners()
-        coordinator.hass.async_create_task(
+        coordinator.entry.async_create_background_task(
+            coordinator.hass,
             async_monitor_unattended_canary(
                 coordinator=coordinator,
                 manager=manager,

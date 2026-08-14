@@ -68,7 +68,8 @@ async def async_run_supervised_first_live_trial(
         )
         result = await executor.async_execute(request=request, snapshot=coordinator.data)
         if result.status.value == "start_dispatched" and result.attempt_id is not None:
-            coordinator.hass.async_create_task(
+            coordinator.entry.async_create_background_task(
+                coordinator.hass,
                 async_monitor_first_live_acceptance(
                     coordinator=coordinator,
                     audit_sink=JsonlFirstLiveTrialAuditSink(log_path),
