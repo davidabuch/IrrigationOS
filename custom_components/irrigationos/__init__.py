@@ -31,6 +31,15 @@ from .supervised_operation import (
     SupervisedOperationStatus,
     async_run_supervised_operation,
 )
+from .unattended_canary import (
+    SERVICE_AUTHORIZE_UNATTENDED_CANARY,
+    SERVICE_RUN_UNATTENDED_CANARY,
+    UNATTENDED_CANARY_DEFAULT_RUNTIME_SECONDS,
+    UnattendedCanaryAuthorizationStatus,
+    UnattendedCanaryRunStatus,
+    async_authorize_unattended_canary,
+    async_run_unattended_canary,
+)
 
 type IrrigationOSConfigEntry = ConfigEntry[IrrigationOSCoordinator]
 
@@ -51,6 +60,29 @@ SUPERVISED_OPERATION_SERVICE_SCHEMA = vol.Schema(
             vol.Coerce(int), vol.Range(min=1, max=120)
         ),
         vol.Required(ATTR_CONFIRMATION): str,
+    }
+)
+
+UNATTENDED_CANARY_APPROVAL_SERVICE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_CONFIG_ENTRY_ID): str,
+        vol.Required(ATTR_CONTROLLER_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1)),
+        vol.Required(ATTR_AREA_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1)),
+        vol.Required(
+            ATTR_RUNTIME_SECONDS, default=UNATTENDED_CANARY_DEFAULT_RUNTIME_SECONDS
+        ): vol.All(vol.Coerce(int), vol.Range(min=15, max=60)),
+        vol.Required(ATTR_CONFIRMATION): str,
+    }
+)
+
+UNATTENDED_CANARY_RUN_SERVICE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_CONFIG_ENTRY_ID): str,
+        vol.Required(ATTR_CONTROLLER_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1)),
+        vol.Required(ATTR_AREA_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1)),
+        vol.Required(
+            ATTR_RUNTIME_SECONDS, default=UNATTENDED_CANARY_DEFAULT_RUNTIME_SECONDS
+        ): vol.All(vol.Coerce(int), vol.Range(min=15, max=60)),
     }
 )
 
@@ -112,6 +144,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry)
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _async_register_supervised_operation_service(hass)
+    _async_register_unattended_canary_services(hass)
     return True
 
 
@@ -221,6 +254,66 @@ def _async_register_supervised_operation_service(hass: HomeAssistant) -> None:
         _async_handle,
         schema=SUPERVISED_OPERATION_SERVICE_SCHEMA,
     )
+
+
+def _async_register_unattended_canary_services(hass: HomeAssistant) -> None:
+    """Register separate approval and one-shot execution boundaries."""
+
+    async def _coordinator(call: ServiceCall) -> IrrigationOSCoordinator:
+        entry_id = str(call.data[ATTR_CONFIG_ENTRY_ID])
+        target_entry = hass.config_entries.async_get_entry(entry_id)
+        if target_entry is None or target_entry.domain != DOMAIN:
+            raise HomeAssistantError("IrrigationOS config entry was not found")
+        try:
+            coordinator = target_entry.runtime_data
+        except RuntimeError as err:
+            raise HomeAssistantError("IrrigationOS config entry is not loaded") from err
+        if not isinstance(coordinator, IrrigationOSCoordinator):
+            raise HomeAssistantError("IrrigationOS runtime data is unavailable")
+        return coordinator
+
+    if not hass.services.has_service(DOMAIN, SERVICE_AUTHORIZE_UNATTENDED_CANARY):
+
+        async def _async_authorize(call: ServiceCall) -> None:
+            coordinator = await _coordinator(call)
+            result = await async_authorize_unattended_canary(
+                coordinator,
+                controller_slot=int(call.data[ATTR_CONTROLLER_SLOT]),
+                area_slot=int(call.data[ATTR_AREA_SLOT]),
+                runtime_seconds=int(call.data[ATTR_RUNTIME_SECONDS]),
+                confirmation=str(call.data[ATTR_CONFIRMATION]),
+            )
+            if result.status is not UnattendedCanaryAuthorizationStatus.APPROVED:
+                blockers = ", ".join(result.blocker_codes) or result.status.value
+                raise HomeAssistantError(f"Canary approval blocked: {blockers}")
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_AUTHORIZE_UNATTENDED_CANARY,
+            _async_authorize,
+            schema=UNATTENDED_CANARY_APPROVAL_SERVICE_SCHEMA,
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_RUN_UNATTENDED_CANARY):
+
+        async def _async_run(call: ServiceCall) -> None:
+            coordinator = await _coordinator(call)
+            result = await async_run_unattended_canary(
+                coordinator,
+                controller_slot=int(call.data[ATTR_CONTROLLER_SLOT]),
+                area_slot=int(call.data[ATTR_AREA_SLOT]),
+                runtime_seconds=int(call.data[ATTR_RUNTIME_SECONDS]),
+            )
+            if result.status is not UnattendedCanaryRunStatus.START_DISPATCHED:
+                blockers = ", ".join(result.blocker_codes) or result.status.value
+                raise HomeAssistantError(f"Unattended canary blocked: {blockers}")
+
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_RUN_UNATTENDED_CANARY,
+            _async_run,
+            schema=UNATTENDED_CANARY_RUN_SERVICE_SCHEMA,
+        )
 
 
 def _migrate_global_entity_ids(

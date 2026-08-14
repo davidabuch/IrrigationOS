@@ -245,6 +245,9 @@ def evaluate_supervised_operation_blockers(
         blockers.add("runtime_out_of_range")
     if coordinator.supervised_operation.in_progress:
         blockers.add("supervised_operation_in_progress")
+    unattended_canary = getattr(coordinator, "unattended_canary", None)
+    if unattended_canary is not None and unattended_canary.in_progress:
+        blockers.add("unattended_canary_in_progress")
 
     if not coordinator.validated_targets.contains(controller_slot, area_slot):
         blockers.add("target_not_validated")

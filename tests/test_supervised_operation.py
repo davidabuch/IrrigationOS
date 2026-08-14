@@ -255,6 +255,12 @@ def test_supervised_operation_blocks_existing_watering() -> None:
     assert "active_watering_conflict" in blockers
 
 
+def test_supervised_operation_blocks_an_in_progress_unattended_canary() -> None:
+    coordinator = _coordinator()
+    coordinator.unattended_canary = SimpleNamespace(in_progress=True)
+    assert "unattended_canary_in_progress" in _blockers(coordinator)
+
+
 def test_supervised_operation_manager_exposes_and_clears_safe_state() -> None:
     manager = SupervisedOperationManager()
     manager.mark_dispatched(

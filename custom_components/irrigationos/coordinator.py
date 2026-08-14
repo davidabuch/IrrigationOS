@@ -81,6 +81,10 @@ from .shadow_evaluation.manager import ShadowEvaluationManager
 from .sunrise_hard_stop.manager import SunriseHardStopManager
 from .supervised_operation.acceptance import SupervisedOperationAcceptanceManager
 from .supervised_operation.manager import SupervisedOperationManager
+from .unattended_canary import (
+    UnattendedCanaryAcceptanceManager,
+    UnattendedCanaryManager,
+)
 
 if TYPE_CHECKING:
     from .realtime import RealtimeObservationManager
@@ -173,6 +177,10 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.supervised_operation_acceptance = SupervisedOperationAcceptanceManager(
             hass, entry.entry_id
         )
+        self.unattended_canary = UnattendedCanaryManager()
+        self.unattended_canary_acceptance = UnattendedCanaryAcceptanceManager(
+            hass, entry.entry_id
+        )
         self.manual_override_preservation = ManualOverridePreservationManager(
             hass, log_root, self.command_acknowledgements
         )
@@ -228,6 +236,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         await self.first_live_acceptance.async_initialize()
         await self.validated_targets.async_initialize(self.first_live_acceptance.latest)
         await self.supervised_operation_acceptance.async_initialize()
+        await self.unattended_canary_acceptance.async_initialize()
         await self.observation_history.async_initialize()
         await self.shadow_evaluations.async_initialize()
         shadow_records = await self.shadow_evaluations.async_load_records()
@@ -559,7 +568,18 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             safety_prerequisites_met=(
                 self.live_commissioning.summary.supervised_safety_prerequisites_met
             ),
-            unattended_canary_approval_present=False,
+            unattended_canary_approval_present=(
+                self.unattended_canary.valid_approval_for(
+                    now=evaluated_at,
+                    production_targets=tuple(production_targets),
+                    validated_targets=validated_targets,
+                )
+            ),
+            unattended_canary_in_progress=self.unattended_canary.in_progress,
+            unattended_canary_persistence_healthy=(
+                self.unattended_canary_acceptance.last_persistence_error is None
+                and self.unattended_canary.last_audit_error is None
+            ),
         )
 
     async def confirm_controller_ownership(self) -> bool:

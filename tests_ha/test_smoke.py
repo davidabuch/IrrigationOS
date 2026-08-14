@@ -62,6 +62,10 @@ from custom_components.irrigationos.production_readiness import (
     ProductionReadinessInputs,
     ProductionTarget,
 )
+from custom_components.irrigationos.unattended_canary import (
+    UNATTENDED_CANARY_CONFIRMATION,
+    build_canary_acceptance_record,
+)
 
 
 def _area(
@@ -240,6 +244,23 @@ def _supervised_acceptance_record(status: str) -> Any:
         refresh_error_count=1,
         concurrent_watering_observed=status == "fail",
         terminal_detail_code=f"supervised_operation_{status}",
+    )
+
+
+def _canary_acceptance_record() -> Any:
+    now = datetime.now(UTC)
+    return build_canary_acceptance_record(
+        canary_id="unattended_canary_test",
+        approval_id="unattended_canary_approval_test",
+        controller_slot=1,
+        area_slot=1,
+        requested_runtime_seconds=30,
+        observed_watering_at=now,
+        observed_idle_at=now + timedelta(seconds=30),
+        refresh_error_count=0,
+        concurrent_watering_observed=False,
+        safety_preemption_observed=False,
+        terminal_detail_code="canary_accepted",
     )
 
 
@@ -657,6 +678,103 @@ async def test_production_readiness_entities_use_only_configured_targets_and_res
     )
     assert hass.states.get("binary_sensor.irrigationos_production_ready").state == "off"
     assert entry.runtime_data.supervised_operation.in_progress is False
+
+
+@pytest.mark.asyncio
+async def test_unattended_canary_approval_acceptance_visibility_and_restart_safety(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = MutableAdapter(_production_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    approval_sensor = "sensor.irrigationos_unattended_canary_approval"
+    acceptance_sensor = "sensor.irrigationos_unattended_canary_acceptance"
+    progress_binary = "binary_sensor.irrigationos_unattended_canary_in_progress"
+    assert hass.states.get(approval_sensor).state == "none"
+    assert hass.states.get(acceptance_sensor).state == "not_available"
+    assert hass.states.get(progress_binary).state == "off"
+    assert hass.services.has_service(DOMAIN, "authorize_unattended_canary")
+    assert hass.services.has_service(DOMAIN, "run_unattended_canary")
+
+    validation_record = build_acceptance_record(
+        attempt_id="first_live_zone_1",
+        controller_slot=1,
+        area_slot=1,
+        requested_runtime_seconds=30,
+        observed_watering_at=datetime.now(UTC),
+        observed_idle_at=datetime.now(UTC) + timedelta(seconds=30),
+        refresh_error_count=0,
+        concurrent_watering_observed=False,
+        terminal_detail_code="first_live_trial_accepted",
+    )
+    assert await entry.runtime_data.validated_targets.async_register(validation_record)
+    await hass.services.async_call(
+        DOMAIN,
+        "authorize_unattended_canary",
+        {
+            "config_entry_id": entry.entry_id,
+            "controller_slot": 1,
+            "area_slot": 1,
+            "runtime_seconds": 30,
+            "confirmation": UNATTENDED_CANARY_CONFIRMATION,
+        },
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    approval_state = hass.states.get(approval_sensor)
+    assert approval_state.state == "approved"
+    assert approval_state.attributes["controller_slot"] == 1
+    assert approval_state.attributes["area_slot"] == 1
+    assert approval_state.attributes["runtime_seconds"] == 30
+    assert approval_state.attributes["single_use"] is True
+    assert approval_state.attributes["persists_across_restart"] is False
+    assert "native-zone" not in repr(approval_state.attributes)
+
+    acceptance_record = _canary_acceptance_record()
+    assert await entry.runtime_data.unattended_canary_acceptance.async_record(
+        acceptance_record
+    )
+    entry.runtime_data.unattended_canary.mark_dispatched(
+        "unattended_canary_test",
+        "unattended_canary_approval_test",
+        controller_slot=1,
+        area_slot=1,
+        runtime_seconds=30,
+    )
+    entry.runtime_data.async_update_listeners()
+    await hass.async_block_till_done()
+    assert hass.states.get(acceptance_sensor).state == "pass"
+    assert hass.states.get(progress_binary).state == "on"
+    assert "native-zone" not in repr(hass.states.get(acceptance_sensor).attributes)
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    canary_diagnostics = diagnostics["coordinator"]["unattended_canary"]
+    acceptance_diagnostics = diagnostics["coordinator"][
+        "unattended_canary_acceptance"
+    ]
+    assert "native-zone" not in repr(canary_diagnostics)
+    assert "native-zone" not in repr(acceptance_diagnostics)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(approval_sensor).state == "none"
+    assert hass.states.get(acceptance_sensor).state == "pass"
+    assert hass.states.get(progress_binary).state == "off"
+    assert entry.runtime_data.unattended_canary.approval is None
+    assert entry.runtime_data.unattended_canary.in_progress is False
+    assert entry.runtime_data.production_readiness.summary.live_control_authorized is False
 
 
 @pytest.mark.asyncio

@@ -63,6 +63,8 @@ async def async_setup_entry(
         IrrigationOSFirstLiveAcceptanceSensor(coordinator),
         IrrigationOSValidatedTargetsSensor(coordinator),
         IrrigationOSProductionReadinessSensor(coordinator),
+        IrrigationOSUnattendedCanaryApprovalSensor(coordinator),
+        IrrigationOSUnattendedCanaryAcceptanceSensor(coordinator),
         IrrigationOSSupervisedOperationAcceptanceSensor(coordinator),
         *(
             IrrigationOSPipelineStageStatusSensor(coordinator, stage)
@@ -378,6 +380,60 @@ class IrrigationOSProductionReadinessSensor(IrrigationOSEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return self.coordinator.production_readiness.summary.to_dict()
+
+
+class IrrigationOSUnattendedCanaryApprovalSensor(IrrigationOSEntity, SensorEntity):
+    """Expose one restart-ephemeral single-use approval."""
+
+    _attr_name = "Unattended canary approval"
+    _attr_unique_id = "irrigationos_unattended_canary_approval"
+    entity_id = "sensor.irrigationos_unattended_canary_approval"
+    _attr_icon = "mdi:shield-key-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.unattended_canary.approval_state().value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        diagnostics = self.coordinator.unattended_canary.approval_diagnostics()
+        approval = diagnostics["approval"]
+        if isinstance(approval, dict):
+            return dict(approval)
+        return {
+            "single_use": True,
+            "persists_across_restart": False,
+        }
+
+
+class IrrigationOSUnattendedCanaryAcceptanceSensor(
+    IrrigationOSEntity, SensorEntity
+):
+    """Expose latest persisted terminal canary acceptance."""
+
+    _attr_name = "Unattended canary acceptance"
+    _attr_unique_id = "irrigationos_unattended_canary_acceptance"
+    entity_id = "sensor.irrigationos_unattended_canary_acceptance"
+    _attr_icon = "mdi:clipboard-check-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.unattended_canary_acceptance.status.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        manager = self.coordinator.unattended_canary_acceptance
+        attributes = {} if manager.latest is None else manager.latest.to_dict()
+        attributes["last_persistence_error"] = manager.last_persistence_error
+        return attributes
 
 
 class IrrigationOSCurrentWateringSessionSensor(IrrigationOSEntity, SensorEntity):

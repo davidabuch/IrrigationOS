@@ -95,6 +95,11 @@ def test_unattended_canary_requires_explicit_additional_prerequisite() -> None:
         ),
         ({"active_external_watering_count": 1}, "active_watering_conflict"),
         ({"supervised_operation_in_progress": True}, "supervised_operation_in_progress"),
+        ({"unattended_canary_in_progress": True}, "unattended_canary_in_progress"),
+        (
+            {"unattended_canary_persistence_healthy": False},
+            "unattended_canary_persistence_unhealthy",
+        ),
         ({"safety_prerequisites_met": False}, "safety_prerequisites_not_met"),
     ],
 )

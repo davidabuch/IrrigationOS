@@ -37,6 +37,7 @@ async def async_setup_entry(
         IrrigationOSWateringActiveSensor(coordinator),
         IrrigationOSSupervisedOperationInProgressSensor(coordinator),
         IrrigationOSProductionReadySensor(coordinator),
+        IrrigationOSUnattendedCanaryInProgressSensor(coordinator),
     ]
     inventory = EntityInventory()
     entities.extend(_new_dynamic_entities(coordinator, inventory))
@@ -278,6 +279,29 @@ class IrrigationOSProductionReadySensor(IrrigationOSEntity, BinarySensorEntity):
             "readiness_state": summary.state.value,
             "blocker_codes": list(summary.blocker_codes),
         }
+
+
+class IrrigationOSUnattendedCanaryInProgressSensor(
+    IrrigationOSEntity, BinarySensorEntity
+):
+    """Report only an accepted canary awaiting terminal observation."""
+
+    _attr_name = "Unattended canary in progress"
+    _attr_unique_id = "irrigationos_unattended_canary_in_progress"
+    entity_id = "binary_sensor.irrigationos_unattended_canary_in_progress"
+    _attr_icon = "mdi:timer-sand"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        return self.coordinator.unattended_canary.in_progress
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self.coordinator.unattended_canary.progress_diagnostics()
 
 
 class IrrigationOSControllerOnlineSensor(IrrigationOSControllerEntity, BinarySensorEntity):
