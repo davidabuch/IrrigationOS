@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from tests.helpers import load_integration_module
 
@@ -12,7 +14,7 @@ MODELS = load_integration_module("actual_vs_shadow.models")
 START = datetime(2026, 8, 10, 3, 0, tzinfo=UTC)
 
 
-def _shadow_record() -> dict[str, object]:
+def _shadow_record() -> dict[str, Any]:
     return {
         "evaluation_id": "eval-1",
         "timestamp_utc": START.isoformat(),
@@ -53,6 +55,46 @@ def test_extracts_only_scheduled_irrigation_and_cycle_runtime() -> None:
     assert len(actions) == 1
     assert actions[0]["target_id"] == "controller:slot:1"
     assert actions[0]["runtime_seconds"] == 600
+
+
+def test_extracts_real_schema_one_serialized_area_scheduling_payload() -> None:
+    action = _shadow_record()["payload"]["scheduling"]["actions"][0]
+    serialized = json.dumps(
+        {
+            "schema_version": 1,
+            "evaluation_id": "legacy-eval",
+            "payload": {
+                "scheduling": [
+                    {
+                        "area_id": "legacy-canonical-area",
+                        "schedule": {"actions": [action]},
+                        "blocker_codes": [],
+                    }
+                ]
+            },
+        }
+    )
+    actions = MATCHING.extract_scheduled_irrigation_actions(json.loads(serialized))
+    assert len(actions) == 1
+    assert actions[0]["scheduled_action_id"] == "sched-1"
+
+
+def test_extracts_schema_two_area_scheduling_envelope() -> None:
+    action = _shadow_record()["payload"]["scheduling"]["actions"][0]
+    record = {
+        "schema_version": 2,
+        "evaluation_id": "schema-two-eval",
+        "payload": {
+            "scheduling": {
+                "area_evaluations": [
+                    {"area_id": "canonical-area", "schedule": {"actions": [action]}}
+                ]
+            }
+        },
+    }
+    actions = MATCHING.extract_scheduled_irrigation_actions(record)
+    assert len(actions) == 1
+    assert actions[0]["evaluation_id"] == "schema-two-eval"
 
 
 def test_close_timing_and_runtime_are_agreement() -> None:

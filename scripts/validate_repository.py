@@ -104,6 +104,11 @@ REQUIRED_FILES = (
     "docs/V1_0_41_MULTI_ZONE_COMMISSIONING.md",
     "docs/V1_0_42_PRODUCTION_READINESS_GATE.md",
     "docs/V1_0_43_FIRST_BOUNDED_UNATTENDED_CANARY.md",
+    "docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md",
+    "custom_components/irrigationos/production_targets.py",
+    "custom_components/irrigationos/production_recommendation/__init__.py",
+    "custom_components/irrigationos/production_recommendation/engine.py",
+    "custom_components/irrigationos/production_recommendation/models.py",
     "custom_components/irrigationos/first_live_delivery/acceptance.py",
     "custom_components/irrigationos/first_live_delivery/validated_targets.py",
     "custom_components/irrigationos/production_readiness/engine.py",
@@ -181,8 +186,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.43":
-        raise SystemExit("manifest.json version must be 1.0.43")
+    if manifest.get("version") != "1.0.44":
+        raise SystemExit("manifest.json version must be 1.0.44")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")

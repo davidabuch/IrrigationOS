@@ -7,7 +7,7 @@ from datetime import datetime
 from enum import Enum, StrEnum
 from typing import Any, cast
 
-SHADOW_EVALUATION_SCHEMA_VERSION = 1
+SHADOW_EVALUATION_SCHEMA_VERSION = 2
 
 
 class ShadowEvaluationReason(StrEnum):

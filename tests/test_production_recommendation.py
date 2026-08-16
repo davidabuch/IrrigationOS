@@ -1,0 +1,118 @@
+"""Behavioral tests for the canonical production-recommendation contract."""
+
+from __future__ import annotations
+
+import ast
+from dataclasses import FrozenInstanceError, replace
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from tests.helpers import load_integration_module
+from tests.test_pipeline_evaluation import inputs_snapshot, profile, snapshot
+
+controllers = load_integration_module("controllers")
+pipeline = load_integration_module("pipeline")
+production = load_integration_module("production_recommendation")
+
+
+def _evaluation() -> Any:
+    observed = snapshot()
+    controller = observed.controllers[0]
+    area = replace(
+        controller.areas[0],
+        binding=controllers.VendorBinding("rachio", "provider-zone-secret"),
+    )
+    observed = replace(observed, controllers=(replace(controller, areas=(area,)),))
+    evaluated_at = datetime(2026, 8, 6, 6, 5, tzinfo=UTC)
+    return pipeline.build_pipeline_evaluation(
+        observed,
+        profile(),
+        inputs_snapshot(ready=False),
+        evaluated_at=evaluated_at,
+    )
+
+
+def test_insufficient_evidence_never_invents_depth_runtime_or_schedule() -> None:
+    result = production.build_production_recommendations(_evaluation())
+    assert result.state is production.ProductionRecommendationState.INSUFFICIENT_EVIDENCE
+    assert len(result.recommendations) == 1
+    recommendation = result.recommendations[0]
+    assert recommendation.target.to_dict() == {"controller_slot": 1, "area_slot": 1}
+    assert recommendation.scientific_need is production.ScientificNeedState.UNAVAILABLE
+    assert recommendation.delivery_readiness is production.DeliveryReadinessState.INCOMPLETE
+    assert recommendation.irrigation_depth is None
+    assert recommendation.estimated_runtime_seconds is None
+    assert recommendation.scheduling_window is None
+    assert recommendation.execution_authorized is False
+    assert "plant_profile_unresolved" in recommendation.blocker_codes
+    assert "target_irrigation_depth_unavailable" in recommendation.blocker_codes
+    assert "provider-zone-secret" not in repr(result.to_dict())
+
+
+def test_restart_state_requires_fresh_recomputation_and_is_not_authority() -> None:
+    result = production.ProductionRecommendationSnapshot.not_available()
+    assert result.state is production.ProductionRecommendationState.NOT_AVAILABLE
+    assert result.calculated_at is None
+    assert result.recommendations == ()
+    assert result.execution_authorized is False
+
+
+def test_serialization_is_deterministic_and_models_are_immutable() -> None:
+    first = production.build_production_recommendations(_evaluation())
+    second = production.build_production_recommendations(_evaluation())
+    assert first == second
+    assert first.to_dict() == second.to_dict()
+    with pytest.raises(FrozenInstanceError):
+        first.recommendations[0].confidence = 1.0
+
+
+def test_quantity_preserves_scalar_and_range_shapes() -> None:
+    scalar = production.RecommendationQuantity(unit="millimeters", scalar=2.5)
+    bounded = production.RecommendationQuantity(
+        unit="millimeters", minimum=1.0, typical=2.0, maximum=3.0
+    )
+    assert scalar.scalar == 2.5
+    assert bounded.minimum == 1.0
+    with pytest.raises(ValueError):
+        production.RecommendationQuantity(
+            unit="millimeters", scalar=2.0, minimum=1.0, maximum=3.0
+        )
+
+
+def test_stale_weather_is_not_refreshed_by_a_new_pipeline_evaluation() -> None:
+    evaluation = _evaluation()
+    weather = replace(
+        inputs_snapshot().weather,
+        observed_at=evaluation.evaluated_at - timedelta(hours=3),
+    )
+    stale_inputs = replace(evaluation.scientific_inputs, weather=weather)
+    stale_evaluation = replace(evaluation, scientific_inputs=stale_inputs)
+    result = production.build_production_recommendations(stale_evaluation)
+    assert "weather_observation_stale" in result.recommendations[0].blocker_codes
+
+
+def test_package_has_no_physical_operation_or_provider_transport_imports() -> None:
+    root = (
+        Path(__file__).resolve().parents[1]
+        / "custom_components"
+        / "irrigationos"
+        / "production_recommendation"
+    )
+    imports: set[str] = set()
+    for path in root.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        imports.update(
+            node.module or ""
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+        )
+    forbidden = (
+        "first_live_delivery",
+        "supervised_operation",
+        "unattended_canary",
+        "adapters.rachio",
+    )
+    assert not any(name in imported for imported in imports for name in forbidden)

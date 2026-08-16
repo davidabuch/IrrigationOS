@@ -14,6 +14,7 @@ from homeassistant.helpers.storage import Store
 
 from ..const import VERSION
 from ..pipeline import PipelineEvaluation
+from ..production_recommendation import ProductionRecommendationSnapshot
 from .models import (
     SHADOW_EVALUATION_SCHEMA_VERSION,
     ShadowEvaluationReason,
@@ -34,7 +35,10 @@ def _section_hash(value: Any) -> str:
     return hashlib.sha256(_canonical(semantic_value(value)).encode()).hexdigest()
 
 
-def _decision_payload(pipeline: PipelineEvaluation) -> dict[str, Any]:
+def _decision_payload(
+    pipeline: PipelineEvaluation,
+    production_recommendations: ProductionRecommendationSnapshot,
+) -> dict[str, Any]:
     return {
         "status": pipeline.status.value,
         "current_stage": pipeline.current_stage.value,
@@ -44,8 +48,9 @@ def _decision_payload(pipeline: PipelineEvaluation) -> dict[str, Any]:
         "plant_health": jsonable(pipeline.plant_health),
         "recommendations": jsonable(pipeline.recommendations),
         "planning": jsonable(pipeline.planning),
-        "scheduling": jsonable(pipeline.scheduling),
+        "scheduling": {"area_evaluations": jsonable(pipeline.scheduling)},
         "execution_simulation": jsonable(pipeline.execution),
+        "production_recommendations": production_recommendations.to_dict(),
     }
 
 
@@ -90,6 +95,7 @@ class ShadowEvaluationManager:
         self,
         pipeline: PipelineEvaluation,
         *,
+        production_recommendations: ProductionRecommendationSnapshot,
         completed_session_count: int,
         force_reason: ShadowEvaluationReason | None = None,
     ) -> ShadowEvaluationRecord | None:
@@ -97,8 +103,10 @@ class ShadowEvaluationManager:
         reason = force_reason or self._reason_for_change(
             pipeline, completed_session_count
         )
-        payload = self._build_payload(pipeline)
-        fingerprint = _section_hash(_decision_payload(pipeline))
+        payload = self._build_payload(pipeline, production_recommendations)
+        fingerprint = _section_hash(
+            _decision_payload(pipeline, production_recommendations)
+        )
         should_write = (
             reason is ShadowEvaluationReason.NIGHTLY
             or fingerprint != self.last_decision_fingerprint
@@ -164,7 +172,11 @@ class ShadowEvaluationManager:
         }
         self._completed_session_count = completed_count
 
-    def _build_payload(self, pipeline: PipelineEvaluation) -> dict[str, Any]:
+    def _build_payload(
+        self,
+        pipeline: PipelineEvaluation,
+        production_recommendations: ProductionRecommendationSnapshot,
+    ) -> dict[str, Any]:
         return {
             "pipeline_status": pipeline.status.value,
             "current_stage": pipeline.current_stage.value,
@@ -173,7 +185,7 @@ class ShadowEvaluationManager:
             "scientific_inputs": jsonable(pipeline.scientific_inputs),
             "observation_snapshot": jsonable(pipeline.observation_snapshot),
             "landscape_profile": jsonable(pipeline.landscape_profile),
-            **_decision_payload(pipeline),
+            **_decision_payload(pipeline, production_recommendations),
         }
 
     def _write_record(self, record: ShadowEvaluationRecord) -> bool:

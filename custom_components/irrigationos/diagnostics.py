@@ -142,6 +142,9 @@ async def async_get_config_entry_diagnostics(
             "first_live_acceptance": entry.runtime_data.first_live_acceptance.diagnostics(),
             "validated_targets": entry.runtime_data.validated_targets.diagnostics(),
             "production_readiness": entry.runtime_data.production_readiness.diagnostics(),
+            "production_recommendations": (
+                entry.runtime_data.production_recommendations.to_dict()
+            ),
             "unattended_canary": entry.runtime_data.unattended_canary.diagnostics(),
             "unattended_canary_acceptance": (
                 entry.runtime_data.unattended_canary_acceptance.diagnostics()

@@ -1,20 +1,20 @@
 # IrrigationOS Roadmap
 
-## v1.0.43 — First Bounded Unattended Canary
+## v1.0.44 — Canonical Production Recommendation Contract
 
-- Adds one exact-target, exact-runtime, ten-minute, single-use canary approval.
-- Requires current unattended-canary readiness and every existing fail-closed safety gate before one transport attempt.
-- Limits runtime to 15–60 seconds and never restores or retries consumed approval.
-- Persists privacy-safe audit and completed acceptance while keeping approval, progress, and monitoring restart-ephemeral.
-- Adds no scheduling, recurring canaries, multi-zone unattended watering, or general Live authority.
+- Adds one privacy-safe immutable current recommendation per canonical production target.
+- Separates scientific irrigation need from quantitative delivery and scheduling readiness.
+- Uses one shared configured/enabled/bound target selector with production readiness.
+- Retains source weather freshness and stores recommendation snapshots only as shadow audit history.
+- Adds no execution authorization, scheduler dispatch, retry, or autonomous watering.
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.43
+- **Installable Home Assistant release:** v1.0.44
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
-- **Current operating boundary:** Observation remains the default commissioned mode; supervised first-live and bounded manual operation remain available, plus one exact single-use 15–60 second unattended canary on a validated production target; general Live mode, recurring operation, and autonomous scheduling remain disabled
-- **Current epic:** supervised physical commissioning transitioning through one bounded unattended validation canary
-- **Next milestone:** perform one explicitly approved bounded canary on HAOS and review its terminal evidence before considering any further authority
+- **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
+- **Current epic:** connect scientific evidence to canonical production targets without expanding authority
+- **Next milestone:** shadow-evaluate recommendation evidence quality against observed watering before considering any scheduler authority
 
 ## Delivery model
 

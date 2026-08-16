@@ -73,6 +73,11 @@ from .production_readiness import (
     ProductionReadinessManager,
     ProductionTarget,
 )
+from .production_recommendation import (
+    ProductionRecommendationSnapshot,
+    build_production_recommendations,
+)
+from .production_targets import select_production_targets
 from .replay_readiness.manager import ReplayReadinessManager
 from .safety_preemption.manager import SafetyPreemptionManager
 from .scientific_inputs import build_scientific_input_snapshot
@@ -112,6 +117,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.landscape = LandscapeProfile(schema_version=1, areas=())
         self.last_successful_refresh: datetime | None = None
         self.pipeline_evaluation: PipelineEvaluation | None = None
+        self.production_recommendations = ProductionRecommendationSnapshot.not_available()
         self.refresh_count = 0
         self.realtime: RealtimeObservationManager | None = None
         self.identities = ControllerIdentityRegistry.from_dict(
@@ -325,7 +331,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             ),
         )
         weather_entities = tuple(
-            (entity_id, state.state, state.attributes)
+            (entity_id, state.state, state.attributes, state.last_updated)
             for entity_id in self.hass.states.async_entity_ids("weather")
             if (state := self.hass.states.get(entity_id)) is not None
         )
@@ -346,13 +352,19 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             )
         except Exception as err:  # Pipeline faults are operational failures, not commands.
             self.pipeline_evaluation = None
+            self.production_recommendations = ProductionRecommendationSnapshot.not_available()
             await self._record_refresh_failure("pipeline")
             raise UpdateFailed("IrrigationOS pipeline evaluation failed") from err
+
+        self.production_recommendations = build_production_recommendations(
+            self.pipeline_evaluation
+        )
 
         force_shadow_reason = self._force_next_shadow_reason
         self._force_next_shadow_reason = None
         shadow_record = await self.shadow_evaluations.async_consider(
             self.pipeline_evaluation,
+            production_recommendations=self.production_recommendations,
             completed_session_count=len(self.observation_history.completed_sessions),
             force_reason=force_shadow_reason,
         )
@@ -379,6 +391,10 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
                 tuple(controller.native_id for controller in snapshot.controllers)
             )
         await self.async_update_health("refresh_success", notify_listeners=False)
+        self.production_recommendations = build_production_recommendations(
+            self.pipeline_evaluation,
+            execution_blocker_codes=self.production_readiness.summary.blocker_codes,
+        )
         await self._write_operational_event("refresh_success")
         return snapshot
 
@@ -510,7 +526,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self, evaluated_at: datetime
     ) -> ProductionReadinessInputs:
         snapshot = self._health_snapshot
-        production_targets: list[ProductionTarget] = []
+        production_targets: tuple[ProductionTarget, ...] = ()
         watering_count = len(self.observation_history.active_sessions)
         if snapshot is not None:
             watering_count = max(
@@ -521,12 +537,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
                     for area in controller.areas
                 ),
             )
-            for controller_slot, controller in enumerate(snapshot.controllers, start=1):
-                production_targets.extend(
-                    ProductionTarget(controller_slot, area.slot_number)
-                    for area in controller.areas
-                    if area.configured and area.enabled and area.binding is not None
-                )
+            production_targets = select_production_targets(snapshot)
         validated_targets = tuple(
             ProductionTarget(target.controller_slot, target.area_slot)
             for target in self.validated_targets.targets
@@ -550,7 +561,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             ownership_persistence_healthy=(
                 self.ownership_commissioning.last_error is None
             ),
-            production_targets=tuple(production_targets),
+            production_targets=production_targets,
             validated_targets=validated_targets,
             validated_target_persistence_healthy=(
                 self.validated_targets.last_persistence_error is None
@@ -571,7 +582,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             unattended_canary_approval_present=(
                 self.unattended_canary.valid_approval_for(
                     now=evaluated_at,
-                    production_targets=tuple(production_targets),
+                    production_targets=production_targets,
                     validated_targets=validated_targets,
                 )
             ),
