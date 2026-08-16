@@ -62,3 +62,19 @@ def test_shadow_contract_is_immutable() -> None:
         payload={},
     )
     assert record.reason.value == "nightly"
+
+
+def test_current_shadow_schema_is_two_while_legacy_records_remain_data() -> None:
+    assert MODELS.SHADOW_EVALUATION_SCHEMA_VERSION == 2
+    legacy = MODELS.ShadowEvaluationRecord(
+        schema_version=1,
+        evaluation_id="legacy",
+        reason=MODELS.ShadowEvaluationReason.DECISION_CHANGE,
+        timestamp_utc=datetime(2026, 8, 10, 3, 0, tzinfo=UTC),
+        timestamp_local=datetime(2026, 8, 9, 20, 0, tzinfo=UTC),
+        integration_version="1.0.43",
+        pipeline_algorithm_version="1.0.10",
+        decision_fingerprint="legacy-fingerprint",
+        payload={"scheduling": []},
+    )
+    assert legacy.schema_version == 1

@@ -49,6 +49,12 @@ class WeatherInputSnapshot:
     attribution: str | None
     known_fact_count: int
 
+    def __post_init__(self) -> None:
+        if self.observed_at.tzinfo is None or self.observed_at.utcoffset() is None:
+            raise ValueError("weather observed_at must be timezone-aware")
+        if self.known_fact_count < 0:
+            raise ValueError("known_fact_count must not be negative")
+
 
 @dataclass(frozen=True, slots=True)
 class AreaKnowledgeInput:

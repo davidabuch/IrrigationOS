@@ -23,18 +23,22 @@ from .models import (
     WeatherInputSnapshot,
 )
 
+type WeatherEntityInput = (
+    tuple[str, str, Mapping[str, Any], datetime]
+)
+
 
 def build_scientific_input_snapshot(
     *,
     landscape: LandscapeProfile,
-    weather_entities: Sequence[tuple[str, str, Mapping[str, Any]]],
+    weather_entities: Sequence[WeatherEntityInput],
     evaluated_at: datetime,
     country_code: str | None = None,
     latitude: float | None = None,
     elevation_meters: float | None = None,
 ) -> ScientificInputSnapshot:
     """Build deterministic weather and plant-knowledge inputs for one refresh."""
-    weather, weather_blockers = _resolve_weather(weather_entities, evaluated_at)
+    weather, weather_blockers = _resolve_weather(weather_entities)
     area_knowledge = _resolve_area_knowledge(landscape, country_code)
     knowledge_blockers = tuple(
         dict.fromkeys(code for item in area_knowledge for code in item.blocker_codes)
@@ -64,8 +68,7 @@ def build_scientific_input_snapshot(
 
 
 def _resolve_weather(
-    weather_entities: Sequence[tuple[str, str, Mapping[str, Any]]],
-    evaluated_at: datetime,
+    weather_entities: Sequence[WeatherEntityInput],
 ) -> tuple[WeatherInputSnapshot | None, tuple[str, ...]]:
     available = tuple(
         item
@@ -77,7 +80,10 @@ def _resolve_weather(
     if len(available) > 1:
         return None, ("multiple_weather_entities_require_selection",)
 
-    entity_id, condition, attributes = available[0]
+    selected = available[0]
+    entity_id, condition, attributes, observed_at = selected
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+        return None, ("weather_observation_timestamp_invalid",)
     temperature = _temperature_celsius(
         attributes.get("temperature"), attributes.get("temperature_unit")
     )
@@ -102,7 +108,7 @@ def _resolve_weather(
     return (
         WeatherInputSnapshot(
             entity_id=entity_id,
-            observed_at=evaluated_at,
+            observed_at=observed_at,
             condition=condition or None,
             temperature_celsius=temperature,
             relative_humidity_percent=humidity,

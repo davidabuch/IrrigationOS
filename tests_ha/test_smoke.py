@@ -621,6 +621,22 @@ async def test_production_readiness_entities_use_only_configured_targets_and_res
     summary = coordinator.production_readiness.summary
     assert [target.area_slot for target in summary.production_targets] == [1, 2, 4, 5]
     assert summary.state.value == "not_ready"
+    recommendation = hass.states.get("sensor.irrigationos_production_recommendations")
+    assert recommendation is not None
+    assert recommendation.state == "insufficient_evidence"
+    assert recommendation.attributes["execution_authorized"] is False
+    assert len(recommendation.attributes["recommendations"]) == 4
+    for slot in (1, 2, 4, 5):
+        area_recommendation = hass.states.get(
+            f"sensor.zone_{slot}_production_recommendation"
+        )
+        assert area_recommendation is not None
+        assert area_recommendation.state == "insufficient_evidence"
+        assert area_recommendation.attributes["irrigation_depth"] is None
+        assert area_recommendation.attributes["estimated_runtime_seconds"] is None
+        assert area_recommendation.attributes["scheduling_window"] is None
+        assert area_recommendation.attributes["execution_authorized"] is False
+        assert "native-zone" not in repr(area_recommendation.attributes)
 
     targets = tuple(ProductionTarget(1, slot) for slot in (1, 2, 4, 5))
     coordinator.production_readiness.consider(

@@ -25,11 +25,7 @@ def extract_scheduled_irrigation_actions(record: dict[str, Any]) -> tuple[dict[s
     if not evaluation_id or not isinstance(payload, dict):
         return ()
     scheduling = payload.get("scheduling")
-    if not isinstance(scheduling, dict):
-        return ()
-    actions = scheduling.get("actions", [])
-    if not isinstance(actions, list):
-        return ()
+    actions = _scheduling_actions(scheduling)
     found: list[dict[str, Any]] = []
     for raw in actions:
         if not isinstance(raw, dict) or raw.get("disposition") != "scheduled":
@@ -70,6 +66,35 @@ def extract_scheduled_irrigation_actions(record: dict[str, Any]) -> tuple[dict[s
             key=lambda item: (item["evaluation_id"], item["scheduled_action_id"]),
         )
     )
+
+
+def _scheduling_actions(scheduling: object) -> list[object]:
+    """Read legacy schema-1 lists and coherent schema-2 scheduling envelopes."""
+
+    if isinstance(scheduling, list):
+        area_evaluations = scheduling
+    elif isinstance(scheduling, dict):
+        direct = scheduling.get("actions")
+        if isinstance(direct, list):
+            return list(direct)
+        nested = scheduling.get("area_evaluations")
+        if not isinstance(nested, list):
+            return []
+        area_evaluations = nested
+    else:
+        return []
+
+    actions: list[object] = []
+    for evaluation in area_evaluations:
+        if not isinstance(evaluation, dict):
+            continue
+        schedule = evaluation.get("schedule")
+        if not isinstance(schedule, dict):
+            continue
+        nested_actions = schedule.get("actions")
+        if isinstance(nested_actions, list):
+            actions.extend(nested_actions)
+    return actions
 
 
 def classify_match(

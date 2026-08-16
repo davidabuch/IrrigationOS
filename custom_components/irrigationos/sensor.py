@@ -21,6 +21,7 @@ from .entity import (
 )
 from .observation_history.models import safe_session_summary
 from .pipeline import PIPELINE_ALGORITHM_VERSION, PipelineStage
+from .production_targets import find_production_area, select_production_targets
 from .reconciliation import EntityInventory, controller_first
 from .supervised_operation.acceptance import (
     SUPERVISED_OPERATION_ACCEPTANCE_RECORD_SCHEMA_VERSION,
@@ -63,6 +64,7 @@ async def async_setup_entry(
         IrrigationOSFirstLiveAcceptanceSensor(coordinator),
         IrrigationOSValidatedTargetsSensor(coordinator),
         IrrigationOSProductionReadinessSensor(coordinator),
+        IrrigationOSProductionRecommendationsSensor(coordinator),
         IrrigationOSUnattendedCanaryApprovalSensor(coordinator),
         IrrigationOSUnattendedCanaryAcceptanceSensor(coordinator),
         IrrigationOSSupervisedOperationAcceptanceSensor(coordinator),
@@ -103,6 +105,14 @@ def _new_dynamic_entities(
         if area.configured and _has_landscape_profile(coordinator, area.area_id):
             candidates[f"landscape:{area.area_id}"] = IrrigationOSLandscapeProfileSensor(
                 coordinator, area
+            )
+    for target in select_production_targets(coordinator.data):
+        production_area = find_production_area(coordinator.data, target)
+        if production_area is not None:
+            candidates[f"production_recommendation:{production_area.area_id}"] = (
+                IrrigationOSAreaProductionRecommendationSensor(
+                    coordinator, production_area, target.controller_slot
+                )
             )
     result = inventory.reconcile(set(candidates))
     return [candidates[key] for key in controller_first(result.added)]
@@ -380,6 +390,27 @@ class IrrigationOSProductionReadinessSensor(IrrigationOSEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return self.coordinator.production_readiness.summary.to_dict()
+
+
+class IrrigationOSProductionRecommendationsSensor(IrrigationOSEntity, SensorEntity):
+    """Expose the current transient recommendation set without authority."""
+
+    _attr_name = "Production recommendations"
+    _attr_unique_id = "irrigationos_production_recommendations"
+    entity_id = "sensor.irrigationos_production_recommendations"
+    _attr_icon = "mdi:clipboard-text-search-outline"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.production_recommendations.state.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self.coordinator.production_recommendations.to_dict()
 
 
 class IrrigationOSUnattendedCanaryApprovalSensor(IrrigationOSEntity, SensorEntity):
@@ -1096,6 +1127,55 @@ class IrrigationOSAreaPipelineSensor(IrrigationOSAreaEntity, SensorEntity):
         return self._output()[1]
 
 
+class IrrigationOSAreaProductionRecommendationSensor(
+    IrrigationOSAreaEntity, SensorEntity
+):
+    """Expose one canonical production-area recommendation."""
+
+    _attr_name = "Production recommendation"
+    _attr_icon = "mdi:sprinkler-variant"
+
+    def __init__(
+        self,
+        coordinator: IrrigationOSCoordinator,
+        area: IrrigationArea,
+        controller_slot: int,
+    ) -> None:
+        super().__init__(coordinator, area)
+        self.controller_slot = controller_slot
+        self._attr_unique_id = f"{area.area_id}_production_recommendation"
+        self._attr_suggested_object_id = (
+            f"zone_{area.slot_number}_production_recommendation"
+        )
+
+    def _recommendation(self) -> Any | None:
+        return next(
+            (
+                item
+                for item in self.coordinator.production_recommendations.recommendations
+                if item.target.controller_slot == self.controller_slot
+                and item.target.area_slot == self.area.slot_number
+            ),
+            None,
+        )
+
+    @property
+    def native_value(self) -> str:
+        recommendation = self._recommendation()
+        return "not_available" if recommendation is None else recommendation.state.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        recommendation = self._recommendation()
+        if recommendation is None:
+            return {
+                "controller_slot": self.controller_slot,
+                "area_slot": self.area.slot_number,
+                "execution_authorized": False,
+            }
+        return recommendation.to_dict()
+
+
 class IrrigationOSPipelineVersionSensor(IrrigationOSEntity, SensorEntity):
     """Expose the pipeline integration algorithm version."""
 
@@ -1176,6 +1256,7 @@ class IrrigationOSWeatherSourceSensor(IrrigationOSEntity, SensorEntity):
             return {}
         weather = evaluation.scientific_inputs.weather
         return {
+            "observed_at": weather.observed_at.isoformat(),
             "condition": weather.condition,
             "temperature_celsius": weather.temperature_celsius,
             "relative_humidity_percent": weather.relative_humidity_percent,

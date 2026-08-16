@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.44 — Canonical Production Recommendation Contract
+
+- Added one immutable, deterministic recommendation contract for each configured, enabled, bound canonical production target.
+- Separates scientific need from quantitative delivery readiness and withholds irrigation depth, runtime, and scheduling windows when evidence is incomplete.
+- Added transient aggregate and per-zone Home Assistant sensors with `execution_authorized` permanently false.
+- Consolidated production-target selection so readiness and recommendation composition use one authoritative rule.
+- Fixed weather freshness to retain the source Home Assistant entity timestamp instead of pipeline evaluation time.
+- Added schema-2 shadow recommendation history and schema-1-compatible actual-vs-shadow scheduling extraction.
+- Added no scheduling authority, physical-operation change, retry, or autonomous irrigation path.
+
 ## 1.0.43 — First Bounded Unattended Canary
 
 - Added separate explicit approval and one-shot execution services for one validated production target.

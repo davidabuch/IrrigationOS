@@ -48,6 +48,7 @@ def profile(*, plant_description: str = "Bermudagrass") -> Any:
 
 def test_single_weather_entity_and_curated_knowledge_are_normalized() -> None:
     evaluated_at = datetime(2026, 8, 6, 12, 0, tzinfo=UTC)
+    weather_observed_at = datetime(2026, 8, 6, 11, 42, tzinfo=UTC)
     result = inputs.build_scientific_input_snapshot(
         landscape=profile(),
         weather_entities=(
@@ -64,6 +65,7 @@ def test_single_weather_entity_and_curated_knowledge_are_normalized() -> None:
                     "wind_speed_unit": "mph",
                     "wind_bearing": 270,
                 },
+                weather_observed_at,
             ),
         ),
         evaluated_at=evaluated_at,
@@ -74,6 +76,7 @@ def test_single_weather_entity_and_curated_knowledge_are_normalized() -> None:
 
     assert result.status is inputs.ScientificInputStatus.READY
     assert result.weather is not None
+    assert result.weather.observed_at == weather_observed_at
     assert round(result.weather.temperature_celsius, 2) == 30.0
     assert round(result.weather.wind_speed_meters_per_second, 3) == 4.47
     assert result.area_knowledge[0].selected_profile_id == "pk.species.cynodon_dactylon"
@@ -83,13 +86,46 @@ def test_single_weather_entity_and_curated_knowledge_are_normalized() -> None:
     assert result.regional_context.elevation_meters == 100.0
 
 
+def test_new_evaluation_does_not_make_unchanged_weather_appear_fresh() -> None:
+    observed_at = datetime(2026, 8, 6, 10, 0, tzinfo=UTC)
+    weather = (
+        "weather.forecast_home",
+        "sunny",
+        {"temperature": 25, "humidity": 40},
+        observed_at,
+    )
+    first = inputs.build_scientific_input_snapshot(
+        landscape=profile(),
+        weather_entities=(weather,),
+        evaluated_at=datetime(2026, 8, 6, 10, 5, tzinfo=UTC),
+    )
+    second = inputs.build_scientific_input_snapshot(
+        landscape=profile(),
+        weather_entities=(weather,),
+        evaluated_at=datetime(2026, 8, 6, 12, 5, tzinfo=UTC),
+    )
+    assert first.weather is not None
+    assert second.weather is not None
+    assert first.weather.observed_at == second.weather.observed_at == observed_at
+
+
 def test_multiple_weather_entities_are_not_guessed() -> None:
     evaluated_at = datetime(2026, 8, 6, 12, 0, tzinfo=UTC)
     result = inputs.build_scientific_input_snapshot(
         landscape=profile(),
         weather_entities=(
-            ("weather.one", "sunny", {"temperature": 25, "humidity": 40}),
-            ("weather.two", "cloudy", {"temperature": 24, "humidity": 50}),
+            (
+                "weather.one",
+                "sunny",
+                {"temperature": 25, "humidity": 40},
+                evaluated_at,
+            ),
+            (
+                "weather.two",
+                "cloudy",
+                {"temperature": 24, "humidity": 50},
+                evaluated_at,
+            ),
         ),
         evaluated_at=evaluated_at,
     )
@@ -100,12 +136,18 @@ def test_multiple_weather_entities_are_not_guessed() -> None:
 
 
 def test_unresolved_plant_identity_is_reported() -> None:
+    evaluated_at = datetime(2026, 8, 6, 12, 0, tzinfo=UTC)
     result = inputs.build_scientific_input_snapshot(
         landscape=profile(plant_description="Unlisted specimen"),
         weather_entities=(
-            ("weather.forecast_home", "sunny", {"temperature": 25, "humidity": 40}),
+            (
+                "weather.forecast_home",
+                "sunny",
+                {"temperature": 25, "humidity": 40},
+                evaluated_at,
+            ),
         ),
-        evaluated_at=datetime(2026, 8, 6, 12, 0, tzinfo=UTC),
+        evaluated_at=evaluated_at,
     )
 
     assert result.status is inputs.ScientificInputStatus.PARTIAL

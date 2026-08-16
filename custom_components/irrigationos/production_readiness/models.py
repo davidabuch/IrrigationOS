@@ -7,6 +7,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
+from ..production_targets import ProductionTarget as ProductionTarget
+
 PRODUCTION_READINESS_SCHEMA_VERSION = 2
 PRODUCTION_READINESS_POLICY_VERSION = 2
 
@@ -17,24 +19,6 @@ class ProductionReadinessState(StrEnum):
     NOT_READY = "not_ready"
     READY_FOR_SUPERVISED_PRODUCTION = "ready_for_supervised_production"
     READY_FOR_UNATTENDED_CANARY = "ready_for_unattended_canary"
-
-
-@dataclass(frozen=True, slots=True, order=True)
-class ProductionTarget:
-    """One privacy-safe canonical configured irrigation target."""
-
-    controller_slot: int
-    area_slot: int
-
-    def __post_init__(self) -> None:
-        if self.controller_slot < 1 or self.area_slot < 1:
-            raise ValueError("production target slots must be positive")
-
-    def to_dict(self) -> dict[str, int]:
-        return {
-            "controller_slot": self.controller_slot,
-            "area_slot": self.area_slot,
-        }
 
 
 @dataclass(frozen=True, slots=True)
