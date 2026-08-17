@@ -15,6 +15,7 @@ from homeassistant.helpers.storage import Store
 from ..const import VERSION
 from ..pipeline import PipelineEvaluation
 from ..production_recommendation import ProductionRecommendationSnapshot
+from ..quantitative_water_balance import WaterBalanceSnapshot
 from .models import (
     SHADOW_EVALUATION_SCHEMA_VERSION,
     ShadowEvaluationReason,
@@ -38,6 +39,7 @@ def _section_hash(value: Any) -> str:
 def _decision_payload(
     pipeline: PipelineEvaluation,
     production_recommendations: ProductionRecommendationSnapshot,
+    water_balances: WaterBalanceSnapshot | None = None,
 ) -> dict[str, Any]:
     return {
         "status": pipeline.status.value,
@@ -51,6 +53,11 @@ def _decision_payload(
         "scheduling": {"area_evaluations": jsonable(pipeline.scheduling)},
         "execution_simulation": jsonable(pipeline.execution),
         "production_recommendations": production_recommendations.to_dict(),
+        "quantitative_water_balances": (
+            WaterBalanceSnapshot.not_available().to_dict()
+            if water_balances is None
+            else water_balances.to_dict()
+        ),
     }
 
 
@@ -96,6 +103,7 @@ class ShadowEvaluationManager:
         pipeline: PipelineEvaluation,
         *,
         production_recommendations: ProductionRecommendationSnapshot,
+        water_balances: WaterBalanceSnapshot | None = None,
         completed_session_count: int,
         force_reason: ShadowEvaluationReason | None = None,
     ) -> ShadowEvaluationRecord | None:
@@ -103,9 +111,9 @@ class ShadowEvaluationManager:
         reason = force_reason or self._reason_for_change(
             pipeline, completed_session_count
         )
-        payload = self._build_payload(pipeline, production_recommendations)
+        payload = self._build_payload(pipeline, production_recommendations, water_balances)
         fingerprint = _section_hash(
-            _decision_payload(pipeline, production_recommendations)
+            _decision_payload(pipeline, production_recommendations, water_balances)
         )
         should_write = (
             reason is ShadowEvaluationReason.NIGHTLY
@@ -176,6 +184,7 @@ class ShadowEvaluationManager:
         self,
         pipeline: PipelineEvaluation,
         production_recommendations: ProductionRecommendationSnapshot,
+        water_balances: WaterBalanceSnapshot | None = None,
     ) -> dict[str, Any]:
         return {
             "pipeline_status": pipeline.status.value,
@@ -185,7 +194,7 @@ class ShadowEvaluationManager:
             "scientific_inputs": jsonable(pipeline.scientific_inputs),
             "observation_snapshot": jsonable(pipeline.observation_snapshot),
             "landscape_profile": jsonable(pipeline.landscape_profile),
-            **_decision_payload(pipeline, production_recommendations),
+            **_decision_payload(pipeline, production_recommendations, water_balances),
         }
 
     def _write_record(self, record: ShadowEvaluationRecord) -> bool:

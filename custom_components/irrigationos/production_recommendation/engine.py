@@ -9,6 +9,11 @@ from ..landscape import EstablishmentStage
 from ..pipeline import PipelineEvaluation
 from ..plant_water_requirement import PlantWaterRequirementStatus
 from ..production_targets import find_production_area, select_production_targets
+from ..quantitative_water_balance import (
+    ForecastReconciliationState,
+    WaterBalanceSnapshot,
+    WaterBalanceState,
+)
 from ..recommendations import RecommendationCategory, RecommendationStatus
 from .models import (
     DeliveryReadinessState,
@@ -27,6 +32,7 @@ MAX_WEATHER_AGE = timedelta(hours=2)
 def build_production_recommendations(
     pipeline: PipelineEvaluation,
     *,
+    water_balances: WaterBalanceSnapshot | None = None,
     execution_blocker_codes: tuple[str, ...] = (),
 ) -> ProductionRecommendationSnapshot:
     """Compose current recommendations without granting or invoking authority."""
@@ -54,6 +60,12 @@ def build_production_recommendations(
         stress = _by_area(pipeline.plant_stress, area.area_id)
         health = _by_area(pipeline.plant_health, area.area_id)
         advisory = _by_area(pipeline.recommendations, area.area_id)
+        balance = None
+        if water_balances is not None:
+            balance = next(
+                (item for item in water_balances.balances if item.target == target),
+                None,
+            )
 
         blockers: set[str] = set()
         evidence: list[ProductionRecommendationEvidence] = [
@@ -69,6 +81,13 @@ def build_production_recommendations(
             ProductionRecommendationEvidence(
                 kind=RecommendationEvidenceKind.LANDSCAPE_PROFILE,
                 status="complete" if profile is not None and profile.is_complete else "incomplete",
+            )
+        )
+        evidence.append(
+            ProductionRecommendationEvidence(
+                kind=RecommendationEvidenceKind.QUANTITATIVE_WATER_BALANCE,
+                status="unavailable" if balance is None else balance.state.value,
+                confidence=None if balance is None else balance.confidence,
             )
         )
         if knowledge is None or knowledge.selected_profile_id is None:
@@ -159,12 +178,32 @@ def build_production_recommendations(
             ):
                 scientific_need = ScientificNeedState.INDICATED
 
-        # Plant factor evidence is not an irrigation depth. Current pipeline output
-        # therefore cannot support a quantitative delivery or scheduling contract.
+        recommendation_state = ProductionRecommendationState.INSUFFICIENT_EVIDENCE
+        reason_codes = ("recommendation_withheld_insufficient_evidence",)
+        if balance is None or balance.state is not WaterBalanceState.AVAILABLE:
+            blockers.add("quantitative_water_balance_unavailable")
+        elif balance.actual_net_deficit_mm is not None:
+            if (
+                balance.forecast_reconciliation_state
+                is ForecastReconciliationState.DEFERRED_FOR_FORECAST
+            ):
+                scientific_need = ScientificNeedState.DEFERRED
+                recommendation_state = (
+                    ProductionRecommendationState.IRRIGATION_DEFERRED_FOR_FORECAST
+                )
+                reason_codes = ("scientific_need_deferred_for_forecast",)
+            elif _quantity_upper(balance.actual_net_deficit_mm) <= 0:
+                scientific_need = ScientificNeedState.NOT_INDICATED
+                recommendation_state = ProductionRecommendationState.NO_IRRIGATION_RECOMMENDED
+                reason_codes = ("no_current_water_deficit",)
+            else:
+                scientific_need = ScientificNeedState.INDICATED
+                recommendation_state = ProductionRecommendationState.IRRIGATION_RECOMMENDED
+                reason_codes = ("quantitative_water_deficit_present",)
         blockers.update(
             {
-                "target_irrigation_depth_unavailable",
                 "delivery_evidence_incomplete",
+                "target_irrigation_depth_unavailable",
                 "runtime_estimate_unavailable",
                 "scheduling_window_unavailable",
             }
@@ -179,7 +218,7 @@ def build_production_recommendations(
         recommendations.append(
             ProductionAreaRecommendation(
                 target=target,
-                state=ProductionRecommendationState.INSUFFICIENT_EVIDENCE,
+                state=recommendation_state,
                 scientific_need=scientific_need,
                 delivery_readiness=DeliveryReadinessState.INCOMPLETE,
                 irrigation_depth=None,
@@ -188,7 +227,7 @@ def build_production_recommendations(
                 evidence=tuple(sorted(evidence, key=lambda item: item.kind.value)),
                 confidence=confidence,
                 completeness=completeness,
-                reason_codes=("recommendation_withheld_insufficient_evidence",),
+                reason_codes=reason_codes,
                 blocker_codes=tuple(sorted(blockers)),
                 execution_blocker_codes=tuple(sorted(set(execution_blocker_codes))),
                 calculated_at=calculated_at,
@@ -205,17 +244,20 @@ def build_production_recommendations(
             }
         )
     )
+    states = {item.state for item in recommendations}
     state = (
-        ProductionRecommendationState.INSUFFICIENT_EVIDENCE
-        if recommendations
-        else ProductionRecommendationState.NOT_AVAILABLE
+        ProductionRecommendationState.NOT_AVAILABLE
+        if not recommendations
+        else next(iter(states))
+        if len(states) == 1
+        else ProductionRecommendationState.MIXED
     )
     return ProductionRecommendationSnapshot(
         state=state,
         calculated_at=calculated_at if recommendations else None,
         recommendations=tuple(recommendations),
         reason_codes=(
-            ("recommendation_withheld_insufficient_evidence",)
+            tuple(sorted({code for item in recommendations for code in item.reason_codes}))
             if recommendations
             else ("no_production_targets",)
         ),
@@ -229,3 +271,7 @@ def build_production_recommendations(
 
 def _by_area(values: tuple[Any, ...], area_id: str) -> Any | None:
     return next((item for item in values if getattr(item, "area_id", None) == area_id), None)
+
+
+def _quantity_upper(value: Any) -> float:
+    return value.scalar if value.scalar is not None else value.maximum

@@ -18,6 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.storage import Store
 from homeassistant.util.aiohttp import MockRequest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -61,6 +62,15 @@ from custom_components.irrigationos.health import IrrigationOSHealthState
 from custom_components.irrigationos.production_readiness import (
     ProductionReadinessInputs,
     ProductionTarget,
+)
+from custom_components.irrigationos.quantitative_water_balance import (
+    WaterBalanceLedgerEvent,
+    WaterBalanceLedgerEventKind,
+    WaterQuantity,
+)
+from custom_components.irrigationos.quantitative_water_balance.manager import (
+    WATER_BALANCE_LEDGER_STORE_VERSION,
+    WaterBalanceLedgerManager,
 )
 from custom_components.irrigationos.unattended_canary import (
     UNATTENDED_CANARY_CONFIRMATION,
@@ -626,6 +636,12 @@ async def test_production_readiness_entities_use_only_configured_targets_and_res
     assert recommendation.state == "insufficient_evidence"
     assert recommendation.attributes["execution_authorized"] is False
     assert len(recommendation.attributes["recommendations"]) == 4
+    aggregate_balance = hass.states.get(
+        "sensor.irrigationos_quantitative_water_balances"
+    )
+    assert aggregate_balance is not None
+    assert aggregate_balance.state == "insufficient_evidence"
+    assert len(aggregate_balance.attributes["balances"]) == 4
     for slot in (1, 2, 4, 5):
         area_recommendation = hass.states.get(
             f"sensor.zone_{slot}_production_recommendation"
@@ -637,6 +653,14 @@ async def test_production_readiness_entities_use_only_configured_targets_and_res
         assert area_recommendation.attributes["scheduling_window"] is None
         assert area_recommendation.attributes["execution_authorized"] is False
         assert "native-zone" not in repr(area_recommendation.attributes)
+        area_balance = hass.states.get(f"sensor.zone_{slot}_water_balance")
+        assert area_balance is not None
+        assert area_balance.state == "insufficient_evidence"
+        assert area_balance.attributes["actual_net_deficit_mm"] is None
+        assert area_balance.attributes["execution_authorized"] is False
+        assert "native-zone" not in repr(area_balance.attributes)
+    assert hass.states.get("sensor.zone_3_water_balance") is None
+    assert hass.states.get("sensor.zone_6_water_balance") is None
 
     targets = tuple(ProductionTarget(1, slot) for slot in (1, 2, 4, 5))
     coordinator.production_readiness.consider(
@@ -694,6 +718,47 @@ async def test_production_readiness_entities_use_only_configured_targets_and_res
     )
     assert hass.states.get("binary_sensor.irrigationos_production_ready").state == "off"
     assert entry.runtime_data.supervised_operation.in_progress is False
+
+
+@pytest.mark.asyncio
+async def test_water_balance_ledger_persists_and_corruption_fails_closed(
+    hass: HomeAssistant,
+) -> None:
+    entry_id = "water_balance_test"
+    manager = WaterBalanceLedgerManager(hass, entry_id)
+    await manager.async_initialize()
+    now = datetime.now(UTC)
+    event = WaterBalanceLedgerEvent(
+        event_id="water_balance.deferral.test",
+        kind=WaterBalanceLedgerEventKind.FORECAST_DEFERRAL,
+        target=ProductionTarget(1, 4),
+        forecast_id="weather.forecast.test",
+        recorded_at=now,
+        accounted_through=now,
+        forecast_window_start=now + timedelta(hours=1),
+        forecast_window_end=now + timedelta(hours=12),
+        deferred_deficit_mm=WaterQuantity.millimeters(5),
+        carry_forward_deficit_mm=WaterQuantity.millimeters(5),
+    )
+    assert await manager.async_append(event)
+    assert await manager.async_append(event)
+    restored = WaterBalanceLedgerManager(hass, entry_id)
+    await restored.async_initialize()
+    assert restored.events == (event,)
+    assert restored.diagnostics()["execution_authorized"] is False
+
+    corrupt_id = "water_balance_corrupt"
+    store = Store[dict[str, Any]](
+        hass,
+        WATER_BALANCE_LEDGER_STORE_VERSION,
+        f"irrigationos.{corrupt_id}.water_balance_ledger",
+    )
+    await store.async_save({"events": [{"invalid": True}]})
+    corrupted = WaterBalanceLedgerManager(hass, corrupt_id)
+    await corrupted.async_initialize()
+    assert corrupted.healthy is False
+    assert corrupted.events == ()
+    assert corrupted.last_error == "water_balance_ledger_invalid"
 
 
 @pytest.mark.asyncio

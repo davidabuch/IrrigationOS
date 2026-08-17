@@ -21,6 +21,7 @@ class ProductionRecommendationState(StrEnum):
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
     NO_IRRIGATION_RECOMMENDED = "no_irrigation_recommended"
     IRRIGATION_RECOMMENDED = "irrigation_recommended"
+    IRRIGATION_DEFERRED_FOR_FORECAST = "irrigation_deferred_for_forecast"
     MIXED = "mixed"
 
 
@@ -30,6 +31,7 @@ class ScientificNeedState(StrEnum):
     UNAVAILABLE = "unavailable"
     NOT_INDICATED = "not_indicated"
     INDICATED = "indicated"
+    DEFERRED = "deferred"
 
 
 class DeliveryReadinessState(StrEnum):
@@ -50,6 +52,7 @@ class RecommendationEvidenceKind(StrEnum):
     PLANT_STRESS = "plant_stress"
     PLANT_HEALTH = "plant_health"
     WEATHER_OBSERVATION = "weather_observation"
+    QUANTITATIVE_WATER_BALANCE = "quantitative_water_balance"
 
 
 @dataclass(frozen=True, slots=True)

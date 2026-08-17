@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.44 — Canonical Production Recommendation Contract**
+**v1.0.45 — Quantitative Water Balance & Forecast Reconciliation**
 
 The current release:
 
@@ -45,10 +45,11 @@ The current release:
 - selects configured, enabled, bound production targets through one shared canonical selector used by readiness and recommendations;
 - exposes one immutable, transient, privacy-safe recommendation per production target with scientific need kept separate from delivery readiness;
 - records recommendation snapshots in schema-2 shadow history while treating persisted history as audit evidence only;
+- separates actual ET/precipitation/irrigation accounting from provisional forecast cover and preserves forecast deferrals as immutable, non-authorizing ledger evidence;
 - preserves source weather timestamps so a new pipeline evaluation cannot make unchanged weather appear fresh;
 - keeps scheduler/coordinator-loop actuation, general Live mode, autonomous scheduling, and `live_control_authorized` hard-coded `false`.
 
-See [`docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md`](docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md), [`docs/V1_0_43_FIRST_BOUNDED_UNATTENDED_CANARY.md`](docs/V1_0_43_FIRST_BOUNDED_UNATTENDED_CANARY.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+See [`docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md`](docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md), [`docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md`](docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
 
 Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can reach. Home Assistant Cloud is optional. If no suitable URL is configured, IrrigationOS reports a repair warning and continues observing through polling.
 
@@ -63,6 +64,7 @@ The repository is currently private, so HACS publication and validation are defe
 Key documents:
 
 - [`docs/IRRIGATIONOS_ARCHITECTURE_V1.md`](docs/IRRIGATIONOS_ARCHITECTURE_V1.md)
+- [`docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md`](docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md)
 - [`docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md`](docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md)
 - [`docs/V1_0_43_FIRST_BOUNDED_UNATTENDED_CANARY.md`](docs/V1_0_43_FIRST_BOUNDED_UNATTENDED_CANARY.md)
 - [`docs/V1_0_42_PRODUCTION_READINESS_GATE.md`](docs/V1_0_42_PRODUCTION_READINESS_GATE.md)
@@ -97,7 +99,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation remains the default commissioned operating mode in v1.0.44. Production recommendations are advisory snapshots and never authorize execution. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
+Observation remains the default commissioned operating mode in v1.0.45. Water balances and production recommendations are advisory snapshots and never authorize execution. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
 
 Before dispatch, v1.0.41 retains the v1.0.40 requirement for aggregate health `HEALTHY`, a fresh confirmed canonical observation, current integrated supervised-safety prerequisites, commissioned controller ownership, acknowledged execution-boundary review, zero active watering, an online Rachio controller, an idle configured target, and durable privacy-safe audit intent. A second IrrigationOS-supervised operation cannot overlap an operation that is still awaiting terminal observation. Transport failures are never retried automatically. Accepted starts are observed asynchronously for `WATERING` then `IDLE`, written to separate supervised-operation audit and structured acceptance JSONL files, and exposed through restart-safe latest-result state.
 

@@ -78,6 +78,11 @@ from .production_recommendation import (
     build_production_recommendations,
 )
 from .production_targets import select_production_targets
+from .quantitative_water_balance import (
+    WaterBalanceSnapshot,
+    build_water_balance_snapshot,
+)
+from .quantitative_water_balance.manager import WaterBalanceLedgerManager
 from .replay_readiness.manager import ReplayReadinessManager
 from .safety_preemption.manager import SafetyPreemptionManager
 from .scientific_inputs import build_scientific_input_snapshot
@@ -118,6 +123,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.last_successful_refresh: datetime | None = None
         self.pipeline_evaluation: PipelineEvaluation | None = None
         self.production_recommendations = ProductionRecommendationSnapshot.not_available()
+        self.water_balances = WaterBalanceSnapshot.not_available()
         self.refresh_count = 0
         self.realtime: RealtimeObservationManager | None = None
         self.identities = ControllerIdentityRegistry.from_dict(
@@ -165,6 +171,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.shadow_evaluations = ShadowEvaluationManager(
             hass, entry.entry_id, log_root, local_timezone
         )
+        self.water_balance_ledger = WaterBalanceLedgerManager(hass, entry.entry_id)
         self.actual_vs_shadow = ActualVsShadowReconciliationManager(
             hass, entry.entry_id, log_root, local_timezone
         )
@@ -244,6 +251,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         await self.supervised_operation_acceptance.async_initialize()
         await self.unattended_canary_acceptance.async_initialize()
         await self.observation_history.async_initialize()
+        await self.water_balance_ledger.async_initialize()
         await self.shadow_evaluations.async_initialize()
         shadow_records = await self.shadow_evaluations.async_load_records()
         await self.actual_vs_shadow.async_initialize(
@@ -353,11 +361,18 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         except Exception as err:  # Pipeline faults are operational failures, not commands.
             self.pipeline_evaluation = None
             self.production_recommendations = ProductionRecommendationSnapshot.not_available()
+            self.water_balances = WaterBalanceSnapshot.not_available()
             await self._record_refresh_failure("pipeline")
             raise UpdateFailed("IrrigationOS pipeline evaluation failed") from err
 
+        self.water_balances = build_water_balance_snapshot(
+            self.pipeline_evaluation,
+            completed_sessions=self.observation_history.completed_sessions,
+            ledger_events=self.water_balance_ledger.events,
+        )
         self.production_recommendations = build_production_recommendations(
-            self.pipeline_evaluation
+            self.pipeline_evaluation,
+            water_balances=self.water_balances,
         )
 
         force_shadow_reason = self._force_next_shadow_reason
@@ -365,6 +380,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         shadow_record = await self.shadow_evaluations.async_consider(
             self.pipeline_evaluation,
             production_recommendations=self.production_recommendations,
+            water_balances=self.water_balances,
             completed_session_count=len(self.observation_history.completed_sessions),
             force_reason=force_shadow_reason,
         )
@@ -393,6 +409,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         await self.async_update_health("refresh_success", notify_listeners=False)
         self.production_recommendations = build_production_recommendations(
             self.pipeline_evaluation,
+            water_balances=self.water_balances,
             execution_blocker_codes=self.production_readiness.summary.blocker_codes,
         )
         await self._write_operational_event("refresh_success")
