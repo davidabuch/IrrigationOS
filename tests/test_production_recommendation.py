@@ -16,6 +16,7 @@ from tests.test_pipeline_evaluation import inputs_snapshot, profile, snapshot
 controllers = load_integration_module("controllers")
 pipeline = load_integration_module("pipeline")
 production = load_integration_module("production_recommendation")
+water_balance = load_integration_module("quantitative_water_balance")
 
 
 def _evaluation() -> Any:
@@ -116,3 +117,46 @@ def test_package_has_no_physical_operation_or_provider_transport_imports() -> No
         "adapters.rachio",
     )
     assert not any(name in imported for imported in imports for name in forbidden)
+
+
+def test_quantitative_deficit_changes_scientific_need_but_never_authority() -> None:
+    evaluation = _evaluation()
+    target = load_integration_module("production_targets").ProductionTarget(1, 1)
+    balance = water_balance.calculate_production_area_water_balance(
+        water_balance.ProductionAreaWaterBalanceRequest(
+            target=target,
+            window_start=evaluation.evaluated_at - timedelta(days=1),
+            window_end=evaluation.evaluated_at,
+            calculated_at=evaluation.evaluated_at,
+            reference_et_mm=water_balance.WaterQuantity.millimeters(10),
+            plant_factor=water_balance.RatioQuantity(scalar=0.5),
+            observed_precipitation_mm=water_balance.WaterQuantity.millimeters(0),
+            quantified_irrigation_credit_mm=water_balance.WaterQuantity.millimeters(0),
+            unquantified_irrigation_session_ids=(),
+            effective_precipitation_policy=water_balance.EffectivePrecipitationPolicy(
+                policy_id="water.effective.test",
+                effective_fraction=1,
+                confidence=1,
+                rationale_code="measured_effective_precipitation",
+            ),
+            forecast=None,
+        )
+    )
+    balances = water_balance.WaterBalanceSnapshot(
+        state=water_balance.WaterBalanceState.AVAILABLE,
+        calculated_at=evaluation.evaluated_at,
+        balances=(balance,),
+        reason_codes=("actual_water_balance_calculated",),
+        blocker_codes=(),
+    )
+
+    result = production.build_production_recommendations(
+        evaluation, water_balances=balances
+    )
+    recommendation = result.recommendations[0]
+    assert recommendation.scientific_need.value == "indicated"
+    assert recommendation.irrigation_depth is None
+    assert "target_irrigation_depth_unavailable" in recommendation.blocker_codes
+    assert recommendation.estimated_runtime_seconds is None
+    assert recommendation.scheduling_window is None
+    assert recommendation.execution_authorized is False

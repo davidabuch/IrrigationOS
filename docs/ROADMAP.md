@@ -1,5 +1,13 @@
 # IrrigationOS Roadmap
 
+## v1.0.45 — Quantitative Water Balance & Forecast Reconciliation
+
+- Canonical actual water balance for production targets only.
+- Explicit separation of observed water, forecast adjustment, and carry-forward deficit.
+- Deterministic forecast deferral/reconciliation with immutable restart-safe ledger evidence.
+- Quantitative evidence feeds production recommendations without runtime or execution authority.
+- Missing ET0, precipitation history, plant factor, effective-precipitation policy, and calibrated irrigation remain fail-closed blockers.
+
 ## v1.0.44 — Canonical Production Recommendation Contract
 
 - Adds one privacy-safe immutable current recommendation per canonical production target.
@@ -10,7 +18,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.44
+- **Installable Home Assistant release:** v1.0.45
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority

@@ -65,6 +65,7 @@ async def async_setup_entry(
         IrrigationOSValidatedTargetsSensor(coordinator),
         IrrigationOSProductionReadinessSensor(coordinator),
         IrrigationOSProductionRecommendationsSensor(coordinator),
+        IrrigationOSQuantitativeWaterBalancesSensor(coordinator),
         IrrigationOSUnattendedCanaryApprovalSensor(coordinator),
         IrrigationOSUnattendedCanaryAcceptanceSensor(coordinator),
         IrrigationOSSupervisedOperationAcceptanceSensor(coordinator),
@@ -111,6 +112,11 @@ def _new_dynamic_entities(
         if production_area is not None:
             candidates[f"production_recommendation:{production_area.area_id}"] = (
                 IrrigationOSAreaProductionRecommendationSensor(
+                    coordinator, production_area, target.controller_slot
+                )
+            )
+            candidates[f"water_balance:{production_area.area_id}"] = (
+                IrrigationOSAreaWaterBalanceSensor(
                     coordinator, production_area, target.controller_slot
                 )
             )
@@ -411,6 +417,27 @@ class IrrigationOSProductionRecommendationsSensor(IrrigationOSEntity, SensorEnti
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return self.coordinator.production_recommendations.to_dict()
+
+
+class IrrigationOSQuantitativeWaterBalancesSensor(IrrigationOSEntity, SensorEntity):
+    """Expose actual balances separately from provisional forecast adjustments."""
+
+    _attr_name = "Quantitative water balances"
+    _attr_unique_id = "irrigationos_quantitative_water_balances"
+    entity_id = "sensor.irrigationos_quantitative_water_balances"
+    _attr_icon = "mdi:water-percent"
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.water_balances.state.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self.coordinator.water_balances.to_dict()
 
 
 class IrrigationOSUnattendedCanaryApprovalSensor(IrrigationOSEntity, SensorEntity):
@@ -1174,6 +1201,51 @@ class IrrigationOSAreaProductionRecommendationSensor(
                 "execution_authorized": False,
             }
         return recommendation.to_dict()
+
+
+class IrrigationOSAreaWaterBalanceSensor(IrrigationOSAreaEntity, SensorEntity):
+    """Expose one canonical production-area actual/forecast balance."""
+
+    _attr_name = "Water balance"
+    _attr_icon = "mdi:water-sync"
+
+    def __init__(
+        self,
+        coordinator: IrrigationOSCoordinator,
+        area: IrrigationArea,
+        controller_slot: int,
+    ) -> None:
+        super().__init__(coordinator, area)
+        self.controller_slot = controller_slot
+        self._attr_unique_id = f"{area.area_id}_quantitative_water_balance"
+        self._attr_suggested_object_id = f"zone_{area.slot_number}_water_balance"
+
+    def _balance(self) -> Any | None:
+        return next(
+            (
+                item
+                for item in self.coordinator.water_balances.balances
+                if item.target.controller_slot == self.controller_slot
+                and item.target.area_slot == self.area.slot_number
+            ),
+            None,
+        )
+
+    @property
+    def native_value(self) -> str:
+        balance = self._balance()
+        return "not_available" if balance is None else balance.state.value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        balance = self._balance()
+        if balance is None:
+            return {
+                "controller_slot": self.controller_slot,
+                "area_slot": self.area.slot_number,
+                "execution_authorized": False,
+            }
+        return balance.to_dict()
 
 
 class IrrigationOSPipelineVersionSensor(IrrigationOSEntity, SensorEntity):

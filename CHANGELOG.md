@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.45 — Quantitative Water Balance & Forecast Reconciliation
+
+- Added immutable per-production-area actual water-balance contracts with scalar/range preservation.
+- Kept forecast precipitation provisional: it may defer urgency but never enters historical water received before observation.
+- Added deterministic realized, partially realized, and missed-forecast reconciliation with recoverable deferred deficit.
+- Added a fail-closed immutable HA storage ledger for forecast deferral/reconciliation evidence; current balances are always recomputed.
+- Exposed aggregate and per-area water-balance sensors only for canonical production targets.
+- Fed available balance evidence into the production recommendation contract without runtime, scheduling, or execution authority.
+- Preserved missing ET0, historical precipitation, unresolved Trees identity, and uncalibrated watering as explicit blockers.
+
 ## 1.0.44 — Canonical Production Recommendation Contract
 
 - Added one immutable, deterministic recommendation contract for each configured, enabled, bound canonical production target.
