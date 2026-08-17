@@ -1,5 +1,12 @@
 # IrrigationOS Roadmap
 
+## v1.0.46 — Shadow Stability Hotfix
+
+- Deduplicates shadow history from explicit decision semantics rather than derived evaluation timestamps.
+- Aggregates shadow commissioning counts without retaining or repeatedly scanning full payload history.
+- Avoids unchanged shadow Store writes and exposes bounded privacy-safe performance diagnostics.
+- Adds no scientific capability or execution authority.
+
 ## v1.0.45 — Quantitative Water Balance & Forecast Reconciliation
 
 - Canonical actual water balance for production targets only.
@@ -18,7 +25,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.45
+- **Installable Home Assistant release:** v1.0.46
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority

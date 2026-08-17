@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.46 — Shadow Stability Hotfix
+
+- Fixed semantic shadow deduplication so derived calculation, validity, and sliding accounting-window times do not create duplicate scientific decisions.
+- Preserved forecast windows, observed precipitation, water deficits, recommendations, and canonical targets as decision-significant evidence.
+- Replaced retained full shadow payloads in commissioning reporting with aggregate counters and avoided rescanning them on every refresh.
+- Avoided unchanged shadow metadata Store writes and duplicate section hashing.
+- Added privacy-safe shadow-history size, write, retention, and coordinator refresh-duration diagnostics.
+- Preserved every physical-operation, no-retry, runtime, confirmation, lifecycle, and authorization boundary unchanged.
+
 ## 1.0.45 — Quantitative Water Balance & Forecast Reconciliation
 
 - Added immutable per-production-area actual water-balance contracts with scalar/range preservation.

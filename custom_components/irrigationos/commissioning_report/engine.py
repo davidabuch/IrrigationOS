@@ -21,6 +21,38 @@ def build_commissioning_summary(
     shadows = tuple(shadow_records)
     reconciliations = tuple(reconciliation_records)
 
+    return _build_commissioning_summary(
+        shadow_count=len(shadows),
+        nightly_shadow_count=sum(
+            1 for item in shadows if item.get("reason") == "nightly"
+        ),
+        reconciliations=reconciliations,
+    )
+
+
+def build_commissioning_summary_from_counts(
+    *,
+    shadow_count: int,
+    nightly_shadow_count: int,
+    reconciliation_records: Iterable[Mapping[str, Any]],
+) -> CommissioningSummary:
+    """Aggregate without retaining or rescanning complete shadow payloads."""
+
+    if shadow_count < 0 or not 0 <= nightly_shadow_count <= shadow_count:
+        raise ValueError("shadow counters are inconsistent")
+    return _build_commissioning_summary(
+        shadow_count=shadow_count,
+        nightly_shadow_count=nightly_shadow_count,
+        reconciliations=tuple(reconciliation_records),
+    )
+
+
+def _build_commissioning_summary(
+    *,
+    shadow_count: int,
+    nightly_shadow_count: int,
+    reconciliations: tuple[Mapping[str, Any], ...],
+) -> CommissioningSummary:
     outcome_counts = {name: 0 for name in (*_COMPARABLE_OUTCOMES, "insufficient_evidence")}
     confidence_counts = {name: 0 for name in ("high", "medium", "low", "none")}
     kind_counts = {
@@ -68,7 +100,7 @@ def build_commissioning_summary(
         else None
     )
     status = _status(
-        shadow_count=len(shadows),
+        shadow_count=shadow_count,
         reconciliation_count=len(reconciliations),
         comparable_count=comparable_count,
         substantive_disagreement_count=substantive_disagreement_count,
@@ -76,8 +108,8 @@ def build_commissioning_summary(
 
     return CommissioningSummary(
         status=status,
-        shadow_evaluation_count=len(shadows),
-        nightly_shadow_count=sum(1 for item in shadows if item.get("reason") == "nightly"),
+        shadow_evaluation_count=shadow_count,
+        nightly_shadow_count=nightly_shadow_count,
         reconciliation_count=len(reconciliations),
         comparable_count=comparable_count,
         insufficient_evidence_count=outcome_counts["insufficient_evidence"],

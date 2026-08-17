@@ -6,6 +6,7 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from time import monotonic
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
@@ -125,6 +126,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.production_recommendations = ProductionRecommendationSnapshot.not_available()
         self.water_balances = WaterBalanceSnapshot.not_available()
         self.refresh_count = 0
+        self.last_refresh_duration_ms: float | None = None
         self.realtime: RealtimeObservationManager | None = None
         self.identities = ControllerIdentityRegistry.from_dict(
             entry.data.get(CONF_IDENTITY_REGISTRY)
@@ -298,6 +300,15 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             self._shadow_nightly_unsubscribe = None
 
     async def _async_update_data(self) -> ControllerRegistrySnapshot:
+        started = monotonic()
+        try:
+            return await self._async_update_data_impl()
+        finally:
+            self.last_refresh_duration_ms = round((monotonic() - started) * 1000, 3)
+
+    async def _async_update_data_impl(self) -> ControllerRegistrySnapshot:
+        """Run one bounded observation and advisory refresh."""
+
         observation_hint = self._next_observation_context
         self._next_observation_context = None
         account_id = str(self.entry.data[CONF_PERSON_ID])
