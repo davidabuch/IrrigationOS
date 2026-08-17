@@ -5,6 +5,7 @@ from __future__ import annotations
 from tests.helpers import load_integration_module
 
 commissioning_report = load_integration_module("commissioning_report")
+commissioning_manager = load_integration_module("commissioning_report.manager")
 CommissioningEvidenceStatus = commissioning_report.CommissioningEvidenceStatus
 build_commissioning_summary = commissioning_report.build_commissioning_summary
 
@@ -106,3 +107,43 @@ def test_medium_confidence_disagreement_requires_review() -> None:
     assert summary.substantive_disagreement_count == 1
     assert summary.skipped_planned_count == 1
     assert summary.unexpected_observed_count == 1
+
+
+def test_large_shadow_history_is_aggregated_and_not_retained_or_rescanned() -> None:
+    class TrackingRecord(dict[str, object]):
+        get_count = 0
+
+        def get(self, key: str, default: object = None) -> object:
+            type(self).get_count += 1
+            return super().get(key, default)
+
+    records = tuple(
+        TrackingRecord(
+            _shadow(
+                f"shadow-{index}",
+                reason="nightly" if index % 288 == 0 else "decision_change",
+            )
+        )
+        for index in range(10_000)
+    )
+    manager = commissioning_manager.CommissioningReportManager()
+    manager.initialize(records, ())
+    calls_after_initialize = TrackingRecord.get_count
+
+    manager.consider(shadow_record=None, reconciliation_records=())
+
+    assert TrackingRecord.get_count == calls_after_initialize
+    assert manager.summary.shadow_evaluation_count == 10_000
+    assert manager.summary.nightly_shadow_count == 35
+    assert manager.retained_record_count == 0
+    assert manager.diagnostics()["retained_commissioning_record_count"] == 0
+
+
+def test_new_shadow_updates_aggregate_counters_without_retaining_payload() -> None:
+    manager = commissioning_manager.CommissioningReportManager()
+    manager.initialize((_shadow("existing", reason="decision_change"),), ())
+    manager.consider(shadow_record=_shadow("new", reason="nightly"), reconciliation_records=())
+
+    assert manager.summary.shadow_evaluation_count == 2
+    assert manager.summary.nightly_shadow_count == 1
+    assert manager.retained_record_count == 0

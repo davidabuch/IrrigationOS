@@ -48,6 +48,13 @@ SENSITIVE_KEYS = {
 }
 VOLATILE_SEMANTIC_KEYS = {"evaluated_at", "observed_at", "generated_at", "created_at"}
 
+_EVALUATION_ONLY_KEYS = {"evaluated_at", "generated_at", "created_at"}
+_DERIVED_CONTRACT_TIME_KEYS = {"calculated_at", "valid_until"}
+_DECISION_CONTRACT_ROOTS = {
+    "production_recommendations",
+    "quantitative_water_balances",
+}
+
 
 def jsonable(value: Any) -> Any:
     """Convert canonical contracts to safe JSON-compatible values."""
@@ -79,4 +86,43 @@ def semantic_value(value: Any) -> Any:
         }
     if isinstance(value, list):
         return [semantic_value(v) for v in value]
+    return value
+
+
+def semantic_decision_value(value: Any) -> Any:
+    """Project a decision payload without evaluation-time-only metadata.
+
+    Source and forecast windows remain semantic. Only the sliding accounting window
+    on a calculated water-balance result is omitted; its underlying ET,
+    precipitation, irrigation, deficit, forecast, and reconciliation facts remain.
+    """
+
+    return _semantic_decision_value(jsonable(value), ())
+
+
+def _semantic_decision_value(value: Any, path: tuple[str, ...]) -> Any:
+    if isinstance(value, dict):
+        projected: dict[str, Any] = {}
+        for key, item in value.items():
+            if key in _EVALUATION_ONLY_KEYS or key.endswith("_id"):
+                continue
+            if key == "observed_at" and value.get("kind") == "controller_observation":
+                continue
+            if (
+                path
+                and path[0] in _DECISION_CONTRACT_ROOTS
+                and key in _DERIVED_CONTRACT_TIME_KEYS
+            ):
+                continue
+            if (
+                len(path) >= 3
+                and path[0] == "quantitative_water_balances"
+                and path[1] == "balances"
+                and key in {"window_start", "window_end"}
+            ):
+                continue
+            projected[key] = _semantic_decision_value(item, (*path, key))
+        return projected
+    if isinstance(value, list):
+        return [_semantic_decision_value(item, (*path, "[]")) for item in value]
     return value

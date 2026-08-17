@@ -95,6 +95,10 @@ async def async_get_config_entry_diagnostics(
                 "runtime_monitoring": len(pipeline.runtime_monitoring),
             },
         }
+    shadow_diagnostics = entry.runtime_data.shadow_evaluations.diagnostics()
+    shadow_diagnostics["retained_commissioning_record_count"] = (
+        entry.runtime_data.commissioning_report.retained_record_count
+    )
     return {
         "entry": redact_data(dict(entry.data), TO_REDACT),
         "coordinator": {
@@ -105,6 +109,9 @@ async def async_get_config_entry_diagnostics(
                 else None
             ),
             "refresh_count": entry.runtime_data.refresh_count,
+            "coordinator_refresh_duration_ms": (
+                entry.runtime_data.last_refresh_duration_ms
+            ),
             "last_exception": (
                 str(entry.runtime_data.last_exception)
                 if entry.runtime_data.last_exception is not None
@@ -124,7 +131,7 @@ async def async_get_config_entry_diagnostics(
                 else None
             ),
             "operational_health": entry.runtime_data.operational_health_diagnostics(),
-            "shadow_evaluations": entry.runtime_data.shadow_evaluations.diagnostics(),
+            "shadow_evaluations": shadow_diagnostics,
             "actual_vs_shadow": entry.runtime_data.actual_vs_shadow.diagnostics(),
             "commissioning_report": entry.runtime_data.commissioning_report.diagnostics(),
             "command_acknowledgements": (
