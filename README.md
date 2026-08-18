@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.46 — Shadow Stability Hotfix**
+**v1.0.47 — Weather Evidence Ingestion**
 
 The current release:
 
@@ -18,6 +18,8 @@ The current release:
 - assigns persisted provider-neutral controller identities and permanent numbered slots;
 - exposes timestamps, freshness, source quality, and safe partial-failure metadata;
 - normalizes the single available Home Assistant weather entity into canonical units;
+- ingests that Home Assistant weather entity's hourly forecast as the preferred forecast authority;
+- ingests estimated recent Open-Meteo historical precipitation and FAO-56 ET0 with bounded caching and fail-closed freshness;
 - resolves landscape plant identities against the curated Plant Knowledge library;
 - executes the synchronized Water Requirement, Plant Stress, Plant Health, Recommendations, Planning, Scheduling, simulation-only Execution, and Runtime Monitoring pipeline;
 - reconstructs canonical watering sessions across polling, realtime refreshes, controller gaps, and Home Assistant restarts;
@@ -50,7 +52,7 @@ The current release:
 - preserves source weather timestamps so a new pipeline evaluation cannot make unchanged weather appear fresh;
 - keeps scheduler/coordinator-loop actuation, general Live mode, autonomous scheduling, and `live_control_authorized` hard-coded `false`.
 
-See [`docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md`](docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md), [`docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md`](docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+See [`docs/V1_0_47_WEATHER_EVIDENCE_INGESTION.md`](docs/V1_0_47_WEATHER_EVIDENCE_INGESTION.md), [`docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md`](docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md), [`docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md`](docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
 
 Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can reach. Home Assistant Cloud is optional. If no suitable URL is configured, IrrigationOS reports a repair warning and continues observing through polling.
 
@@ -100,7 +102,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation remains the default commissioned operating mode in v1.0.46. Water balances and production recommendations are advisory snapshots and never authorize execution. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
+Observation remains the default commissioned operating mode in v1.0.47. Water balances and production recommendations are advisory snapshots and never authorize execution. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
 
 Before dispatch, v1.0.41 retains the v1.0.40 requirement for aggregate health `HEALTHY`, a fresh confirmed canonical observation, current integrated supervised-safety prerequisites, commissioned controller ownership, acknowledged execution-boundary review, zero active watering, an online Rachio controller, an idle configured target, and durable privacy-safe audit intent. A second IrrigationOS-supervised operation cannot overlap an operation that is still awaiting terminal observation. Transport failures are never retried automatically. Accepted starts are observed asynchronously for `WATERING` then `IDLE`, written to separate supervised-operation audit and structured acceptance JSONL files, and exposed through restart-safe latest-result state.
 
@@ -115,3 +117,7 @@ IrrigationOS separates controller facts from landscape facts. Each irrigation ar
 ## v1.0.35 supervised first-live operator interface
 
 The Home Assistant options flow can perform an explicitly confirmed supervised first-live watering trial for each configured target. A PASS durably validates only that exact canonical target; the bounded operational service rejects all unvalidated targets. The production-readiness gate evaluates current evidence but cannot execute irrigation, and autonomous scheduling remains disabled.
+
+### Weather evidence ingestion
+
+IrrigationOS 1.0.47 uses the single available Home Assistant weather entity as the preferred hourly forecast source and Open-Meteo as a read-only source for recent hourly precipitation and FAO-56 reference evapotranspiration (ET0). Open-Meteo requests use Home Assistant's configured coordinates at runtime; coordinates are not persisted in IrrigationOS weather evidence or diagnostics. Missing source fields are not fabricated, and weather ingestion never grants execution authority.

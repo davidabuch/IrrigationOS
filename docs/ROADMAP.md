@@ -1,5 +1,12 @@
 # IrrigationOS Roadmap
 
+## v1.0.47 — Weather Evidence Ingestion
+
+- Normalizes the single Home Assistant hourly forecast into canonical forecast evidence.
+- Ingests estimated recent Open-Meteo historical precipitation and FAO-56 ET0 with bounded freshness.
+- Feeds canonical weather evidence into quantitative water balance while preserving forecast separation and fail-closed blockers.
+- Adds no execution authority, scheduler dispatch, retry, or autonomous watering.
+
 ## v1.0.46 — Shadow Stability Hotfix
 
 - Deduplicates shadow history from explicit decision semantics rather than derived evaluation timestamps.
@@ -25,7 +32,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.46
+- **Installable Home Assistant release:** v1.0.47
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
