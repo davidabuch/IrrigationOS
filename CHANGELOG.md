@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.47 — Weather Evidence Ingestion
+
+- Added Home Assistant hourly forecast normalization using the source weather entity timestamp as issuance evidence.
+- Added bounded Open-Meteo Historical Forecast ingestion for estimated recent precipitation and FAO-56 ET0; model-derived history is explicitly classified as estimated rather than sensor-verified.
+- Added a 30-minute Open-Meteo refresh cadence with a two-hour last-known-good ceiling and fail-closed source handling.
+- Fed canonical ET0, historical precipitation, and provisional forecast precipitation into quantitative water balance without inventing missing probability or effective precipitation.
+- Preserved exact non-overlapping accounting boundaries after persisted forecast-ledger carry-forward.
+- Added privacy-safe weather-evidence diagnostics and retained all existing execution-safety boundaries.
+
 ## 1.0.46 — Shadow Stability Hotfix
 
 - Fixed semantic shadow deduplication so derived calculation, validity, and sliding accounting-window times do not create duplicate scientific decisions.

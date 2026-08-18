@@ -96,6 +96,7 @@ from .unattended_canary import (
     UnattendedCanaryAcceptanceManager,
     UnattendedCanaryManager,
 )
+from .weather.ingestion import WeatherEvidenceManager
 
 if TYPE_CHECKING:
     from .realtime import RealtimeObservationManager
@@ -174,6 +175,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             hass, entry.entry_id, log_root, local_timezone
         )
         self.water_balance_ledger = WaterBalanceLedgerManager(hass, entry.entry_id)
+        self.weather_evidence = WeatherEvidenceManager(hass, async_get_clientsession(hass))
         self.actual_vs_shadow = ActualVsShadowReconciliationManager(
             hass, entry.entry_id, log_root, local_timezone
         )
@@ -376,10 +378,13 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             await self._record_refresh_failure("pipeline")
             raise UpdateFailed("IrrigationOS pipeline evaluation failed") from err
 
+        await self.weather_evidence.async_refresh(self.last_successful_refresh)
         self.water_balances = build_water_balance_snapshot(
             self.pipeline_evaluation,
             completed_sessions=self.observation_history.completed_sessions,
             ledger_events=self.water_balance_ledger.events,
+            weather_observations=self.weather_evidence.observations,
+            weather_forecast=self.weather_evidence.forecast,
         )
         self.production_recommendations = build_production_recommendations(
             self.pipeline_evaluation,
