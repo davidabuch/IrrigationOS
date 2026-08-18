@@ -641,7 +641,12 @@ async def test_production_readiness_entities_use_only_configured_targets_and_res
     )
     assert aggregate_balance is not None
     assert aggregate_balance.state == "insufficient_evidence"
-    assert len(aggregate_balance.attributes["balances"]) == 4
+    assert aggregate_balance.attributes["production_target_count"] == 4
+    assert len(aggregate_balance.attributes["targets"]) == 4
+    assert "balances" not in aggregate_balance.attributes
+    assert "evidence" not in aggregate_balance.attributes
+    aggregate_payload = json.dumps(dict(aggregate_balance.attributes), default=str)
+    assert len(aggregate_payload.encode("utf-8")) < 8192
     for slot in (1, 2, 4, 5):
         area_recommendation = hass.states.get(
             f"sensor.zone_{slot}_production_recommendation"

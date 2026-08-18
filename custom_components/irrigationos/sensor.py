@@ -437,7 +437,37 @@ class IrrigationOSQuantitativeWaterBalancesSensor(IrrigationOSEntity, SensorEnti
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return self.coordinator.water_balances.to_dict()
+        snapshot = self.coordinator.water_balances
+        state_counts: dict[str, int] = {}
+        targets: list[dict[str, Any]] = []
+        for balance in snapshot.balances:
+            state = balance.state.value
+            state_counts[state] = state_counts.get(state, 0) + 1
+            targets.append(
+                {
+                    "controller_slot": balance.target.controller_slot,
+                    "area_slot": balance.target.area_slot,
+                    "state": state,
+                    "confidence": balance.confidence,
+                    "completeness": balance.completeness,
+                    "forecast_reconciliation_state": (
+                        balance.forecast_reconciliation_state.value
+                    ),
+                }
+            )
+        return {
+            "schema_version": snapshot.schema_version,
+            "policy_version": snapshot.policy_version,
+            "calculated_at": (
+                None if snapshot.calculated_at is None else snapshot.calculated_at.isoformat()
+            ),
+            "production_target_count": len(snapshot.balances),
+            "state_counts": state_counts,
+            "reason_codes": list(snapshot.reason_codes),
+            "blocker_codes": list(snapshot.blocker_codes),
+            "targets": targets,
+            "execution_authorized": snapshot.execution_authorized,
+        }
 
 
 class IrrigationOSUnattendedCanaryApprovalSensor(IrrigationOSEntity, SensorEntity):

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.48 — Recorder Payload Hotfix
+
+- Replaced the oversized aggregate quantitative-water-balance attributes with a compact summary contract.
+- Preserved detailed per-zone water-balance entities and full shadow/diagnostic evidence.
+- Added a regression assertion keeping the aggregate Recorder payload below 8 KiB.
+- Changed no weather ingestion, controller transport, lifecycle, scheduling, or execution authority.
+
 ## 1.0.47 — Weather Evidence Ingestion
 
 - Added Home Assistant hourly forecast normalization using the source weather entity timestamp as issuance evidence.

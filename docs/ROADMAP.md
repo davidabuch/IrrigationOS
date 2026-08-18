@@ -1,5 +1,11 @@
 # IrrigationOS Roadmap
 
+## v1.0.48 — Recorder Payload Hotfix
+
+- Keeps the aggregate quantitative-water-balance sensor below Home Assistant Recorder attribute limits.
+- Retains detailed per-zone water-balance entities and complete audit/diagnostic evidence.
+- Adds no scientific, controller, scheduling, or execution behavior.
+
 ## v1.0.47 — Weather Evidence Ingestion
 
 - Normalizes the single Home Assistant hourly forecast into canonical forecast evidence.
@@ -32,7 +38,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.47
+- **Installable Home Assistant release:** v1.0.48
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
