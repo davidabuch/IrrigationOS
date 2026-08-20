@@ -153,6 +153,7 @@ async def async_get_config_entry_diagnostics(
                 entry.runtime_data.production_recommendations.to_dict()
             ),
             "quantitative_water_balances": entry.runtime_data.water_balances.to_dict(),
+            "landscape_intelligence": entry.runtime_data.landscape_intelligence.diagnostics(),
             "water_balance_ledger": entry.runtime_data.water_balance_ledger.diagnostics(),
             "weather_evidence": entry.runtime_data.weather_evidence.diagnostics(),
             "unattended_canary": entry.runtime_data.unattended_canary.diagnostics(),

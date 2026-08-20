@@ -485,6 +485,15 @@ All notable changes to IrrigationOS will be documented here.
 - Redacted diagnostics and explicit API error handling.
 - Expanded tests for API behavior and payload normalization.
 
+## [1.0.49] - 2026-08-19
+
+### Added
+
+- Added Landscape Intelligence Profile v1 with a human-reviewed Zone 1 commissioning seed.
+- Added immutable structured longitudinal plant-health observations and deterministic health trends.
+- Added durable integration storage and diagnostics while keeping Recorder-facing summaries compact.
+- Preserved unresolved landscape factors and all existing execution/live-control safety boundaries.
+
 ## [Unreleased]
 
 ### Added
