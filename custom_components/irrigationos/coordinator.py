@@ -57,6 +57,7 @@ from .health import (
 )
 from .integrated_safety_review.manager import IntegratedSafetyReviewManager
 from .landscape import LandscapeProfile, build_landscape_profile
+from .landscape_intelligence.manager import LandscapeIntelligenceManager
 from .live_commissioning.engine import supervised_trial_safety_prerequisites_met
 from .live_commissioning.manager import LiveCommissioningManager
 from .live_mode_safety.manager import LiveModeSafetyManager
@@ -176,6 +177,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         )
         self.water_balance_ledger = WaterBalanceLedgerManager(hass, entry.entry_id)
         self.weather_evidence = WeatherEvidenceManager(hass, async_get_clientsession(hass))
+        self.landscape_intelligence = LandscapeIntelligenceManager(hass, entry.entry_id)
         self.actual_vs_shadow = ActualVsShadowReconciliationManager(
             hass, entry.entry_id, log_root, local_timezone
         )
@@ -240,6 +242,11 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         if isinstance(stored, dict):
             self._restore_health_state(stored)
         await self._write_operational_event("integration_starting")
+
+
+    async def async_initialize_landscape_intelligence(self) -> None:
+        """Restore the advisory Landscape Intelligence Profile."""
+        await self.landscape_intelligence.async_initialize(initial_observed_at=datetime.now(UTC))
 
     async def async_initialize_ownership_commissioning(self) -> None:
         """Restore explicit operator ownership commissioning decisions."""
