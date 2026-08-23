@@ -172,3 +172,56 @@ def test_landscape_intelligence_is_wired_to_storage_and_diagnostics() -> None:
     diagnostics = (root / "custom_components/irrigationos/diagnostics.py").read_text()
     assert "LandscapeIntelligenceManager" in coordinator
     assert "landscape_intelligence.diagnostics()" in diagnostics
+
+
+F = load_integration_module("landscape_intelligence.factor_resolution")
+E = load_integration_module("landscape_intelligence.zone1_factor_evidence")
+
+
+def test_zone1_factor_resolution_is_partial_and_advisory() -> None:
+    profile = Z.build_zone_1_landscape_intelligence(datetime(2026, 8, 20, tzinfo=UTC))
+    result = F.resolve_zone_factor(profile, E.zone_1_factor_evidence())
+    groups = {item.plant_group_id: item for item in result.group_resolutions}
+
+    assert result.status is F.FactorResolutionStatus.PARTIALLY_RESOLVED
+    assert result.plant_factor is None
+    assert result.controlling_group_id is None
+    assert result.execution_authorized is False
+    assert result.live_control_authorized is False
+    assert groups["mature_palms"].status is F.FactorResolutionStatus.EXCLUDED
+    assert groups["podocarpus"].status is F.FactorResolutionStatus.RESOLVED
+    assert groups["podocarpus"].admitted_factor == 0.5
+    assert groups["citrus"].status is F.FactorResolutionStatus.PARTIALLY_RESOLVED
+    assert "establishment_adjustment_unresolved" in groups["citrus"].blocker_codes
+    assert groups["passion_fruit"].status is F.FactorResolutionStatus.PARTIALLY_RESOLVED
+    assert "hydrozone_controlling_group_unresolved" in result.blocker_codes
+    assert "density_factor_unresolved" in result.blocker_codes
+
+
+def test_agricultural_kc_cannot_be_authoritative_landscape_pf() -> None:
+    try:
+        F.PlantFactorEvidence(
+            "citrus",
+            F.EvidenceClass.AGRICULTURAL_CROP_COEFFICIENT,
+            F.FactorRange(0.65, 0.70),
+            None,
+            "source",
+            "source",
+            "https://example.invalid",
+            "high",
+            True,
+            "not admissible",
+        )
+    except ValueError as exc:
+        assert "cannot directly authorize" in str(exc)
+    else:
+        raise AssertionError("agricultural Kc was admitted as landscape PF")
+
+
+def test_factor_ranges_preserve_source_uncertainty_without_midpoint() -> None:
+    evidence = {item.plant_group_id: item for item in E.zone_1_factor_evidence()}
+    drought = evidence["drought_tolerant_ornamentals"]
+    assert isinstance(drought.factor, F.FactorRange)
+    assert drought.factor.minimum == 0.1
+    assert drought.factor.maximum == 0.3
+    assert "typical" not in drought.factor.to_dict()
