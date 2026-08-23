@@ -1,3 +1,13 @@
+## [1.0.50] - 2026-08-20
+
+### Added
+- Advisory Landscape Factor Resolution v1 for the commissioned Zone 1 mixed hydrozone.
+- Explicit evidence-class hierarchy, source provenance, range preservation, establishment blockers, incidental-plant exclusion, and mixed-zone blocker reporting.
+- Diagnostics expose the detailed factor-resolution result while Recorder-facing summaries remain compact.
+
+### Safety
+- No quantitative water-balance factor is admitted yet. No runtime, scheduling, execution, Rachio-control, or authorization behavior changed.
+
 # Changelog
 
 ## 1.0.48 — Recorder Payload Hotfix

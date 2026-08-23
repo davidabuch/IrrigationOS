@@ -8,8 +8,10 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
+from .factor_resolution import ZoneFactorResolution, resolve_zone_factor
 from .models import HealthState, LandscapeIntelligenceProfile, summarize_health
 from .zone1 import build_zone_1_landscape_intelligence
+from .zone1_factor_evidence import zone_1_factor_evidence
 
 STORE_VERSION = 1
 
@@ -24,10 +26,14 @@ class LandscapeIntelligenceManager:
             f"irrigationos.{entry_id}.landscape_intelligence",
         )
         self._zone1: LandscapeIntelligenceProfile | None = None
+        self._zone1_factor_resolution: ZoneFactorResolution | None = None
 
     async def async_initialize(self, *, initial_observed_at: datetime) -> None:
         """Seed the reviewed v1 profile without synthesizing image evidence."""
         self._zone1 = build_zone_1_landscape_intelligence(initial_observed_at)
+        self._zone1_factor_resolution = resolve_zone_factor(
+            self._zone1, zone_1_factor_evidence()
+        )
         stored = await self._store.async_load()
         if stored is None:
             await self._store.async_save(
@@ -62,6 +68,11 @@ class LandscapeIntelligenceManager:
             "plant_group_count": len(profile.plant_groups),
             "health_exception_count": len(exceptions),
             "plant_factor_status": profile.plant_factor_status,
+            "factor_resolution_status": (
+                None
+                if self._zone1_factor_resolution is None
+                else self._zone1_factor_resolution.status.value
+            ),
             "landscape_factor_status": profile.landscape_factor_status,
             "execution_authorized": False,
             "live_control_authorized": False,
@@ -69,4 +80,13 @@ class LandscapeIntelligenceManager:
 
     def diagnostics(self) -> dict[str, Any]:
         """Return detailed profile evidence outside Home Assistant state attributes."""
-        return {"zone_1": self.zone1.to_dict()} if self._zone1 is not None else {}
+        if self._zone1 is None:
+            return {}
+        return {
+            "zone_1": self.zone1.to_dict(),
+            "zone_1_factor_resolution": (
+                None
+                if self._zone1_factor_resolution is None
+                else self._zone1_factor_resolution.to_dict()
+            ),
+        }

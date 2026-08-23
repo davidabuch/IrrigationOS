@@ -38,7 +38,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.49
+- **Installable Home Assistant release:** v1.0.50
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
