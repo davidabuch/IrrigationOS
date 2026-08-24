@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.51 — Zone 1 Factor Closure v1**
+**v1.0.52 — Generic Zone Commissioning Foundation**
 
 The current release:
 
@@ -54,9 +54,12 @@ The current release:
 - upgrades Zone 1 factor evidence to direct UC residential landscape PF guidance for fig, citrus, passion fruit, and Peruvian lilies;
 - keeps citrus establishment management separate from its baseline plant factor and keeps the unresolved mixed ornamental group fail-closed;
 - removes the blanket density-factor blocker from plant-factor resolution without inventing a density coefficient;
+- normalizes manual plant profiles, user-calibrated baselines, and future structured photo findings through one generic zone-commissioning contract;
+- preserves immutable landscape add/remove history and links plant groups to separate canonical water-delivery evidence;
+- retains Zone 1 as a backward-compatible regression fixture rather than a per-property product architecture;
 - keeps scheduler/coordinator-loop actuation, general Live mode, autonomous scheduling, and `live_control_authorized` hard-coded `false`.
 
-See [`docs/V1_0_47_WEATHER_EVIDENCE_INGESTION.md`](docs/V1_0_47_WEATHER_EVIDENCE_INGESTION.md), [`docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md`](docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md), [`docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md`](docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+See [`docs/V1_0_52_GENERIC_ZONE_COMMISSIONING.md`](docs/V1_0_52_GENERIC_ZONE_COMMISSIONING.md), [`docs/V1_0_47_WEATHER_EVIDENCE_INGESTION.md`](docs/V1_0_47_WEATHER_EVIDENCE_INGESTION.md), [`docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md`](docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
 
 Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can reach. Home Assistant Cloud is optional. If no suitable URL is configured, IrrigationOS reports a repair warning and continues observing through polling.
 
@@ -70,6 +73,7 @@ The repository is currently private, so HACS publication and validation are defe
 
 Key documents:
 
+- [`docs/V1_0_52_GENERIC_ZONE_COMMISSIONING.md`](docs/V1_0_52_GENERIC_ZONE_COMMISSIONING.md)
 - [`docs/IRRIGATIONOS_ARCHITECTURE_V1.md`](docs/IRRIGATIONOS_ARCHITECTURE_V1.md)
 - [`docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md`](docs/V1_0_45_QUANTITATIVE_WATER_BALANCE.md)
 - [`docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md`](docs/V1_0_44_CANONICAL_PRODUCTION_RECOMMENDATION_CONTRACT.md)
@@ -106,7 +110,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation remains the default commissioned operating mode in v1.0.51. Water balances and production recommendations are advisory snapshots and never authorize execution. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
+Observation remains the default commissioned operating mode in v1.0.52. Water balances, production recommendations, commissioning profiles, and delivery advisories are evidence only and never authorize execution. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
 
 Before dispatch, v1.0.41 retains the v1.0.40 requirement for aggregate health `HEALTHY`, a fresh confirmed canonical observation, current integrated supervised-safety prerequisites, commissioned controller ownership, acknowledged execution-boundary review, zero active watering, an online Rachio controller, an idle configured target, and durable privacy-safe audit intent. A second IrrigationOS-supervised operation cannot overlap an operation that is still awaiting terminal observation. Transport failures are never retried automatically. Accepted starts are observed asynchronously for `WATERING` then `IDLE`, written to separate supervised-operation audit and structured acceptance JSONL files, and exposed through restart-safe latest-result state.
 

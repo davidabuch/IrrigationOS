@@ -1,3 +1,17 @@
+## [1.0.52] - 2026-08-24
+
+### Added
+- Generic immutable zone commissioning with stable property/zone identity, manual plant details, calibrated-baseline evidence, structured visual-assessment references, delivery links, and landscape events.
+- Advisory plant-to-delivery documentation assessment and explicit establishment-delivery review needs.
+- Synthetic cross-property, manual Podocarpus, landscape replacement, and user-baseline regression fixtures.
+
+### Changed
+- Zone 1 is now constructed through the generic commissioning aggregate while its existing public builder, factor behavior, diagnostics, and Store compatibility remain intact.
+- Landscape Intelligence Manager now owns a deterministic zone collection instead of a single internal Zone 1 field.
+
+### Safety
+- No scheduling, weather scaling, runtime calculation, controller transport, retry, or execution authority was added. `execution_authorized` and `live_control_authorized` remain false.
+
 ## [1.0.51] - 2026-08-24
 
 ### Added
