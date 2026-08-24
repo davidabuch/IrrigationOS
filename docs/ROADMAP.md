@@ -1,5 +1,12 @@
 # IrrigationOS Roadmap
 
+## v1.0.51 — Zone 1 Factor Closure v1
+
+- Admits direct UC residential landscape Plant Factors for commissioned plant types where supported.
+- Separates baseline PF from establishment-stage irrigation management.
+- Removes the blanket density coefficient requirement from Plant Factor resolution.
+- Keeps unresolved mixed ornamentals fail-closed and adds no execution authority.
+
 ## v1.0.48 — Recorder Payload Hotfix
 
 - Keeps the aggregate quantitative-water-balance sensor below Home Assistant Recorder attribute limits.
@@ -38,11 +45,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.50
+- **Installable Home Assistant release:** v1.0.51
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
-- **Next milestone:** shadow-evaluate recommendation evidence quality against observed watering before considering any scheduler authority
+- **Next milestone:** quantify irrigation delivery/application so observed runtime can be credited into the water-balance ledger before any scheduler authority
 
 ## Delivery model
 

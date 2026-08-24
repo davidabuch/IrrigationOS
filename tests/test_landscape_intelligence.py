@@ -178,24 +178,36 @@ F = load_integration_module("landscape_intelligence.factor_resolution")
 E = load_integration_module("landscape_intelligence.zone1_factor_evidence")
 
 
-def test_zone1_factor_resolution_is_partial_and_advisory() -> None:
+def test_zone1_factor_resolution_v2_is_partial_and_advisory() -> None:
     profile = Z.build_zone_1_landscape_intelligence(datetime(2026, 8, 20, tzinfo=UTC))
     result = F.resolve_zone_factor(profile, E.zone_1_factor_evidence())
     groups = {item.plant_group_id: item for item in result.group_resolutions}
 
+    assert result.algorithm_version == "1.1.0"
     assert result.status is F.FactorResolutionStatus.PARTIALLY_RESOLVED
     assert result.plant_factor is None
     assert result.controlling_group_id is None
     assert result.execution_authorized is False
     assert result.live_control_authorized is False
+    assert result.density_factor_status == "not_required_for_plant_factor_v2"
+    assert "density_factor_unresolved" not in result.blocker_codes
+
     assert groups["mature_palms"].status is F.FactorResolutionStatus.EXCLUDED
-    assert groups["podocarpus"].status is F.FactorResolutionStatus.RESOLVED
     assert groups["podocarpus"].admitted_factor == 0.5
+    assert groups["fig"].status is F.FactorResolutionStatus.RESOLVED
+    assert groups["fig"].admitted_factor == 0.8
+    assert groups["passion_fruit"].status is F.FactorResolutionStatus.RESOLVED
+    assert groups["passion_fruit"].admitted_factor == 0.5
+    assert groups["peruvian_lilies"].status is F.FactorResolutionStatus.RESOLVED
+    assert groups["peruvian_lilies"].admitted_factor == 0.5
+
     assert groups["citrus"].status is F.FactorResolutionStatus.PARTIALLY_RESOLVED
-    assert "establishment_adjustment_unresolved" in groups["citrus"].blocker_codes
-    assert groups["passion_fruit"].status is F.FactorResolutionStatus.PARTIALLY_RESOLVED
+    assert groups["citrus"].admitted_factor == 1.0
+    assert "establishment_management_unresolved" in groups["citrus"].blocker_codes
+    assert "plant_group_factor_unresolved" not in groups["citrus"].blocker_codes
+
+    assert groups["drought_tolerant_ornamentals"].admitted_factor is None
     assert "hydrozone_controlling_group_unresolved" in result.blocker_codes
-    assert "density_factor_unresolved" in result.blocker_codes
 
 
 def test_agricultural_kc_cannot_be_authoritative_landscape_pf() -> None:
@@ -225,3 +237,51 @@ def test_factor_ranges_preserve_source_uncertainty_without_midpoint() -> None:
     assert drought.factor.minimum == 0.1
     assert drought.factor.maximum == 0.3
     assert "typical" not in drought.factor.to_dict()
+
+
+def test_direct_residential_pf_outranks_agricultural_context() -> None:
+    evidence = E.zone_1_factor_evidence()
+    profile = Z.build_zone_1_landscape_intelligence(datetime(2026, 8, 20, tzinfo=UTC))
+    result = F.resolve_zone_factor(profile, evidence)
+    groups = {item.plant_group_id: item for item in result.group_resolutions}
+
+    assert groups["fig"].evidence_class is F.EvidenceClass.URBAN_HORTICULTURE
+    assert groups["fig"].admitted_factor == 0.8
+    assert "ucanr.fig_crop_water_research" in groups["fig"].source_ids
+
+    assert groups["citrus"].evidence_class is F.EvidenceClass.URBAN_HORTICULTURE
+    assert groups["citrus"].admitted_factor == 1.0
+    assert "ucanr.young_orchard_irrigation.citrus" in groups["citrus"].source_ids
+
+
+def test_mixed_zone_resolves_to_highest_pf_when_all_controllers_have_factors() -> None:
+    profile = Z.build_zone_1_landscape_intelligence(datetime(2026, 8, 20, tzinfo=UTC))
+    evidence = (
+        *(
+            item
+            for item in E.zone_1_factor_evidence()
+            if item.plant_group_id != "drought_tolerant_ornamentals"
+        ),
+        F.PlantFactorEvidence(
+            "drought_tolerant_ornamentals",
+            F.EvidenceClass.URBAN_HORTICULTURE,
+            0.3,
+            "desert_adapted",
+            "test.authoritative_ornamental_pf",
+            "Test source",
+            "https://example.invalid",
+            "high",
+            True,
+            "Test-only admitted factor.",
+        ),
+    )
+
+    result = F.resolve_zone_factor(profile, evidence)
+
+    assert result.status is F.FactorResolutionStatus.PARTIALLY_RESOLVED
+    assert result.plant_factor == 1.0
+    assert result.controlling_group_id == "citrus"
+    assert "hydrozone_controlling_group_unresolved" not in result.blocker_codes
+    assert "establishment_management_unresolved" in result.blocker_codes
+    assert result.execution_authorized is False
+    assert result.live_control_authorized is False

@@ -1,3 +1,18 @@
+## [1.0.51] - 2026-08-24
+
+### Added
+- Zone 1 Factor Closure v1 using direct UC residential landscape Plant Factor guidance where the commissioned plant type supports it.
+- Baseline PF resolution for fig, citrus, passion fruit, and Peruvian lilies while preserving agricultural Kc as non-authorizing context.
+- Separate establishment-management blocking so young citrus retains a source-supported baseline PF without pretending its establishment irrigation policy is resolved.
+
+### Changed
+- Removed the blanket density-factor blocker from Plant Factor resolution; projected canopy/planted area remains a separate future geometry/delivery concern.
+- Mixed-zone factor selection now uses the highest admitted PF only when every controlling group has an admitted factor.
+
+### Safety
+- The unidentified drought-tolerant ornamental group remains unresolved, so Zone 1 stays fail-closed for authoritative quantitative plant-factor use.
+- No scheduler, runtime, execution, Rachio-control, retry, or authorization behavior changed.
+
 ## [1.0.50] - 2026-08-20
 
 ### Added
