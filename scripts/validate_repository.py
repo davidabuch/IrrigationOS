@@ -109,6 +109,8 @@ REQUIRED_FILES = (
     "docs/V1_0_47_WEATHER_EVIDENCE_INGESTION.md",
     "docs/V1_0_48_RECORDER_PAYLOAD_HOTFIX.md",
     "docs/V1_0_51_ZONE_1_FACTOR_CLOSURE.md",
+    "docs/V1_0_52_GENERIC_ZONE_COMMISSIONING.md",
+    "docs/adr/ADR-024-generic-zone-commissioning.md",
     "custom_components/irrigationos/weather/ingestion.py",
     "custom_components/irrigationos/production_targets.py",
     "custom_components/irrigationos/production_recommendation/__init__.py",
@@ -197,8 +199,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.51":
-        raise SystemExit("manifest.json version must be 1.0.51")
+    if manifest.get("version") != "1.0.52":
+        raise SystemExit("manifest.json version must be 1.0.52")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")

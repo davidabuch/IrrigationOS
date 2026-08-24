@@ -1,5 +1,12 @@
 # IrrigationOS Roadmap
 
+## v1.0.52 — Generic Zone Commissioning Foundation
+
+- Normalizes manual plant profiles, user-calibrated baselines, and future structured photo evidence into one generic commissioning contract.
+- Adds immutable landscape add/remove history and plant-to-delivery linkage without duplicating the Water Delivery domain.
+- Runs current Zone 1 through the generic path while retaining it as a backward-compatible real-world regression fixture.
+- Adds no weather-scaling, scheduling, runtime, or execution authority.
+
 ## v1.0.51 — Zone 1 Factor Closure v1
 
 - Admits direct UC residential landscape Plant Factors for commissioned plant types where supported.
@@ -45,11 +52,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.51
+- **Installable Home Assistant release:** v1.0.52
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
-- **Next milestone:** quantify irrigation delivery/application so observed runtime can be credited into the water-balance ledger before any scheduler authority
+- **Next milestone:** add persistence/UI mapping from approved onboarding evidence into generic commissioned zones, then connect calibrated demand and delivery only through explicit scientific policies
 
 ## Delivery model
 
