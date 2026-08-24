@@ -1,3 +1,17 @@
+## [1.0.53] - 2026-08-24
+
+### Added
+- Deterministic schema-2 persistence for arbitrary generic commissioned zones, with additive migration from legacy Zone 1 and v1.0.52 Store payloads.
+- Home Assistant options-flow onboarding for manual plant profiles, user-calibrated baselines, approved structured visual findings, and hybrid evidence.
+- Explicit unresolved commissioning conflicts, evidence-preserving deactivation tombstones, and compact canonical diagnostics.
+
+### Changed
+- Landscape Intelligence Manager CRUD now persists before publishing in-memory changes and restores generic zones on reload.
+- Zone 1 remains the exact legacy compatibility record while arbitrary zones use the same generic aggregate and no zone-specific Python module.
+
+### Safety
+- Commissioning remains evidence-only. No weather scaling, runtime calculation, scheduling, controller transport, retry, or execution authority was added; `execution_authorized` and `live_control_authorized` remain false.
+
 ## [1.0.52] - 2026-08-24
 
 ### Added

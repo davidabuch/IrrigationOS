@@ -1,5 +1,13 @@
 # IrrigationOS Roadmap
 
+## v1.0.53 — Generic Commissioning Persistence & Onboarding
+
+- Persists arbitrary generic commissioned-zone aggregates through an additive, deterministic Store schema.
+- Maps installed-user onboarding into manual plant facts, calibrated baseline evidence, approved structured visual findings, and hybrid evidence.
+- Preserves evidence conflicts and landscape deactivation history without granting downstream authority.
+- Keeps Zone 1 as a backward-compatible fixture and leaves factor resolution at algorithm version 1.1.0.
+- Adds no weather scaling, runtime calculation, scheduling, controller transport, retry, or autonomous watering.
+
 ## v1.0.52 — Generic Zone Commissioning Foundation
 
 - Normalizes manual plant profiles, user-calibrated baselines, and future structured photo evidence into one generic commissioning contract.
@@ -52,11 +60,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.52
+- **Installable Home Assistant release:** v1.0.53
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
-- **Next milestone:** add persistence/UI mapping from approved onboarding evidence into generic commissioned zones, then connect calibrated demand and delivery only through explicit scientific policies
+- **Next milestone:** connect persisted calibrated demand and documented delivery evidence to explicit, provider-neutral scientific policies without expanding execution authority
 
 ## Delivery model
 

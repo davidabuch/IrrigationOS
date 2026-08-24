@@ -69,6 +69,7 @@ class HydrozoneType(StrEnum):
 
     UNIFORM = "uniform"
     MIXED = "mixed"
+    UNRESOLVED = "unresolved"
 
 
 class HydrozoneQuality(StrEnum):

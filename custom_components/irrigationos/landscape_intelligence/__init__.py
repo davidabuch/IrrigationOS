@@ -10,7 +10,16 @@ from .commissioning import (
     CommissionedZoneProfile as CommissionedZoneProfile,
 )
 from .commissioning import (
+    CommissioningConflictCandidate as CommissioningConflictCandidate,
+)
+from .commissioning import (
+    CommissioningEvidenceConflict as CommissioningEvidenceConflict,
+)
+from .commissioning import (
     CommissioningEvidenceSource as CommissioningEvidenceSource,
+)
+from .commissioning import (
+    DeactivatedCommissionedZone as DeactivatedCommissionedZone,
 )
 from .commissioning import (
     DeliveryAdvisory as DeliveryAdvisory,
@@ -76,6 +85,27 @@ from .factor_resolution import (
     resolve_zone_factor as resolve_zone_factor,
 )
 from .models import *  # noqa: F403
+from .onboarding import (
+    ApprovedVisualPlantFinding as ApprovedVisualPlantFinding,
+)
+from .onboarding import (
+    ManualPlantOnboardingInput as ManualPlantOnboardingInput,
+)
+from .onboarding import (
+    PlantAdditionInput as PlantAdditionInput,
+)
+from .onboarding import (
+    PlantRemovalInput as PlantRemovalInput,
+)
+from .onboarding import (
+    ZoneOnboardingRequest as ZoneOnboardingRequest,
+)
+from .onboarding import (
+    map_landscape_changes as map_landscape_changes,
+)
+from .onboarding import (
+    map_zone_onboarding as map_zone_onboarding,
+)
 from .zone1 import (
     build_zone_1_commissioning_profile as build_zone_1_commissioning_profile,
 )
