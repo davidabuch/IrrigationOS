@@ -8,7 +8,7 @@ from typing import Any
 
 from .models import EstablishmentState, IrrigationRole, LandscapeIntelligenceProfile
 
-FACTOR_RESOLUTION_ALGORITHM_VERSION = "1.0.0"
+FACTOR_RESOLUTION_ALGORITHM_VERSION = "1.1.0"
 
 
 class EvidenceClass(StrEnum):
@@ -213,9 +213,10 @@ def resolve_zone_factor(
             EstablishmentState.NEWLY_PLANTED,
             EstablishmentState.ESTABLISHING,
         }:
+            # Keep any source-supported baseline PF, but do not pretend that the
+            # establishment-stage irrigation management policy is resolved.
             status = FactorResolutionStatus.PARTIALLY_RESOLVED
-            admitted = None
-            group_blockers.append("establishment_adjustment_unresolved")
+            group_blockers.append("establishment_management_unresolved")
 
         results.append(
             PlantGroupFactorResolution(
@@ -229,37 +230,67 @@ def resolve_zone_factor(
             )
         )
 
-    controlling_candidates = [
+    admitted_candidates = [
         item
         for item in results
-        if item.controls_zone_demand
-        and item.status is FactorResolutionStatus.RESOLVED
-        and item.admitted_factor is not None
+        if item.controls_zone_demand and item.admitted_factor is not None
     ]
-    unresolved_controllers = [
+    unresolved_factor_controllers = [
         item
         for item in results
-        if item.controls_zone_demand and item.status is not FactorResolutionStatus.RESOLVED
+        if item.controls_zone_demand and item.admitted_factor is None
     ]
     zone_blockers: set[str] = {code for item in results for code in item.blocker_codes}
-    if unresolved_controllers:
+    if unresolved_factor_controllers:
         zone_blockers.add("hydrozone_controlling_group_unresolved")
 
-    # Zone 1 is visibly sparse/mixed, but commissioned canopy geometry is not yet measured.
-    zone_blockers.add("density_factor_unresolved")
-    status = (
-        FactorResolutionStatus.PARTIALLY_RESOLVED
-        if controlling_candidates
-        else FactorResolutionStatus.UNRESOLVED
-    )
+    # Plant Factor v2 does not synthesize a density coefficient. UC landscape
+    # guidance uses projected canopy/planted area separately from PF; geometry
+    # belongs to a future quantitative area/delivery model.
+    density_factor_status = "not_required_for_plant_factor_v2"
+
+    # A zone PF is admitted only when every controlling group has an admitted
+    # factor. Establishment-management blockers may still keep the overall zone
+    # partially resolved even when the baseline PF is known.
+    if unresolved_factor_controllers or not admitted_candidates:
+        status = (
+            FactorResolutionStatus.PARTIALLY_RESOLVED
+            if admitted_candidates
+            else FactorResolutionStatus.UNRESOLVED
+        )
+        plant_factor = None
+        controlling_group_id = None
+    else:
+        scalar_candidates = [
+            (item, item.admitted_factor)
+            for item in admitted_candidates
+            if isinstance(item.admitted_factor, float)
+        ]
+        if len(scalar_candidates) != len(admitted_candidates):
+            status = FactorResolutionStatus.PARTIALLY_RESOLVED
+            plant_factor = None
+            controlling_group_id = None
+            zone_blockers.add("hydrozone_controlling_group_unresolved")
+        else:
+            controlling, plant_factor = max(
+                scalar_candidates,
+                key=lambda candidate: candidate[1],
+            )
+            controlling_group_id = controlling.plant_group_id
+            status = (
+                FactorResolutionStatus.PARTIALLY_RESOLVED
+                if zone_blockers
+                else FactorResolutionStatus.RESOLVED
+            )
+
     return ZoneFactorResolution(
         FACTOR_RESOLUTION_ALGORITHM_VERSION,
         profile.area_slot,
         status,
-        None,
-        None,
+        plant_factor,
+        controlling_group_id,
         tuple(results),
         tuple(sorted(zone_blockers)),
-        "unresolved",
-        "not_required_for_plant_factor_v1",
+        density_factor_status,
+        "not_required_for_plant_factor_v2",
     )

@@ -6,7 +6,11 @@ from .factor_resolution import EvidenceClass, FactorRange, PlantFactorEvidence
 
 
 def zone_1_factor_evidence() -> tuple[PlantFactorEvidence, ...]:
-    """Return conservative, source-traceable evidence without invented coefficients."""
+    """Return conservative, source-traceable Zone 1 factor evidence."""
+    ucanr_pf_url = (
+        "https://ucanr.edu/site/center-landscape-urban-horticulture/"
+        "plant-factor-or-crop-coefficient-whats-difference"
+    )
     return (
         PlantFactorEvidence(
             "podocarpus",
@@ -21,27 +25,45 @@ def zone_1_factor_evidence() -> tuple[PlantFactorEvidence, ...]:
             ),
             "high",
             True,
-            (
-                "UC landscape guidance supports PF 0.5 for established landscape trees "
-                "and woody plants in most of California."
-            ),
+            "UC landscape guidance supports PF 0.5 for established landscape trees.",
         ),
         PlantFactorEvidence(
-            "peruvian_lilies",
-            EvidenceClass.QUALITATIVE_HORTICULTURE,
+            "fig",
+            EvidenceClass.URBAN_HORTICULTURE,
+            0.8,
+            "home_fruit_crop_deciduous",
+            "ucanr.residential_pf.home_fruit_deciduous",
+            "Plant Factor or Crop Coefficient: What's the difference?",
+            ucanr_pf_url,
+            "high",
+            True,
+            "UC residential landscape guidance lists deciduous home fruit crops at PF 0.8.",
+        ),
+        PlantFactorEvidence(
+            "fig",
+            EvidenceClass.AGRICULTURAL_CROP_COEFFICIENT,
             None,
-            "low_to_moderate",
-            "ucanr.alameda.outstanding_plants.alstroemeria",
-            "Outstanding Plants for Alameda County",
-            (
-                "https://ucanr.edu/site/uc-master-gardener-program-alameda-county/"
-                "outstanding-plants-alameda-county"
-            ),
+            None,
+            "ucanr.fig_crop_water_research",
+            "California Agriculture fig irrigation research",
+            "https://calag.ucanr.edu/",
             "moderate",
             False,
+            "Commercial crop-water evidence remains context only.",
+        ),
+        PlantFactorEvidence(
+            "citrus",
+            EvidenceClass.URBAN_HORTICULTURE,
+            1.0,
+            "home_fruit_crop_evergreen",
+            "ucanr.residential_pf.home_fruit_evergreen",
+            "Plant Factor or Crop Coefficient: What's the difference?",
+            ucanr_pf_url,
+            "high",
+            True,
             (
-                "UC guidance supports low-to-moderate water use but does not publish a "
-                "numeric landscape PF here."
+                "UC residential landscape guidance lists evergreen home fruit crops at "
+                "PF 1.0. Establishment-stage irrigation management remains separate."
             ),
         ),
         PlantFactorEvidence(
@@ -58,41 +80,46 @@ def zone_1_factor_evidence() -> tuple[PlantFactorEvidence, ...]:
             ),
             "high",
             False,
-            (
-                "Mature citrus Kc is agricultural evidence; young-tree Kc is a "
-                "canopy/age-dependent fraction and is not admitted as residential "
-                "landscape PF."
-            ),
-        ),
-        PlantFactorEvidence(
-            "fig",
-            EvidenceClass.AGRICULTURAL_CROP_COEFFICIENT,
-            None,
-            None,
-            "ucanr.fig_crop_water_research",
-            "California Agriculture fig irrigation research",
-            "https://calag.ucanr.edu/",
-            "moderate",
-            False,
-            (
-                "Commercial crop-water evidence is informative but is not directly "
-                "admitted as a residential landscape PF."
-            ),
+            "Agricultural young-tree Kc remains context only and cannot authorize landscape PF.",
         ),
         PlantFactorEvidence(
             "passion_fruit",
-            EvidenceClass.UNKNOWN,
+            EvidenceClass.URBAN_HORTICULTURE,
+            0.5,
+            "vine",
+            "ucanr.residential_pf.vines",
+            "Plant Factor or Crop Coefficient: What's the difference?",
+            ucanr_pf_url,
+            "high",
+            True,
+            "UC residential landscape guidance lists vines with woody landscape plants at PF 0.5.",
+        ),
+        PlantFactorEvidence(
+            "peruvian_lilies",
+            EvidenceClass.URBAN_HORTICULTURE,
+            0.5,
+            "herbaceous_perennial",
+            "ucanr.residential_pf.herbaceous_perennials",
+            "Plant Factor or Crop Coefficient: What's the difference?",
+            ucanr_pf_url,
+            "high",
+            True,
+            "UC residential landscape guidance lists herbaceous perennials at PF 0.5.",
+        ),
+        PlantFactorEvidence(
+            "peruvian_lilies",
+            EvidenceClass.QUALITATIVE_HORTICULTURE,
             None,
-            None,
-            "internal.unresolved.passion_fruit",
-            "No admitted production-grade factor source",
-            "",
-            "low",
-            False,
+            "low_to_moderate",
+            "ucanr.alameda.outstanding_plants.alstroemeria",
+            "Outstanding Plants for Alameda County",
             (
-                "No sufficiently direct California landscape factor has been admitted "
-                "for this milestone."
+                "https://ucanr.edu/site/uc-master-gardener-program-alameda-county/"
+                "outstanding-plants-alameda-county"
             ),
+            "moderate",
+            False,
+            "Species-oriented low-to-moderate guidance remains supporting evidence.",
         ),
         PlantFactorEvidence(
             "drought_tolerant_ornamentals",
@@ -105,8 +132,8 @@ def zone_1_factor_evidence() -> tuple[PlantFactorEvidence, ...]:
             "moderate",
             False,
             (
-                "The group is not taxonomically resolved; the low class band is retained "
-                "as context, not admitted as a group PF."
+                "The mixed ornamental group is not taxonomically resolved; its low-water "
+                "context is not admitted as one authoritative group PF."
             ),
         ),
     )
