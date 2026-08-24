@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime, time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -42,6 +44,23 @@ from .landscape import (
     SoilTexture,
     SunExposure,
 )
+from .landscape_intelligence import (
+    CanonicalZoneIdentity,
+    Confidence,
+    DeliveryLinkStatus,
+    IrrigationDeliveryLink,
+    UserCalibratedBaseline,
+    ZoneDemandSourceMode,
+)
+from .landscape_intelligence import (
+    EstablishmentState as CommissioningEstablishmentState,
+)
+from .landscape_intelligence.onboarding import (
+    ApprovedVisualPlantFinding,
+    ManualPlantOnboardingInput,
+    ZoneOnboardingRequest,
+    map_zone_onboarding,
+)
 
 CONF_DISPLAY_NAME = "display_name"
 CONF_PLANT_TYPE = "plant_type"
@@ -60,6 +79,26 @@ CONF_OPTIONS_ACTION = "action"
 CONF_FIRST_LIVE_TARGET = "first_live_target"
 CONF_FIRST_LIVE_RUNTIME = "first_live_runtime_seconds"
 CONF_FIRST_LIVE_CONFIRMATION = "first_live_confirmation"
+CONF_COMMISSIONING_TARGET = "commissioning_target"
+CONF_COMMISSIONING_MODE = "commissioning_mode"
+CONF_COMMISSIONING_ZONE_NAME = "commissioning_zone_name"
+CONF_COMMISSIONING_PLANT_NAME = "commissioning_plant_name"
+CONF_COMMISSIONING_BOTANICAL_NAME = "commissioning_botanical_name"
+CONF_COMMISSIONING_ESTABLISHMENT = "commissioning_establishment"
+CONF_COMMISSIONING_PLANTED_DATE = "commissioning_planted_date"
+CONF_COMMISSIONING_CONTAINER_GALLONS = "commissioning_container_gallons"
+CONF_COMMISSIONING_HEIGHT_FEET = "commissioning_height_feet"
+CONF_COMMISSIONING_DELIVERY_PROFILE_ID = "commissioning_delivery_profile_id"
+CONF_COMMISSIONING_COMPONENT_IDS = "commissioning_component_ids"
+CONF_COMMISSIONING_BASELINE_MINUTES = "commissioning_baseline_minutes"
+CONF_COMMISSIONING_REFERENCE_TEMP_F = "commissioning_reference_temperature_f"
+CONF_COMMISSIONING_RECENT_RAIN_MM = "commissioning_recent_rain_mm"
+CONF_COMMISSIONING_ASSESSMENT_ID = "commissioning_assessment_id"
+CONF_COMMISSIONING_EVIDENCE_IDS = "commissioning_evidence_ids"
+CONF_COMMISSIONING_AI_PLANT_NAME = "commissioning_ai_plant_name"
+CONF_COMMISSIONING_AI_BOTANICAL_NAME = "commissioning_ai_botanical_name"
+CONF_COMMISSIONING_AI_CONFIDENCE = "commissioning_ai_confidence"
+CONF_COMMISSIONING_VISIBLE_IRRIGATION = "commissioning_visible_irrigation"
 
 STEP_USER_SCHEMA = vol.Schema(
     {
@@ -197,6 +236,10 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
 
     def __init__(self) -> None:
         self._selected_area_id: str | None = None
+        self._commissioning_controller_slot: int | None = None
+        self._commissioning_area_slot: int | None = None
+        self._commissioning_area_name: str | None = None
+        self._commissioning_mode: ZoneDemandSourceMode | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -207,6 +250,8 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
             action = str(user_input[CONF_OPTIONS_ACTION])
             if action == "landscape":
                 return await self.async_step_landscape()
+            if action == "commissioning":
+                return await self.async_step_commissioning()
             return await self.async_step_first_live_trial()
         return self.async_show_form(
             step_id="init",
@@ -215,11 +260,103 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                     vol.Required(CONF_OPTIONS_ACTION): vol.In(
                         {
                             "landscape": "Edit Landscape Digital Twin",
+                            "commissioning": "Commission generic zone knowledge",
                             "first_live_trial": "Run supervised first-live watering trial",
                         }
                     )
                 }
             ),
+        )
+
+    async def async_step_commissioning(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Select one canonical target and generic onboarding mode."""
+        choices: dict[str, str] = {}
+        manager = self.config_entry.runtime_data.landscape_intelligence
+        for controller_slot, controller in enumerate(
+            self.config_entry.runtime_data.data.controllers, start=1
+        ):
+            for area in controller.areas:
+                if (
+                    area.configured
+                    and area.enabled
+                    and area.binding is not None
+                    and manager.get_zone_by_slots(
+                        controller_slot, area.slot_number
+                    )
+                    is None
+                ):
+                    key = f"{controller_slot}|{area.slot_number}"
+                    choices[key] = area.vendor_name or area.name
+        if not choices:
+            return self.async_abort(reason="no_areas")
+        if user_input is not None:
+            controller_text, area_text = str(
+                user_input[CONF_COMMISSIONING_TARGET]
+            ).split("|", 1)
+            self._commissioning_controller_slot = int(controller_text)
+            self._commissioning_area_slot = int(area_text)
+            self._commissioning_area_name = choices[
+                str(user_input[CONF_COMMISSIONING_TARGET])
+            ]
+            self._commissioning_mode = ZoneDemandSourceMode(
+                str(user_input[CONF_COMMISSIONING_MODE])
+            )
+            return await self.async_step_commissioning_input()
+        return self.async_show_form(
+            step_id="commissioning",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_COMMISSIONING_TARGET): vol.In(choices),
+                    vol.Required(CONF_COMMISSIONING_MODE): vol.In(
+                        [item.value for item in ZoneDemandSourceMode]
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_commissioning_input(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Map approved onboarding input and persist it before reload."""
+        if (
+            self._commissioning_controller_slot is None
+            or self._commissioning_area_slot is None
+            or self._commissioning_mode is None
+        ):
+            return await self.async_step_commissioning()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                profile = _map_commissioning_form(
+                    user_input,
+                    controller_slot=self._commissioning_controller_slot,
+                    area_slot=self._commissioning_area_slot,
+                    mode=self._commissioning_mode,
+                    now=datetime.now(UTC),
+                    timezone=ZoneInfo(self.hass.config.time_zone),
+                )
+            except (KeyError, TypeError, ValueError):
+                errors["base"] = "invalid_commissioning_input"
+            else:
+                manager = self.config_entry.runtime_data.landscape_intelligence
+                saved = await manager.async_add_zone(
+                    profile,
+                )
+                if saved:
+                    return self.async_create_entry(
+                        title="",
+                        data=dict(self.config_entry.options),
+                    )
+                errors["base"] = "commissioning_persistence_failed"
+        return self.async_show_form(
+            step_id="commissioning_input",
+            data_schema=_commissioning_schema(
+                self._commissioning_mode,
+                self._commissioning_area_name or f"Zone {self._commissioning_area_slot}",
+            ),
+            errors=errors,
         )
 
     async def async_step_landscape(
@@ -460,3 +597,237 @@ def _validate_range(values: dict[str, Any], field: str, minimum: float, maximum:
     if not minimum <= number <= maximum:
         raise ValueError(f"{field} is outside its allowed range")
     values[field] = number
+
+
+def _commissioning_schema(
+    mode: ZoneDemandSourceMode,
+    default_name: str,
+) -> vol.Schema:
+    """Return the bounded generic onboarding form for one demand-source mode."""
+    fields: dict[vol.Marker, Any] = {
+        vol.Required(CONF_COMMISSIONING_ZONE_NAME, default=default_name): str,
+    }
+    if mode in {
+        ZoneDemandSourceMode.MANUAL_PLANT_PROFILE,
+        ZoneDemandSourceMode.HYBRID,
+    }:
+        fields.update(
+            {
+                vol.Required(CONF_COMMISSIONING_PLANT_NAME): str,
+                vol.Optional(CONF_COMMISSIONING_BOTANICAL_NAME, default=""): str,
+                vol.Required(
+                    CONF_COMMISSIONING_ESTABLISHMENT,
+                    default=CommissioningEstablishmentState.UNKNOWN.value,
+                ): vol.In([item.value for item in CommissioningEstablishmentState]),
+                vol.Optional(CONF_COMMISSIONING_PLANTED_DATE, default=""): str,
+                vol.Optional(CONF_COMMISSIONING_CONTAINER_GALLONS, default=""): vol.Any(
+                    "", vol.Coerce(float)
+                ),
+                vol.Optional(CONF_COMMISSIONING_HEIGHT_FEET, default=""): vol.Any(
+                    "", vol.Coerce(float)
+                ),
+            }
+        )
+    if mode is ZoneDemandSourceMode.USER_CALIBRATED_BASELINE:
+        fields.update(
+            {
+                vol.Required(CONF_COMMISSIONING_BASELINE_MINUTES, default=12): vol.All(
+                    vol.Coerce(int), vol.Range(min=1, max=1440)
+                ),
+                vol.Required(CONF_COMMISSIONING_REFERENCE_TEMP_F, default=75): vol.Coerce(
+                    float
+                ),
+                vol.Required(CONF_COMMISSIONING_RECENT_RAIN_MM, default=0): vol.All(
+                    vol.Coerce(float), vol.Range(min=0)
+                ),
+            }
+        )
+    if mode in {
+        ZoneDemandSourceMode.PHOTO_AI_DERIVED,
+        ZoneDemandSourceMode.HYBRID,
+    }:
+        fields.update(
+            {
+                vol.Required(CONF_COMMISSIONING_ASSESSMENT_ID): str,
+                vol.Required(CONF_COMMISSIONING_EVIDENCE_IDS): str,
+                vol.Required(CONF_COMMISSIONING_AI_PLANT_NAME): str,
+                vol.Optional(CONF_COMMISSIONING_AI_BOTANICAL_NAME, default=""): str,
+                vol.Required(
+                    CONF_COMMISSIONING_AI_CONFIDENCE,
+                    default=Confidence.MODERATE.value,
+                ): vol.In([item.value for item in Confidence]),
+                vol.Optional(CONF_COMMISSIONING_VISIBLE_IRRIGATION, default=""): str,
+            }
+        )
+    if mode is not ZoneDemandSourceMode.USER_CALIBRATED_BASELINE:
+        fields.update(
+            {
+                vol.Optional(CONF_COMMISSIONING_DELIVERY_PROFILE_ID, default=""): str,
+                vol.Optional(CONF_COMMISSIONING_COMPONENT_IDS, default=""): str,
+            }
+        )
+    return vol.Schema(fields)
+
+
+def _optional_form_text(values: dict[str, Any], key: str) -> str | None:
+    value = str(values.get(key, "")).strip()
+    return value or None
+
+
+def _form_ids(values: dict[str, Any], key: str) -> tuple[str, ...]:
+    value = str(values.get(key, ""))
+    return tuple(item.strip() for item in value.split(",") if item.strip())
+
+
+def _optional_form_float(values: dict[str, Any], key: str) -> float | None:
+    value = values.get(key)
+    if value in {None, ""}:
+        return None
+    if isinstance(value, bool) or not isinstance(value, str | int | float):
+        raise ValueError(f"{key} must be numeric")
+    number = float(value)
+    if number <= 0:
+        raise ValueError(f"{key} must be positive")
+    return number
+
+
+def _planting_datetime(
+    values: dict[str, Any],
+    timezone: ZoneInfo,
+) -> datetime | None:
+    value = _optional_form_text(values, CONF_COMMISSIONING_PLANTED_DATE)
+    if value is None:
+        return None
+    return datetime.combine(date.fromisoformat(value), time.min, tzinfo=timezone)
+
+
+def _map_commissioning_form(
+    values: dict[str, Any],
+    *,
+    controller_slot: int,
+    area_slot: int,
+    mode: ZoneDemandSourceMode,
+    now: datetime,
+    timezone: ZoneInfo,
+) -> Any:
+    """Map one Home Assistant form into the provider-neutral onboarding contract."""
+    zone_id = (
+        f"zone.{area_slot}"
+        if controller_slot == 1
+        else f"zone.{controller_slot}.{area_slot}"
+    )
+    plant_group_id = f"{zone_id}.plant.primary"
+    manual: tuple[ManualPlantOnboardingInput, ...] = ()
+    visual: tuple[ApprovedVisualPlantFinding, ...] = ()
+    baseline: UserCalibratedBaseline | None = None
+    delivery_links: tuple[IrrigationDeliveryLink, ...] = ()
+
+    if mode in {
+        ZoneDemandSourceMode.MANUAL_PLANT_PROFILE,
+        ZoneDemandSourceMode.HYBRID,
+    }:
+        manual = (
+            ManualPlantOnboardingInput(
+                plant_group_id=plant_group_id,
+                common_name=str(values[CONF_COMMISSIONING_PLANT_NAME]).strip(),
+                botanical_name=_optional_form_text(
+                    values, CONF_COMMISSIONING_BOTANICAL_NAME
+                ),
+                establishment_state=CommissioningEstablishmentState(
+                    str(values[CONF_COMMISSIONING_ESTABLISHMENT])
+                ),
+                observed_at=now,
+                planted_at=_planting_datetime(values, timezone),
+                source_container_gallons=_optional_form_float(
+                    values, CONF_COMMISSIONING_CONTAINER_GALLONS
+                ),
+                current_height_meters=(
+                    None
+                    if (
+                        height := _optional_form_float(
+                            values, CONF_COMMISSIONING_HEIGHT_FEET
+                        )
+                    )
+                    is None
+                    else height * 0.3048
+                ),
+            ),
+        )
+    if mode is ZoneDemandSourceMode.USER_CALIBRATED_BASELINE:
+        baseline = UserCalibratedBaseline(
+            runtime_seconds=int(values[CONF_COMMISSIONING_BASELINE_MINUTES]) * 60,
+            reference_air_temperature_celsius=(
+                float(values[CONF_COMMISSIONING_REFERENCE_TEMP_F]) - 32
+            )
+            * 5
+            / 9,
+            reference_recent_precipitation_mm=float(
+                values[CONF_COMMISSIONING_RECENT_RAIN_MM]
+            ),
+            reference_condition="user-confirmed dry-day reference condition",
+            calibrated_at=now,
+            confidence=Confidence.HIGH,
+        )
+    if mode in {
+        ZoneDemandSourceMode.PHOTO_AI_DERIVED,
+        ZoneDemandSourceMode.HYBRID,
+    }:
+        visual = (
+            ApprovedVisualPlantFinding(
+                plant_group_id=plant_group_id,
+                assessment_id=str(values[CONF_COMMISSIONING_ASSESSMENT_ID]).strip(),
+                evidence_ids=_form_ids(values, CONF_COMMISSIONING_EVIDENCE_IDS),
+                likely_common_name=str(
+                    values[CONF_COMMISSIONING_AI_PLANT_NAME]
+                ).strip(),
+                likely_botanical_name=_optional_form_text(
+                    values, CONF_COMMISSIONING_AI_BOTANICAL_NAME
+                ),
+                confidence=Confidence(
+                    str(values[CONF_COMMISSIONING_AI_CONFIDENCE])
+                ),
+                establishment_state=(
+                    manual[0].establishment_state
+                    if manual
+                    else CommissioningEstablishmentState.UNKNOWN
+                ),
+                approved_at=now,
+                visible_irrigation_method=_optional_form_text(
+                    values, CONF_COMMISSIONING_VISIBLE_IRRIGATION
+                ),
+                delivery_profile_id=_optional_form_text(
+                    values, CONF_COMMISSIONING_DELIVERY_PROFILE_ID
+                ),
+                delivery_component_ids=_form_ids(
+                    values, CONF_COMMISSIONING_COMPONENT_IDS
+                ),
+            ),
+        )
+    delivery_profile_id = _optional_form_text(
+        values, CONF_COMMISSIONING_DELIVERY_PROFILE_ID
+    )
+    if manual and delivery_profile_id is not None:
+        delivery_links = (
+            IrrigationDeliveryLink(
+                f"{plant_group_id}.delivery",
+                plant_group_id,
+                DeliveryLinkStatus.DOCUMENTED,
+                delivery_profile_id,
+                _form_ids(values, CONF_COMMISSIONING_COMPONENT_IDS),
+                None,
+            ),
+        )
+    return map_zone_onboarding(
+        ZoneOnboardingRequest(
+            identity=CanonicalZoneIdentity(
+                "property.primary", zone_id, controller_slot, area_slot
+            ),
+            display_name=str(values[CONF_COMMISSIONING_ZONE_NAME]).strip(),
+            mode=mode,
+            observed_at=now,
+            manual_plants=manual,
+            visual_findings=visual,
+            calibrated_baseline=baseline,
+            delivery_links=delivery_links,
+        )
+    )

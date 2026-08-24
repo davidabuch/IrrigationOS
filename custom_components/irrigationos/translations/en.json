@@ -75,6 +75,38 @@
           "area_id": "Irrigation area"
         }
       },
+      "commissioning": {
+        "title": "Commission generic zone knowledge",
+        "description": "Select a canonical configured irrigation area and how its landscape knowledge will be supplied. This records advisory evidence only and cannot water the area.",
+        "data": {
+          "commissioning_target": "Irrigation area",
+          "commissioning_mode": "Onboarding mode"
+        }
+      },
+      "commissioning_input": {
+        "title": "Record commissioned zone evidence",
+        "description": "Save structured zone evidence. Baseline values are not weather-scaled, visual records must already be approved, conflicts remain unresolved, and no execution authority is granted.",
+        "data": {
+          "commissioning_zone_name": "Zone landscape name",
+          "commissioning_plant_name": "User-confirmed plant name",
+          "commissioning_botanical_name": "Botanical name (optional)",
+          "commissioning_establishment": "Establishment state",
+          "commissioning_planted_date": "Planting date, YYYY-MM-DD (optional)",
+          "commissioning_container_gallons": "Source container gallons (optional)",
+          "commissioning_height_feet": "Current height in feet (optional)",
+          "commissioning_delivery_profile_id": "Canonical delivery profile ID (optional)",
+          "commissioning_component_ids": "Canonical delivery component IDs, comma-separated (optional)",
+          "commissioning_baseline_minutes": "Baseline runtime in minutes",
+          "commissioning_reference_temperature_f": "Reference outdoor temperature (°F)",
+          "commissioning_recent_rain_mm": "Recent rain in reference condition (mm)",
+          "commissioning_assessment_id": "Approved structured assessment ID",
+          "commissioning_evidence_ids": "Structured evidence IDs, comma-separated",
+          "commissioning_ai_plant_name": "Visually inferred plant name",
+          "commissioning_ai_botanical_name": "Visually inferred botanical name (optional)",
+          "commissioning_ai_confidence": "Visual finding confidence",
+          "commissioning_visible_irrigation": "Visible irrigation method (optional)"
+        }
+      },
       "first_live_trial": {
         "title": "Supervised first-live watering trial",
         "description": "Current commissioning status: {commissioning_status}. Select exactly one observed Rachio zone and a runtime of 1-120 seconds. To authorize this single supervised attempt, type exactly: {confirmation_phrase}",
@@ -87,6 +119,8 @@
     },
     "error": {
       "invalid_profile": "One or more landscape profile values are outside the allowed range.",
+      "invalid_commissioning_input": "The commissioning evidence is incomplete, inconsistent, or invalid.",
+      "commissioning_persistence_failed": "The commissioning evidence could not be saved. No new zone knowledge was activated.",
       "first_live_confirmation_mismatch": "The exact supervised-trial confirmation phrase was not entered.",
       "first_live_trial_invalid": "The selected trial target or request is no longer valid."
     },

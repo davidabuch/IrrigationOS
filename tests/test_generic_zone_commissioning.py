@@ -163,7 +163,7 @@ def test_landscape_change_preserves_removed_plant_and_flags_new_delivery_gap() -
         C.LandscapePlantSnapshot(avocado, added_details),
     )
     profile = C.CommissionedZoneProfile(
-        1,
+        C.ZONE_COMMISSIONING_SCHEMA_VERSION,
         C.CanonicalZoneIdentity("property.example", "zone.changed", 1, 8),
         "Changed planting",
         _landscape(8, (avocado,)),
@@ -204,7 +204,7 @@ def test_user_calibrated_baseline_carries_reference_without_weather_scaling() ->
         confidence=M.Confidence.HIGH,
     )
     profile = C.CommissionedZoneProfile(
-        1,
+        C.ZONE_COMMISSIONING_SCHEMA_VERSION,
         C.CanonicalZoneIdentity("property.baseline", "zone.baseline", None, 1),
         "User baseline zone",
         _landscape(1, ()),
@@ -232,7 +232,7 @@ def test_synthetic_other_property_accepts_structured_visual_evidence_only() -> N
         M.EstablishmentState.UNKNOWN,
     )
     profile = C.CommissionedZoneProfile(
-        1,
+        C.ZONE_COMMISSIONING_SCHEMA_VERSION,
         C.CanonicalZoneIdentity("property.synthetic_other", "zone.courtyard", None, 1),
         "Synthetic courtyard",
         _landscape(1, (plant,)),
@@ -274,7 +274,7 @@ def test_commissioning_cross_references_and_authority_fail_closed() -> None:
     plant = _plant("plant", "Plant", None, M.EstablishmentState.UNKNOWN)
     with pytest.raises(ValueError, match="unknown current plant group"):
         C.CommissionedZoneProfile(
-            1,
+            C.ZONE_COMMISSIONING_SCHEMA_VERSION,
             C.CanonicalZoneIdentity("property.example", "zone.invalid", 1, 9),
             "Invalid",
             _landscape(9, (plant,)),

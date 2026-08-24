@@ -21,7 +21,7 @@ from .models import (
     PlantGroup,
 )
 
-ZONE_COMMISSIONING_SCHEMA_VERSION = 1
+ZONE_COMMISSIONING_SCHEMA_VERSION = 2
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
@@ -120,6 +120,47 @@ class SerializableCommissioningModel:
         if not isinstance(result, dict):  # pragma: no cover
             raise TypeError("commissioning model did not serialize to a dictionary")
         return result
+
+
+@dataclass(frozen=True, slots=True)
+class CommissioningConflictCandidate(SerializableCommissioningModel):
+    """One preserved candidate value in unresolved commissioning evidence."""
+
+    source: CommissioningEvidenceSource
+    value: str
+    confidence: Confidence
+    evidence_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _text("value", self.value)
+        _unique_ids("evidence_ids", self.evidence_ids)
+
+
+@dataclass(frozen=True, slots=True)
+class CommissioningEvidenceConflict(SerializableCommissioningModel):
+    """Explicit unresolved evidence conflict retained for later review."""
+
+    conflict_id: str
+    plant_group_id: str
+    field_path: str
+    candidates: tuple[CommissioningConflictCandidate, ...]
+    detail: str
+    unresolved: bool = True
+
+    def __post_init__(self) -> None:
+        _identifier("conflict_id", self.conflict_id)
+        _identifier("plant_group_id", self.plant_group_id)
+        _identifier("field_path", self.field_path)
+        _text("detail", self.detail)
+        if len(self.candidates) < 2:
+            raise ValueError("commissioning conflict requires at least two candidates")
+        candidate_keys = tuple(
+            (candidate.source, candidate.value.casefold()) for candidate in self.candidates
+        )
+        if len(candidate_keys) != len(set(candidate_keys)):
+            raise ValueError("commissioning conflict candidates must be unique")
+        if not self.unresolved:
+            raise ValueError("conflict resolution policy is not implemented")
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,8 +334,6 @@ class LandscapeChangeEvent(SerializableCommissioningModel):
     def __post_init__(self) -> None:
         _identifier("event_id", self.event_id)
         _timestamp("effective_at", self.effective_at)
-        if self.plant_snapshot.commissioning_details.observed_at < self.effective_at:
-            raise ValueError("event snapshot cannot predate the effective event")
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,6 +376,7 @@ class CommissionedZoneProfile(SerializableCommissioningModel):
     demand_sources: tuple[ZoneDemandSource, ...]
     delivery_links: tuple[IrrigationDeliveryLink, ...]
     landscape_events: tuple[LandscapeChangeEvent, ...] = ()
+    conflicts: tuple[CommissioningEvidenceConflict, ...] = ()
     execution_authorized: bool = False
     live_control_authorized: bool = False
 
@@ -355,10 +395,12 @@ class CommissionedZoneProfile(SerializableCommissioningModel):
         source_ids = tuple(item.source_id for item in self.demand_sources)
         link_ids = tuple(item.link_id for item in self.delivery_links)
         event_ids = tuple(item.event_id for item in self.landscape_events)
+        conflict_ids = tuple(item.conflict_id for item in self.conflicts)
         for name, values in (
             ("demand source IDs", source_ids),
             ("delivery link IDs", link_ids),
             ("landscape event IDs", event_ids),
+            ("commissioning conflict IDs", conflict_ids),
         ):
             if len(values) != len(set(values)):
                 raise ValueError(f"{name} must be unique")
@@ -372,6 +414,8 @@ class CommissionedZoneProfile(SerializableCommissioningModel):
             raise ValueError("demand source references an unknown current plant group")
         if any(link.plant_group_id not in current_ids for link in self.delivery_links):
             raise ValueError("delivery link references an unknown current plant group")
+        if any(conflict.plant_group_id not in current_ids for conflict in self.conflicts):
+            raise ValueError("commissioning conflict references an unknown current plant group")
         if len({link.plant_group_id for link in self.delivery_links}) != len(
             self.delivery_links
         ):
@@ -387,6 +431,19 @@ class CommissionedZoneProfile(SerializableCommissioningModel):
     def to_landscape_intelligence_profile(self) -> LandscapeIntelligenceProfile:
         """Return the backward-compatible v1 profile consumed by existing engines."""
         return self.landscape_profile
+
+
+@dataclass(frozen=True, slots=True)
+class DeactivatedCommissionedZone(SerializableCommissioningModel):
+    """Evidence-preserving tombstone for a deactivated commissioned zone."""
+
+    profile: CommissionedZoneProfile
+    deactivated_at: datetime
+    reason: str
+
+    def __post_init__(self) -> None:
+        _timestamp("deactivated_at", self.deactivated_at)
+        _text("reason", self.reason)
 
 
 def assess_delivery_compatibility(
