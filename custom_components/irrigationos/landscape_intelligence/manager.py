@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
+from .admission import assess_commissioning
 from .commissioning import (
     CommissionedZoneProfile,
     DeactivatedCommissionedZone,
@@ -181,6 +182,7 @@ class LandscapeIntelligenceManager:
         ]
         resolution = self._factor_resolutions.get(_key(commissioned))
         compatibility = assess_delivery_compatibility(commissioned)
+        assessment = assess_commissioning(commissioned)
         resolved_conflict_ids = {
             item.conflict_id for item in commissioned.conflict_resolutions
         }
@@ -200,6 +202,11 @@ class LandscapeIntelligenceManager:
                 for conflict in commissioned.conflicts
             ),
             "delivery_compatibility_state": compatibility.state.value,
+            "commissioning_assessment_status": assessment.status.value,
+            "commissioning_ready_purpose_count": sum(
+                item.state.value == "ready" for item in assessment.purpose_readiness
+            ),
+            "commissioning_follow_up_count": len(assessment.follow_up_requirements),
             "execution_authorized": False,
             "live_control_authorized": False,
         }
@@ -211,6 +218,7 @@ class LandscapeIntelligenceManager:
         summaries = []
         for zone in self._zones:
             compatibility = assess_delivery_compatibility(zone)
+            assessment = assess_commissioning(zone)
             resolved_conflict_ids = {
                 item.conflict_id for item in zone.conflict_resolutions
             }
@@ -234,6 +242,7 @@ class LandscapeIntelligenceManager:
                     "advisory_codes": [
                         advisory.code for advisory in compatibility.advisories
                     ],
+                    "commissioning_assessment": assessment.to_dict(),
                 }
             )
         zone1_resolution = self._factor_resolutions.get(_ZONE1_KEY)

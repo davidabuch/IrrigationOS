@@ -115,6 +115,8 @@ REQUIRED_FILES = (
     "docs/adr/ADR-025-generic-commissioning-persistence.md",
     "docs/V1_0_54_COMMISSIONING_REVIEW_MULTI_PLANT_EDITING.md",
     "docs/adr/ADR-026-commissioning-review-multi-plant-editing.md",
+    "docs/V1_0_55_COMMISSIONING_COMPLETENESS_EVIDENCE_ADMISSION.md",
+    "docs/adr/ADR-027-commissioning-completeness-evidence-admission.md",
     "custom_components/irrigationos/weather/ingestion.py",
     "custom_components/irrigationos/production_targets.py",
     "custom_components/irrigationos/production_recommendation/__init__.py",
@@ -203,8 +205,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.54":
-        raise SystemExit("manifest.json version must be 1.0.54")
+    if manifest.get("version") != "1.0.55":
+        raise SystemExit("manifest.json version must be 1.0.55")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")
