@@ -196,6 +196,34 @@
           "commissioning_reference_period_hours": "Reference ET₀ period (hours)"
         }
       },
+      "commissioning_baseline_reference": {
+        "title": "Capture current baseline reference",
+        "description": "Capture an exact normalized dry environmental period. ET₀ is measured evidence, never derived from temperature. Blockers: {blockers}",
+        "data": {
+          "commissioning_reference_period_hours": "Reference period",
+          "commissioning_capture_dry_confirmation": "Confirm this is a representative dry reference condition",
+          "commissioning_replace_reference_confirmation": "Confirm replacement of any current reference"
+        }
+      },
+      "commissioning_delivery_calibration": {
+        "title": "Calibrate irrigation delivery",
+        "description": "Record only observed, rated, estimated, or measured component evidence. Unknown values remain unknown and no runtime is calculated.",
+        "data": {
+          "commissioning_delivery_profile_id": "Canonical delivery profile ID",
+          "commissioning_delivery_component_id": "Canonical physical component ID",
+          "commissioning_delivery_component_name": "Component name",
+          "commissioning_delivery_type": "Delivery method",
+          "commissioning_component_count": "Physical component count",
+          "commissioning_flow_evidence_level": "Flow evidence level",
+          "commissioning_flow_basis": "Meaning of the flow value",
+          "commissioning_flow_liters_per_hour": "Rated or estimated flow (L/hour, optional)",
+          "commissioning_collected_volume": "Collected volume (optional)",
+          "commissioning_collected_volume_unit": "Collected-volume unit",
+          "commissioning_collection_duration_seconds": "Collection duration in seconds (optional)",
+          "commissioning_radius_meters": "Observed or estimated radius in meters (optional)",
+          "commissioning_dedicated_emitter": "Dedicated to this plant group"
+        }
+      },
       "commissioning_conflict_select": {
         "title": "Review evidence conflict",
         "data": {
@@ -227,6 +255,8 @@
       "commissioning_persistence_failed": "The commissioning evidence could not be saved. No new zone knowledge was activated.",
       "invalid_commissioning_edit": "The requested commissioning edit is incomplete or inconsistent. Existing evidence was not changed.",
       "commissioning_removal_not_confirmed": "Plant removal was not explicitly confirmed.",
+      "baseline_reference_capture_blocked": "The environmental reference could not be captured. No baseline evidence was changed. Blockers: {blockers}",
+      "invalid_delivery_calibration": "The delivery calibration is incomplete or inconsistent. Existing evidence was not changed.",
       "first_live_confirmation_mismatch": "The exact supervised-trial confirmation phrase was not entered.",
       "first_live_trial_invalid": "The selected trial target or request is no longer valid."
     },

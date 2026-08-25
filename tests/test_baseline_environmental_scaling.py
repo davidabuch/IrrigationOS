@@ -308,6 +308,6 @@ def test_reference_evidence_round_trip_and_schema_three_migration() -> None:
     )
     migrated = P.commissioned_zone_from_dict(legacy)
     migrated_baseline = migrated.demand_sources[0].calibrated_baseline
-    assert migrated.schema_version == 4
+    assert migrated.schema_version == C.ZONE_COMMISSIONING_SCHEMA_VERSION
     assert migrated_baseline is not None
     assert migrated_baseline.environmental_reference is None

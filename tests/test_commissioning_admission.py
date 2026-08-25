@@ -333,7 +333,7 @@ def test_assessment_is_deterministic_and_zone_one_remains_compatible() -> None:
     assert zone1.to_landscape_intelligence_profile() == Z.build_zone_1_landscape_intelligence(NOW)
 
 
-def test_derived_assessment_needs_no_persistence_schema_change() -> None:
+def test_derived_assessment_remains_recomputed_after_calibration_schema_change() -> None:
     zone1 = Z.build_zone_1_commissioning_profile(NOW)
     profile = _profile(manual=(_manual("plant.synthetic", "Synthetic plant"),))
     before = A.assess_commissioning(profile)
@@ -349,7 +349,7 @@ def test_derived_assessment_needs_no_persistence_schema_change() -> None:
         item for item in restored.zones if item.identity.zone_id == "zone.synthetic"
     )
 
-    assert P.COMMISSIONING_STORE_SCHEMA_VERSION == 4
+    assert P.COMMISSIONING_STORE_SCHEMA_VERSION == 5
     assert A.assess_commissioning(restored_profile) == before
     assert "commissioning_assessment" not in P.build_store_payload(
         (profile, zone1),

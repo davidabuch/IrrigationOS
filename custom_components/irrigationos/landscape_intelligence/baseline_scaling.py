@@ -158,7 +158,9 @@ def assess_baseline_environmental_scaling(
     if baseline is not None and baseline.reference_recent_precipitation_mm != 0:
         blockers.add("reference_condition_not_dry")
 
-    selected = _select_observation_window(observations, reference.period_hours if reference else 0)
+    selected = select_exact_observation_window(
+        observations, reference.period_hours if reference else 0
+    )
     if observations is None:
         blockers.add("current_environmental_evidence_unavailable")
     elif selected is None:
@@ -271,9 +273,10 @@ def assess_baseline_environmental_scaling(
     )
 
 
-def _select_observation_window(
+def select_exact_observation_window(
     observations: ObservationWindow | None, period_hours: int
 ) -> ObservationWindow | None:
+    """Return the trailing exact contiguous hourly period used by scaling/capture."""
     if observations is None or period_hours < 1:
         return None
     starts_at = observations.ends_at - timedelta(hours=period_hours)
