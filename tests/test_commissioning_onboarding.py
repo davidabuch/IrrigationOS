@@ -245,7 +245,7 @@ def test_schema_two_round_trip_and_deterministic_multi_property_order() -> None:
     )
     restored = P.restore_store_payload(payload, fallback_zone1=zone1)
 
-    assert payload["commissioning_store_schema_version"] == 3
+    assert payload["commissioning_store_schema_version"] == 4
     assert tuple(
         (zone.identity.property_id, zone.identity.zone_id) for zone in restored.zones
     ) == (

@@ -8,7 +8,12 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
+from ..weather import ForecastWindow, ObservationWindow
 from .admission import assess_commissioning
+from .baseline_scaling import (
+    BaselineEnvironmentalScalingAssessment,
+    assess_baseline_environmental_scaling,
+)
 from .commissioning import (
     CommissionedZoneProfile,
     DeactivatedCommissionedZone,
@@ -46,6 +51,9 @@ class LandscapeIntelligenceManager:
         self._deactivated_zones: tuple[DeactivatedCommissionedZone, ...] = ()
         self._legacy_zone1: dict[str, Any] = {}
         self._factor_resolutions: dict[tuple[str, str], ZoneFactorResolution] = {}
+        self._baseline_scaling: dict[
+            tuple[str, str], BaselineEnvironmentalScalingAssessment
+        ] = {}
         self.last_persistence_error: str | None = None
 
     async def async_initialize(self, *, initial_observed_at: datetime) -> None:
@@ -71,6 +79,7 @@ class LandscapeIntelligenceManager:
         self._deactivated_zones = restored.deactivated_zones
         self._legacy_zone1 = restored.legacy_zone1
         self._refresh_factor_resolutions()
+        self._baseline_scaling = {}
         self.last_persistence_error = None
         if restored.migration_required:
             await self._async_save(self._zones, self._deactivated_zones)
@@ -117,7 +126,40 @@ class LandscapeIntelligenceManager:
     ) -> CommissionedZoneReview | None:
         """Build a bounded detailed review for one active commissioned zone."""
         profile = self.get_zone(property_id, zone_id)
-        return None if profile is None else build_commissioning_review(profile)
+        return (
+            None
+            if profile is None
+            else build_commissioning_review(
+                profile,
+                baseline_scaling_assessment=self._baseline_scaling.get(_key(profile)),
+            )
+        )
+
+    def refresh_baseline_scaling(
+        self,
+        *,
+        observations: ObservationWindow | None,
+        forecast: ForecastWindow | None,
+        generated_at: datetime,
+    ) -> None:
+        """Recompute transient advisory assessments from current normalized evidence."""
+        self._baseline_scaling = {
+            _key(zone): assess_baseline_environmental_scaling(
+                zone,
+                assess_commissioning(zone),
+                observations=observations,
+                forecast=forecast,
+                generated_at=generated_at,
+            )
+            for zone in self._zones
+            if any(source.calibrated_baseline is not None for source in zone.demand_sources)
+        }
+
+    def baseline_scaling_for(
+        self, property_id: str, zone_id: str
+    ) -> BaselineEnvironmentalScalingAssessment | None:
+        """Return one current transient advisory assessment."""
+        return self._baseline_scaling.get((property_id, zone_id))
 
     async def async_add_zone(self, profile: CommissionedZoneProfile) -> bool:
         """Durably add a new canonical zone before exposing it in memory."""
@@ -183,6 +225,7 @@ class LandscapeIntelligenceManager:
         resolution = self._factor_resolutions.get(_key(commissioned))
         compatibility = assess_delivery_compatibility(commissioned)
         assessment = assess_commissioning(commissioned)
+        baseline_scaling = self._baseline_scaling.get(_key(commissioned))
         resolved_conflict_ids = {
             item.conflict_id for item in commissioned.conflict_resolutions
         }
@@ -207,6 +250,9 @@ class LandscapeIntelligenceManager:
                 item.state.value == "ready" for item in assessment.purpose_readiness
             ),
             "commissioning_follow_up_count": len(assessment.follow_up_requirements),
+            "baseline_scaling_status": (
+                None if baseline_scaling is None else baseline_scaling.status.value
+            ),
             "execution_authorized": False,
             "live_control_authorized": False,
         }
@@ -243,6 +289,11 @@ class LandscapeIntelligenceManager:
                         advisory.code for advisory in compatibility.advisories
                     ],
                     "commissioning_assessment": assessment.to_dict(),
+                    "baseline_environmental_scaling": (
+                        None
+                        if (scaling := self._baseline_scaling.get(_key(zone))) is None
+                        else scaling.to_dict()
+                    ),
                 }
             )
         zone1_resolution = self._factor_resolutions.get(_ZONE1_KEY)
@@ -290,6 +341,7 @@ class LandscapeIntelligenceManager:
             )
         )
         self._refresh_factor_resolutions()
+        self._baseline_scaling = {}
         self.last_persistence_error = None
         return True
 

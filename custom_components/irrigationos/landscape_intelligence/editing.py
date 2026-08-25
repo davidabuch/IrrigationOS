@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 
 from .admission import CommissioningAssessment, assess_commissioning
+from .baseline_scaling import BaselineEnvironmentalScalingAssessment
 from .commissioning import (
     CanonicalZoneIdentity,
     CommissionedZoneProfile,
@@ -87,6 +88,7 @@ class CommissionedZoneReview(SerializableCommissioningModel):
     advisories: tuple[DeliveryAdvisory, ...]
     recent_landscape_events: tuple[LandscapeChangeEvent, ...]
     commissioning_assessment: CommissioningAssessment
+    baseline_scaling_assessment: BaselineEnvironmentalScalingAssessment | None = None
     execution_authorized: bool = False
     live_control_authorized: bool = False
 
@@ -177,6 +179,7 @@ def build_commissioning_review(
     profile: CommissionedZoneProfile,
     *,
     recent_event_limit: int = 10,
+    baseline_scaling_assessment: BaselineEnvironmentalScalingAssessment | None = None,
 ) -> CommissionedZoneReview:
     """Build one bounded deterministic review without mutating evidence."""
     if not 1 <= recent_event_limit <= 20:
@@ -220,6 +223,7 @@ def build_commissioning_review(
         advisories=compatibility.advisories,
         recent_landscape_events=profile.landscape_events[-recent_event_limit:],
         commissioning_assessment=assess_commissioning(profile),
+        baseline_scaling_assessment=baseline_scaling_assessment,
     )
 
 

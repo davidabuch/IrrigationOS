@@ -99,6 +99,8 @@
           "commissioning_baseline_minutes": "Baseline runtime in minutes",
           "commissioning_reference_temperature_f": "Reference outdoor temperature (°F)",
           "commissioning_recent_rain_mm": "Recent rain in reference condition (mm)",
+          "commissioning_reference_et0_mm": "Reference ET₀ for the calibration period (mm, optional)",
+          "commissioning_reference_period_hours": "Reference ET₀ period (hours)",
           "commissioning_assessment_id": "Approved structured assessment ID",
           "commissioning_evidence_ids": "Structured evidence IDs, comma-separated",
           "commissioning_ai_plant_name": "Visually inferred plant name",
@@ -189,7 +191,9 @@
           "commissioning_baseline_action": "Baseline action",
           "commissioning_baseline_minutes": "Baseline runtime in minutes",
           "commissioning_reference_temperature_f": "Reference outdoor temperature (°F)",
-          "commissioning_recent_rain_mm": "Recent rain in reference condition (mm)"
+          "commissioning_recent_rain_mm": "Recent rain in reference condition (mm)",
+          "commissioning_reference_et0_mm": "Reference ET₀ for the calibration period (mm, optional)",
+          "commissioning_reference_period_hours": "Reference ET₀ period (hours)"
         }
       },
       "commissioning_conflict_select": {

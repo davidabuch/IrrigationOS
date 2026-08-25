@@ -15,6 +15,7 @@ from .models import (
     WaterBalanceState,
     WaterQuantity,
 )
+from .precipitation import apply_effective_precipitation_policy
 
 BALANCE_VALIDITY = timedelta(minutes=15)
 
@@ -56,11 +57,8 @@ def calculate_production_area_water_balance(
         reasons.add("quantified_irrigation_credit_applied")
 
     demand = _multiply(request.reference_et_mm, request.plant_factor)
-    effective_observed = _effective_precipitation(
-        request.observed_precipitation_mm,
-        None
-        if request.effective_precipitation_policy is None
-        else request.effective_precipitation_policy.effective_fraction,
+    effective_observed = apply_effective_precipitation_policy(
+        request.observed_precipitation_mm, request.effective_precipitation_policy
     )
     prior = _unresolved_deferral(request)
     opening_deferred = _opening_carry_forward(request)
@@ -73,17 +71,13 @@ def calculate_production_area_water_balance(
     if blockers:
         actual = None
 
-    forecast_effective = _effective_precipitation(
+    forecast_effective = apply_effective_precipitation_policy(
         None if request.forecast is None else request.forecast.precipitation_mm,
-        None
-        if request.effective_precipitation_policy is None
-        else request.effective_precipitation_policy.effective_fraction,
+        request.effective_precipitation_policy,
     )
-    effective_reconciliation_observed = _effective_precipitation(
+    effective_reconciliation_observed = apply_effective_precipitation_policy(
         request.forecast_window_observed_precipitation_mm,
-        None
-        if request.effective_precipitation_policy is None
-        else request.effective_precipitation_policy.effective_fraction,
+        request.effective_precipitation_policy,
     )
     reconciliation = _reconciliation_state(
         request, prior, effective_reconciliation_observed
@@ -368,16 +362,6 @@ def _scale(value: WaterQuantity | None, factor: float | None) -> WaterQuantity |
         return None
     low, typical, high = _bounds(value)
     return _from_bounds(low * factor, None if typical is None else typical * factor, high * factor)
-
-
-def _effective_precipitation(
-    value: WaterQuantity | None, factor: float | None
-) -> WaterQuantity | None:
-    if value is None:
-        return None
-    if _upper(value) == 0:
-        return WaterQuantity.millimeters(0)
-    return _scale(value, factor)
 
 
 def _add(left: WaterQuantity, right: WaterQuantity) -> WaterQuantity:
