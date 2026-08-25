@@ -1370,12 +1370,12 @@ def _commissioning_schema(
                     default=CommissioningEstablishmentState.UNKNOWN.value,
                 ): vol.In([item.value for item in CommissioningEstablishmentState]),
                 vol.Optional(CONF_COMMISSIONING_PLANTED_DATE, default=""): str,
-                vol.Optional(CONF_COMMISSIONING_CONTAINER_GALLONS, default=""): vol.Any(
-                    "", vol.Coerce(float)
-                ),
-                vol.Optional(CONF_COMMISSIONING_HEIGHT_FEET, default=""): vol.Any(
-                    "", vol.Coerce(float)
-                ),
+                _optional_numeric_field(
+                    CONF_COMMISSIONING_CONTAINER_GALLONS
+                ): vol.Coerce(float),
+                _optional_numeric_field(
+                    CONF_COMMISSIONING_HEIGHT_FEET
+                ): vol.Coerce(float),
             }
         )
     if mode is ZoneDemandSourceMode.USER_CALIBRATED_BASELINE:
@@ -1390,9 +1390,9 @@ def _commissioning_schema(
                 vol.Required(CONF_COMMISSIONING_RECENT_RAIN_MM, default=0): vol.All(
                     vol.Coerce(float), vol.Range(min=0)
                 ),
-                vol.Optional(CONF_COMMISSIONING_REFERENCE_ET0_MM, default=""): vol.Any(
-                    "", vol.All(vol.Coerce(float), vol.Range(min=0.001))
-                ),
+                _optional_numeric_field(
+                    CONF_COMMISSIONING_REFERENCE_ET0_MM
+                ): vol.All(vol.Coerce(float), vol.Range(min=0.001)),
                 vol.Required(
                     CONF_COMMISSIONING_REFERENCE_PERIOD_HOURS, default=24
                 ): vol.All(vol.Coerce(int), vol.Range(min=1, max=168)),
@@ -1445,6 +1445,15 @@ def _optional_form_float(values: dict[str, Any], key: str) -> float | None:
     if number <= 0:
         raise ValueError(f"{key} must be positive")
     return number
+
+
+def _optional_numeric_field(
+    key: str, default: int | float | None = None
+) -> vol.Optional:
+    """Return a serializable optional numeric marker with an optional default."""
+    if default is None:
+        return vol.Optional(key)
+    return vol.Optional(key, default=default)
 
 
 def _planting_datetime(
@@ -1600,7 +1609,7 @@ def _commissioning_plant_schema(
     planted_date = ""
     if details is not None and details.planted_at is not None:
         planted_date = details.planted_at.date().isoformat()
-    height_feet: str | float = ""
+    height_feet: float | None = None
     if details is not None and details.current_height_meters is not None:
         height_feet = details.current_height_meters / 0.3048
     return vol.Schema(
@@ -1632,17 +1641,13 @@ def _commissioning_plant_schema(
             vol.Optional(
                 CONF_COMMISSIONING_PLANTED_DATE, default=planted_date
             ): str,
-            vol.Optional(
+            _optional_numeric_field(
                 CONF_COMMISSIONING_CONTAINER_GALLONS,
-                default=(
-                    ""
-                    if details is None or details.source_container_gallons is None
-                    else details.source_container_gallons
-                ),
-            ): vol.Any("", vol.Coerce(float)),
-            vol.Optional(
-                CONF_COMMISSIONING_HEIGHT_FEET, default=height_feet
-            ): vol.Any("", vol.Coerce(float)),
+                None if details is None else details.source_container_gallons,
+            ): vol.Coerce(float),
+            _optional_numeric_field(
+                CONF_COMMISSIONING_HEIGHT_FEET, height_feet
+            ): vol.Coerce(float),
             vol.Required(
                 CONF_COMMISSIONING_DIRECT_IRRIGATION,
                 default=True if group is None else group.direct_irrigation,
@@ -1875,14 +1880,14 @@ def _commissioning_baseline_schema(
                     else existing.reference_recent_precipitation_mm
                 ),
             ): vol.All(vol.Coerce(float), vol.Range(min=0)),
-            vol.Optional(
+            _optional_numeric_field(
                 CONF_COMMISSIONING_REFERENCE_ET0_MM,
-                default=(
-                    ""
+                (
+                    None
                     if existing is None or existing.environmental_reference is None
                     else existing.environmental_reference.reference_et0_mm
                 ),
-            ): vol.Any("", vol.All(vol.Coerce(float), vol.Range(min=0.001))),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0.001)),
             vol.Required(
                 CONF_COMMISSIONING_REFERENCE_PERIOD_HOURS,
                 default=(
@@ -1942,11 +1947,11 @@ def _commissioning_delivery_calibration_schema(
                     FlowBasis.PER_EMITTER.value: "Per physical emitter",
                 }
             ),
-            vol.Optional(CONF_COMMISSIONING_FLOW_LPH, default=""): vol.Any(
-                "", vol.All(vol.Coerce(float), vol.Range(min=0.000001))
+            _optional_numeric_field(CONF_COMMISSIONING_FLOW_LPH): vol.All(
+                vol.Coerce(float), vol.Range(min=0.000001)
             ),
-            vol.Optional(CONF_COMMISSIONING_COLLECTED_VOLUME, default=""): vol.Any(
-                "", vol.All(vol.Coerce(float), vol.Range(min=0.000001))
+            _optional_numeric_field(CONF_COMMISSIONING_COLLECTED_VOLUME): vol.All(
+                vol.Coerce(float), vol.Range(min=0.000001)
             ),
             vol.Optional(
                 CONF_COMMISSIONING_COLLECTED_VOLUME_UNIT, default=""
@@ -1958,11 +1963,11 @@ def _commissioning_delivery_calibration_schema(
                     MeasurementUnit.US_GALLONS.value: "US gallons",
                 }
             ),
-            vol.Optional(CONF_COMMISSIONING_COLLECTION_DURATION, default=""): vol.Any(
-                "", vol.All(vol.Coerce(int), vol.Range(min=1, max=86400))
+            _optional_numeric_field(CONF_COMMISSIONING_COLLECTION_DURATION): vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=86400)
             ),
-            vol.Optional(CONF_COMMISSIONING_RADIUS_METERS, default=""): vol.Any(
-                "", vol.All(vol.Coerce(float), vol.Range(min=0.000001))
+            _optional_numeric_field(CONF_COMMISSIONING_RADIUS_METERS): vol.All(
+                vol.Coerce(float), vol.Range(min=0.000001)
             ),
             vol.Required(
                 CONF_COMMISSIONING_DEDICATED_EMITTER,

@@ -1,3 +1,12 @@
+## [1.0.58] - 2026-08-24
+
+### Fixed
+- Commissioning delivery-calibration and related optional numeric forms now serialize through Home Assistant's config-flow boundary instead of using unsupported blank-string/number unions.
+- The Zone 1 Podocarpus plant-selection transition now opens the delivery-calibration form successfully.
+
+### Safety
+- This hotfix changes form serialization only. Calibration remains evidence-only and all execution and live-control authorization boundaries remain unchanged.
+
 ## [1.0.57] - 2026-08-24
 
 ### Added
