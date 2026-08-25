@@ -13,6 +13,7 @@ from .commissioning import (
     DeactivatedCommissionedZone,
     assess_delivery_compatibility,
 )
+from .editing import CommissionedZoneReview, build_commissioning_review
 from .factor_resolution import ZoneFactorResolution, resolve_zone_factor
 from .models import HealthState, LandscapeIntelligenceProfile, summarize_health
 from .persistence import (
@@ -110,6 +111,13 @@ class LandscapeIntelligenceManager:
         )
         return matches[0] if len(matches) == 1 else None
 
+    def review_zone(
+        self, property_id: str, zone_id: str
+    ) -> CommissionedZoneReview | None:
+        """Build a bounded detailed review for one active commissioned zone."""
+        profile = self.get_zone(property_id, zone_id)
+        return None if profile is None else build_commissioning_review(profile)
+
     async def async_add_zone(self, profile: CommissionedZoneProfile) -> bool:
         """Durably add a new canonical zone before exposing it in memory."""
         if self.get_zone(profile.identity.property_id, profile.identity.zone_id) is not None:
@@ -173,6 +181,9 @@ class LandscapeIntelligenceManager:
         ]
         resolution = self._factor_resolutions.get(_key(commissioned))
         compatibility = assess_delivery_compatibility(commissioned)
+        resolved_conflict_ids = {
+            item.conflict_id for item in commissioned.conflict_resolutions
+        }
         return {
             "schema_version": profile.schema_version,
             "hydrozone_type": profile.hydrozone_type.value,
@@ -184,7 +195,10 @@ class LandscapeIntelligenceManager:
                 None if resolution is None else resolution.status.value
             ),
             "landscape_factor_status": profile.landscape_factor_status,
-            "commissioning_conflict_count": len(commissioned.conflicts),
+            "commissioning_conflict_count": sum(
+                conflict.conflict_id not in resolved_conflict_ids
+                for conflict in commissioned.conflicts
+            ),
             "delivery_compatibility_state": compatibility.state.value,
             "execution_authorized": False,
             "live_control_authorized": False,
@@ -197,14 +211,25 @@ class LandscapeIntelligenceManager:
         summaries = []
         for zone in self._zones:
             compatibility = assess_delivery_compatibility(zone)
+            resolved_conflict_ids = {
+                item.conflict_id for item in zone.conflict_resolutions
+            }
+            unresolved_conflicts = tuple(
+                item
+                for item in zone.conflicts
+                if item.conflict_id not in resolved_conflict_ids
+            )
             summaries.append(
                 {
                     "identity": zone.identity.to_dict(),
                     "demand_source_modes": [
                         source.mode.value for source in zone.demand_sources
                     ],
-                    "conflict_count": len(zone.conflicts),
-                    "conflict_ids": [item.conflict_id for item in zone.conflicts],
+                    "conflict_count": len(unresolved_conflicts),
+                    "conflict_ids": [
+                        item.conflict_id for item in unresolved_conflicts
+                    ],
+                    "conflict_resolution_count": len(zone.conflict_resolutions),
                     "delivery_compatibility_state": compatibility.state.value,
                     "advisory_codes": [
                         advisory.code for advisory in compatibility.advisories

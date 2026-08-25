@@ -245,7 +245,7 @@ def test_schema_two_round_trip_and_deterministic_multi_property_order() -> None:
     )
     restored = P.restore_store_payload(payload, fallback_zone1=zone1)
 
-    assert payload["commissioning_store_schema_version"] == 2
+    assert payload["commissioning_store_schema_version"] == 3
     assert tuple(
         (zone.identity.property_id, zone.identity.zone_id) for zone in restored.zones
     ) == (
@@ -309,3 +309,22 @@ def test_legacy_and_v1052_payloads_migrate_without_zone1_evidence_loss() -> None
     assert v1052.zones[0].landscape_profile == zone1.landscape_profile
     assert v1052.zones[1].identity.zone_id == "zone.2"
     assert v1052.zones[1].plant_details[0].source_container_gallons == 5
+
+    v1053_zone = deepcopy(_manual_zone().to_dict())
+    v1053_zone["schema_version"] = 2
+    v1053_zone.pop("conflict_resolutions", None)
+    v1053 = P.restore_store_payload(
+        {
+            "schema_version": 1,
+            "commissioning_store_schema_version": 2,
+            "zone_1": legacy_profile,
+            "commissioned_zones": [v1053_zone],
+        },
+        fallback_zone1=zone1,
+    )
+    assert v1053.migration_required is True
+    migrated_zone = next(
+        zone for zone in v1053.zones if zone.identity.zone_id == "zone.2"
+    )
+    assert migrated_zone.schema_version == C.ZONE_COMMISSIONING_SCHEMA_VERSION
+    assert migrated_zone.conflict_resolutions == ()

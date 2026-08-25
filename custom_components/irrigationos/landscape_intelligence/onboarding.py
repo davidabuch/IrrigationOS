@@ -346,7 +346,10 @@ def _updated_source(
     has_baseline = source.calibrated_baseline is not None
     kind_count = sum((has_plants, has_visual, has_baseline))
     if kind_count == 0:
-        return None
+        return ZoneDemandSource(
+            source.source_id,
+            ZoneDemandSourceMode.UNRESOLVED,
+        )
     if kind_count >= 2:
         mode = ZoneDemandSourceMode.HYBRID
     elif has_visual:
@@ -414,7 +417,7 @@ def map_landscape_changes(
         )
         links[group.plant_group_id] = link
         sources = (
-            *sources,
+            *(source for source in sources if source.mode is not ZoneDemandSourceMode.UNRESOLVED),
             ZoneDemandSource(
                 f"{addition.event_id}.source.manual",
                 ZoneDemandSourceMode.MANUAL_PLANT_PROFILE,
@@ -429,9 +432,6 @@ def map_landscape_changes(
                 LandscapePlantSnapshot(group, detail),
             )
         )
-    if not sources:
-        raise ValueError("landscape change cannot remove all current demand evidence")
-
     ordered_groups = tuple(groups[key] for key in sorted(groups))
     landscape = profile.landscape_profile
     updated_landscape = LandscapeIntelligenceProfile(
@@ -460,15 +460,21 @@ def map_landscape_changes(
         "unresolved",
         "unresolved",
     )
+    retained_conflicts = tuple(
+        conflict
+        for conflict in profile.conflicts
+        if conflict.plant_group_id in groups
+    )
+    retained_conflict_ids = {conflict.conflict_id for conflict in retained_conflicts}
     return CommissionedZoneProfile(
-        ZONE_COMMISSIONING_SCHEMA_VERSION,
-        profile.identity,
-        profile.display_name,
-        updated_landscape,
-        tuple(details[key] for key in sorted(details)),
-        tuple(sorted(sources, key=lambda source: source.source_id)),
-        tuple(links[key] for key in sorted(links)),
-        tuple(
+        schema_version=ZONE_COMMISSIONING_SCHEMA_VERSION,
+        identity=profile.identity,
+        display_name=profile.display_name,
+        landscape_profile=updated_landscape,
+        plant_details=tuple(details[key] for key in sorted(details)),
+        demand_sources=tuple(sorted(sources, key=lambda source: source.source_id)),
+        delivery_links=tuple(links[key] for key in sorted(links)),
+        landscape_events=tuple(
             sorted(
                 events,
                 key=lambda event: (
@@ -480,9 +486,10 @@ def map_landscape_changes(
                 ),
             )
         ),
-        tuple(
-            conflict
-            for conflict in profile.conflicts
-            if conflict.plant_group_id in groups
+        conflicts=retained_conflicts,
+        conflict_resolutions=tuple(
+            resolution
+            for resolution in profile.conflict_resolutions
+            if resolution.conflict_id in retained_conflict_ids
         ),
     )
