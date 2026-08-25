@@ -207,6 +207,19 @@ def calibrate_delivery_component(
         ),
         clogging_risk=_unknown_fact(request.observed_at, CloggingRisk),
         calibration_ids=calibration_ids,
+        approximate_flow_range=(
+            None if prior_component is None else prior_component.approximate_flow_range
+        ),
+        emitter_class=None if prior_component is None else prior_component.emitter_class,
+        plants_per_emitter=(
+            None if prior_component is None else prior_component.plants_per_emitter
+        ),
+        visual_assessment_ids=(
+            () if prior_component is None else prior_component.visual_assessment_ids
+        ),
+        visual_evidence_ids=(
+            () if prior_component is None else prior_component.visual_evidence_ids
+        ),
     )
     prior_components = () if existing_profile is None else existing_profile.components
     components = tuple(

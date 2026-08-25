@@ -42,7 +42,7 @@ from .models import (
     PlantHealthObservation,
 )
 
-COMMISSIONING_STORE_SCHEMA_VERSION = 5
+COMMISSIONING_STORE_SCHEMA_VERSION = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -430,7 +430,7 @@ def restore_store_payload(
     if int(item.get("schema_version", 1)) != 1:
         raise ValueError("legacy landscape intelligence schema is unsupported")
     payload_schema = int(item.get("commissioning_store_schema_version", 1))
-    if payload_schema not in {1, 2, 3, 4, COMMISSIONING_STORE_SCHEMA_VERSION}:
+    if payload_schema not in {1, 2, 3, 4, 5, COMMISSIONING_STORE_SCHEMA_VERSION}:
         raise ValueError("commissioning Store schema is unsupported")
     if (
         payload_schema == COMMISSIONING_STORE_SCHEMA_VERSION

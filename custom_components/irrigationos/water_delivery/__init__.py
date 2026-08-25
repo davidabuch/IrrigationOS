@@ -6,6 +6,7 @@ from .calibration import (
     derive_collected_volume_flow_liters_per_hour,
 )
 from .models import (
+    ApproximateFlowRange,
     AreaUnit,
     CalibrationMeasurement,
     CalibrationMeasurementType,
@@ -28,6 +29,7 @@ from .models import (
 )
 
 __all__ = [
+    "ApproximateFlowRange",
     "AreaUnit",
     "CalibrationMeasurement",
     "CalibrationMeasurementType",

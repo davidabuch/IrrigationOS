@@ -223,6 +223,29 @@ class SerializableWaterDeliveryModel:
 
 
 @dataclass(frozen=True, slots=True)
+class ApproximateFlowRange(SerializableWaterDeliveryModel):
+    """Provider-neutral approximate flow evidence without false precision."""
+
+    minimum_liters_per_hour: float
+    maximum_liters_per_hour: float
+    reference_id: str
+    confidence: float
+    provenance: DeliveryProvenance
+    assessed_at: datetime
+
+    def __post_init__(self) -> None:
+        _validate_number("minimum_liters_per_hour", self.minimum_liters_per_hour, minimum=0)
+        _validate_number("maximum_liters_per_hour", self.maximum_liters_per_hour, minimum=0)
+        if self.minimum_liters_per_hour <= 0:
+            raise ValueError("minimum_liters_per_hour must be positive")
+        if self.maximum_liters_per_hour < self.minimum_liters_per_hour:
+            raise ValueError("flow range maximum cannot be below minimum")
+        _validate_identifier("reference_id", self.reference_id)
+        _validate_confidence(self.confidence)
+        _validate_timestamp("assessed_at", self.assessed_at)
+
+
+@dataclass(frozen=True, slots=True)
 class DeliveryProvenance(SerializableWaterDeliveryModel):
     """Provider- and controller-neutral origin of a delivery fact."""
 
@@ -457,6 +480,11 @@ class DeliveryComponent(SerializableWaterDeliveryModel):
     served_area_unit: AreaUnit | None = None
     manufacturer: str | None = None
     model: str | None = None
+    approximate_flow_range: ApproximateFlowRange | None = None
+    emitter_class: str | None = None
+    plants_per_emitter: int | None = None
+    visual_assessment_ids: tuple[str, ...] = ()
+    visual_evidence_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _validate_identifier("component_id", self.component_id)
@@ -498,6 +526,16 @@ class DeliveryComponent(SerializableWaterDeliveryModel):
         for name, value in (("manufacturer", self.manufacturer), ("model", self.model)):
             if value is not None:
                 _validate_text(name, value)
+        if self.emitter_class is not None:
+            _validate_text("emitter_class", self.emitter_class)
+        if self.plants_per_emitter is not None and (
+                isinstance(self.plants_per_emitter, bool)
+                or not isinstance(self.plants_per_emitter, int)
+                or self.plants_per_emitter <= 0
+        ):
+            raise ValueError("plants_per_emitter must be a positive integer")
+        _validate_unique_ids("visual_assessment_ids", self.visual_assessment_ids)
+        _validate_unique_ids("visual_evidence_ids", self.visual_evidence_ids)
 
     @property
     def preferred_flow_liters_per_hour(self) -> float | None:

@@ -22,7 +22,7 @@ from .models import (
     PlantGroup,
 )
 
-ZONE_COMMISSIONING_SCHEMA_VERSION = 5
+ZONE_COMMISSIONING_SCHEMA_VERSION = 6
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 

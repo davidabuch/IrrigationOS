@@ -1,5 +1,12 @@
 # IrrigationOS Roadmap
 
+## v1.0.59 — Conversational & Photo-Assisted Commissioning Foundation
+
+- Adds a simple plain-language setup with review and explicit confirmation while preserving advanced expert workflows.
+- Fuses user-confirmed and approved structured visual findings into existing canonical models.
+- Preserves ranges, provenance, uncertainty, conflicts, and materiality-ranked questions without false precision.
+- Adds no external AI call, raw-image persistence, scheduler behavior, controller write, retry, or authority.
+
 ## v1.0.58 — Options-Flow Numeric Schema Hotfix
 
 - Uses Home Assistant-serializable optional numeric schemas throughout generic commissioning forms.
@@ -96,7 +103,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.58
+- **Installable Home Assistant release:** v1.0.59
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority

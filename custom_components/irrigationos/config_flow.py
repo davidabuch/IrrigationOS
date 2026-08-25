@@ -52,7 +52,10 @@ from .landscape_intelligence import (
     CommissionedZoneProfile,
     Confidence,
     ConflictResolutionInput,
+    ConversationalCommissioningIntake,
+    ConversationalCommissioningProposal,
     DeliveryLinkStatus,
+    DeliverySharing,
     IrrigationDeliveryLink,
     IrrigationRole,
     PlantAdditionInput,
@@ -60,12 +63,15 @@ from .landscape_intelligence import (
     PlantEditInput,
     PlantGroup,
     PlantRemovalInput,
+    SimpleDeliveryDescription,
+    SimplePlantDescription,
     UserCalibratedBaseline,
     ZoneDemandSourceMode,
     add_plant_group,
     apply_baseline_reference_capture,
     assess_commissioning,
     build_commissioning_review,
+    build_conversational_commissioning_proposal,
     capture_baseline_environmental_reference,
     edit_plant_group,
     remove_calibrated_baseline,
@@ -93,6 +99,7 @@ from .water_delivery import (
     DeliveryEvidenceLevel,
     FlowBasis,
     MeasurementUnit,
+    SprayPattern,
     WaterDeliveryProfile,
     WaterDeliveryType,
     calibrate_delivery_component,
@@ -172,6 +179,18 @@ CONF_COMMISSIONING_COLLECTED_VOLUME_UNIT = (
 )
 CONF_COMMISSIONING_COLLECTION_DURATION = "commissioning_collection_duration_seconds"
 CONF_COMMISSIONING_RADIUS_METERS = "commissioning_radius_meters"
+CONF_SIMPLE_DESCRIPTION = "simple_description"
+CONF_SIMPLE_PLANT_NAME = "simple_plant_name"
+CONF_SIMPLE_PLANTED_DATE = "simple_planted_date"
+CONF_SIMPLE_CONTAINER_GALLONS = "simple_container_gallons"
+CONF_SIMPLE_HEIGHT_FEET = "simple_height_feet"
+CONF_SIMPLE_DELIVERY_TYPE = "simple_delivery_type"
+CONF_SIMPLE_EMITTER_CLASS = "simple_emitter_class"
+CONF_SIMPLE_THROW_FEET = "simple_throw_feet"
+CONF_SIMPLE_SPRAY_PATTERN = "simple_spray_pattern"
+CONF_SIMPLE_SHARING = "simple_sharing"
+CONF_SIMPLE_PLANTS_PER_EMITTER = "simple_plants_per_emitter"
+CONF_SIMPLE_CONFIRM = "simple_confirm"
 
 STEP_USER_SCHEMA = vol.Schema(
     {
@@ -318,6 +337,7 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
         self._review_plant_group_id: str | None = None
         self._review_plant_action: str | None = None
         self._review_conflict_id: str | None = None
+        self._simple_proposal: ConversationalCommissioningProposal | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -330,6 +350,8 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 return await self.async_step_landscape()
             if action == "commissioning":
                 return await self.async_step_commissioning()
+            if action == "commissioning_simple":
+                return await self.async_step_commissioning_simple()
             if action == "commissioning_review":
                 return await self.async_step_commissioning_review_select()
             return await self.async_step_first_live_trial()
@@ -341,12 +363,114 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                         {
                             "landscape": "Edit Landscape Digital Twin",
                             "commissioning": "Commission generic zone knowledge",
+                            "commissioning_simple": "Simple guided zone setup",
                             "commissioning_review": "Review or edit commissioned zones",
                             "first_live_trial": "Run supervised first-live watering trial",
                         }
                     )
                 }
             ),
+        )
+
+    async def async_step_commissioning_simple(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Select an uncommissioned canonical target for simple guided setup."""
+        choices: dict[str, str] = {}
+        manager = self.config_entry.runtime_data.landscape_intelligence
+        for controller_slot, controller in enumerate(
+            self.config_entry.runtime_data.data.controllers, start=1
+        ):
+            for area in controller.areas:
+                if (
+                    area.configured
+                    and area.enabled
+                    and area.binding is not None
+                    and manager.get_zone_by_slots(controller_slot, area.slot_number) is None
+                ):
+                    choices[f"{controller_slot}|{area.slot_number}"] = (
+                        area.vendor_name or area.name
+                    )
+        if not choices:
+            return self.async_abort(reason="no_areas")
+        if user_input is not None:
+            selected = str(user_input[CONF_COMMISSIONING_TARGET])
+            controller, area = selected.split("|", 1)
+            self._commissioning_controller_slot = int(controller)
+            self._commissioning_area_slot = int(area)
+            self._commissioning_area_name = choices[selected]
+            return await self.async_step_commissioning_simple_input()
+        return self.async_show_form(
+            step_id="commissioning_simple",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_COMMISSIONING_TARGET): vol.In(choices)}
+            ),
+        )
+
+    async def async_step_commissioning_simple_input(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Collect understandable observations and build a reviewable candidate."""
+        if self._commissioning_controller_slot is None or self._commissioning_area_slot is None:
+            return await self.async_step_commissioning_simple()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                self._simple_proposal = _map_simple_commissioning_form(
+                    user_input,
+                    controller_slot=self._commissioning_controller_slot,
+                    area_slot=self._commissioning_area_slot,
+                    zone_name=self._commissioning_area_name
+                    or f"Zone {self._commissioning_area_slot}",
+                    now=datetime.now(UTC),
+                    timezone=ZoneInfo(self.hass.config.time_zone),
+                )
+            except (KeyError, TypeError, ValueError):
+                errors["base"] = "invalid_commissioning_input"
+            else:
+                return await self.async_step_commissioning_simple_review()
+        return self.async_show_form(
+            step_id="commissioning_simple_input",
+            data_schema=_simple_commissioning_schema(),
+            errors=errors,
+        )
+
+    async def async_step_commissioning_simple_review(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Require explicit confirmation before atomically persisting canonical evidence."""
+        proposal = self._simple_proposal
+        if proposal is None:
+            return await self.async_step_commissioning_simple_input()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if not bool(user_input[CONF_SIMPLE_CONFIRM]):
+                errors["base"] = "confirmation_required"
+            else:
+                manager = self.config_entry.runtime_data.landscape_intelligence
+                if proposal.delivery_profile is None:
+                    saved = await manager.async_add_zone(proposal.zone_profile)
+                else:
+                    saved = await manager.async_add_zone_and_delivery_profile(
+                        proposal.zone_profile, proposal.delivery_profile
+                    )
+                if saved:
+                    return self.async_create_entry(
+                        title="", data=dict(self.config_entry.options)
+                    )
+                errors["base"] = "commissioning_persistence_failed"
+        questions = " | ".join(
+            item.question for item in proposal.follow_up_questions
+        ) or "No additional information is required for this commissioning record."
+        return self.async_show_form(
+            step_id="commissioning_simple_review",
+            data_schema=vol.Schema({vol.Required(CONF_SIMPLE_CONFIRM, default=False): bool}),
+            errors=errors,
+            description_placeholders={
+                "understood": " | ".join(proposal.summary),
+                "questions": questions,
+                "authority": "Advisory evidence only; watering is not authorized.",
+            },
         )
 
     async def async_step_commissioning(
@@ -1423,6 +1547,97 @@ def _commissioning_schema(
             }
         )
     return vol.Schema(fields)
+
+
+def _simple_commissioning_schema() -> vol.Schema:
+    """Return the serializable plain-language simple commissioning form."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_SIMPLE_DESCRIPTION): str,
+            vol.Required(CONF_SIMPLE_PLANT_NAME): str,
+            vol.Optional(CONF_SIMPLE_PLANTED_DATE, default=""): str,
+            _optional_numeric_field(CONF_SIMPLE_CONTAINER_GALLONS): vol.Coerce(float),
+            _optional_numeric_field(CONF_SIMPLE_HEIGHT_FEET): vol.Coerce(float),
+            vol.Required(
+                CONF_SIMPLE_DELIVERY_TYPE, default=WaterDeliveryType.UNKNOWN.value
+            ): vol.In([item.value for item in WaterDeliveryType]),
+            vol.Optional(CONF_SIMPLE_EMITTER_CLASS, default=""): str,
+            _optional_numeric_field(CONF_SIMPLE_THROW_FEET): vol.Coerce(float),
+            vol.Required(
+                CONF_SIMPLE_SPRAY_PATTERN, default=SprayPattern.UNKNOWN.value
+            ): vol.In([item.value for item in SprayPattern]),
+            vol.Required(CONF_SIMPLE_SHARING, default=DeliverySharing.UNKNOWN.value): vol.In(
+                [item.value for item in DeliverySharing]
+            ),
+            _optional_numeric_field(CONF_SIMPLE_PLANTS_PER_EMITTER): vol.Coerce(int),
+        }
+    )
+
+
+def _map_simple_commissioning_form(
+    values: dict[str, Any],
+    *,
+    controller_slot: int,
+    area_slot: int,
+    zone_name: str,
+    now: datetime,
+    timezone: ZoneInfo,
+) -> ConversationalCommissioningProposal:
+    """Map simple HA fields without exposing or requiring canonical IDs."""
+    zone_id = f"zone.{area_slot}" if controller_slot == 1 else f"zone.{controller_slot}.{area_slot}"
+    planted_at = _planting_datetime(
+        {CONF_COMMISSIONING_PLANTED_DATE: values.get(CONF_SIMPLE_PLANTED_DATE, "")},
+        timezone,
+    )
+    height_feet = _optional_form_float(values, CONF_SIMPLE_HEIGHT_FEET)
+    delivery_type = WaterDeliveryType(str(values[CONF_SIMPLE_DELIVERY_TYPE]))
+    throw_feet = _optional_form_float(values, CONF_SIMPLE_THROW_FEET)
+    plants_per_emitter = values.get(CONF_SIMPLE_PLANTS_PER_EMITTER)
+    if plants_per_emitter is None or plants_per_emitter == "":
+        plants = None
+    else:
+        if isinstance(plants_per_emitter, bool) or not isinstance(
+            plants_per_emitter, str | int | float
+        ):
+            raise ValueError("plants per emitter must be numeric")
+        plants = int(plants_per_emitter)
+        if plants <= 0:
+            raise ValueError("plants per emitter must be positive")
+    delivery = None
+    if delivery_type is not WaterDeliveryType.UNKNOWN:
+        delivery = SimpleDeliveryDescription(
+            delivery_type,
+            now,
+            emitter_class=_optional_form_text(values, CONF_SIMPLE_EMITTER_CLASS),
+            throw_min_meters=None if throw_feet is None else throw_feet * 0.3048,
+            throw_max_meters=None if throw_feet is None else throw_feet * 0.3048,
+            spray_pattern=SprayPattern(str(values[CONF_SIMPLE_SPRAY_PATTERN])),
+            sharing=DeliverySharing(str(values[CONF_SIMPLE_SHARING])),
+            plants_per_emitter=plants,
+        )
+    return build_conversational_commissioning_proposal(
+        ConversationalCommissioningIntake(
+            CanonicalZoneIdentity("property.primary", zone_id, controller_slot, area_slot),
+            zone_name,
+            str(values[CONF_SIMPLE_DESCRIPTION]).strip(),
+            now,
+            plant=SimplePlantDescription(
+                str(values[CONF_SIMPLE_PLANT_NAME]).strip(),
+                now,
+                planted_at=planted_at,
+                source_container_gallons=_optional_form_float(
+                    values, CONF_SIMPLE_CONTAINER_GALLONS
+                ),
+                current_height_meters=None if height_feet is None else height_feet * 0.3048,
+                establishment_state=(
+                    CommissioningEstablishmentState.ESTABLISHING
+                    if planted_at is not None
+                    else CommissioningEstablishmentState.UNKNOWN
+                ),
+            ),
+            delivery=delivery,
+        )
+    )
 
 
 def _optional_form_text(values: dict[str, Any], key: str) -> str | None:

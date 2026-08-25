@@ -83,6 +83,33 @@
           "commissioning_mode": "Onboarding mode"
         }
       },
+      "commissioning_simple": {
+        "title": "Simple guided zone setup",
+        "description": "Choose an irrigation area. You will describe it in ordinary language; IrrigationOS will create canonical evidence for review before saving.",
+        "data": {"commissioning_target": "Irrigation area"}
+      },
+      "commissioning_simple_input": {
+        "title": "Tell us about this zone",
+        "description": "Describe what you know. Approximate observations are welcome; unknown values remain unknown and this cannot water the zone.",
+        "data": {
+          "simple_description": "Describe the plants and how they are watered",
+          "simple_plant_name": "Plant or plant-group name",
+          "simple_planted_date": "About when was it planted? YYYY-MM-DD (optional)",
+          "simple_container_gallons": "Original container size in gallons (optional)",
+          "simple_height_feet": "Approximate current height in feet (optional)",
+          "simple_delivery_type": "How is it watered?",
+          "simple_emitter_class": "Emitter color or class (optional)",
+          "simple_throw_feet": "Approximate spray distance in feet (optional)",
+          "simple_spray_pattern": "Spray pattern",
+          "simple_sharing": "Does delivery serve one plant or several?",
+          "simple_plants_per_emitter": "Plants served by one emitter (optional)"
+        }
+      },
+      "commissioning_simple_review": {
+        "title": "Review what IrrigationOS understood",
+        "description": "{understood}\n\nFollow-up: {questions}\n\n{authority}",
+        "data": {"simple_confirm": "Confirm and save this evidence"}
+      },
       "commissioning_input": {
         "title": "Record commissioned zone evidence",
         "description": "Save structured zone evidence. Baseline values are not weather-scaled, visual records must already be approved, conflicts remain unresolved, and no execution authority is granted.",

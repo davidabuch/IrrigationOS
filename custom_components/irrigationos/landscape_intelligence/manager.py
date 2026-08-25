@@ -218,6 +218,25 @@ class LandscapeIntelligenceManager:
             delivery_profiles=(*profiles, delivery_profile),
         )
 
+    async def async_add_zone_and_delivery_profile(
+        self,
+        zone: CommissionedZoneProfile,
+        delivery_profile: WaterDeliveryProfile,
+    ) -> bool:
+        """Atomically persist a new zone and linked delivery evidence before publication."""
+        if self.get_zone(zone.identity.property_id, zone.identity.zone_id) is not None:
+            return False
+        if any(
+            item.profile_id == delivery_profile.profile_id
+            for item in self._delivery_profiles
+        ):
+            return False
+        return await self._async_save(
+            (*self._zones, zone),
+            self._deactivated_zones,
+            delivery_profiles=(*self._delivery_profiles, delivery_profile),
+        )
+
     async def async_deactivate_zone(
         self,
         property_id: str,
