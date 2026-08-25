@@ -349,7 +349,7 @@ def test_derived_assessment_needs_no_persistence_schema_change() -> None:
         item for item in restored.zones if item.identity.zone_id == "zone.synthetic"
     )
 
-    assert P.COMMISSIONING_STORE_SCHEMA_VERSION == 3
+    assert P.COMMISSIONING_STORE_SCHEMA_VERSION == 4
     assert A.assess_commissioning(restored_profile) == before
     assert "commissioning_assessment" not in P.build_store_payload(
         (profile, zone1),

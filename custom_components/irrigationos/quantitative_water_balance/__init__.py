@@ -24,6 +24,7 @@ from .models import (
     WaterBalanceState,
     WaterQuantity,
 )
+from .precipitation import apply_effective_precipitation_policy
 from .weather_evidence import canonical_weather_balance_evidence
 
 __all__ = [
@@ -43,6 +44,7 @@ __all__ = [
     "WaterBalanceSnapshot",
     "WaterBalanceState",
     "WaterQuantity",
+    "apply_effective_precipitation_policy",
     "build_water_balance_snapshot",
     "calculate_production_area_water_balance",
     "canonical_weather_balance_evidence",

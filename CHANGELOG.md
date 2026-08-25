@@ -594,3 +594,16 @@ All notable changes to IrrigationOS will be documented here.
 - Repository quality tooling with pytest, Ruff, and MyPy
 - GitHub Actions CI and repository metadata validation
 - Architecture specification and contribution/security guidance
+## [1.0.56] - 2026-08-24
+
+### Added
+- Immutable advisory baseline-scaling assessments using normalized current and explicit reference-period FAO-56 ET₀ evidence.
+- Versioned scaling bounds, measured-precipitation hold, forecast hold, provenance, confidence, and fail-closed blocker reporting.
+- Optional durable reference ET₀ evidence with additive schema-3 migration and bounded commissioning review/diagnostics summaries.
+
+### Changed
+- Effective-precipitation transformation is shared with quantitative water balance instead of being reimplemented.
+- User-calibrated baseline review can retain an explicit ET₀ amount and period; 75°F remains calibration context and is never a temperature multiplier.
+
+### Safety
+- Advisory equivalent runtime is transient evidence only. Execution and Live authorization remain false, and no scheduler, command, transport, network, or retry path consumes it.

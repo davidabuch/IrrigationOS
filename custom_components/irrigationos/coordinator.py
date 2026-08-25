@@ -386,6 +386,11 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             raise UpdateFailed("IrrigationOS pipeline evaluation failed") from err
 
         await self.weather_evidence.async_refresh(self.last_successful_refresh)
+        self.landscape_intelligence.refresh_baseline_scaling(
+            observations=self.weather_evidence.observations,
+            forecast=self.weather_evidence.forecast,
+            generated_at=self.last_successful_refresh,
+        )
         self.water_balances = build_water_balance_snapshot(
             self.pipeline_evaluation,
             completed_sessions=self.observation_history.completed_sessions,

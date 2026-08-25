@@ -1,5 +1,12 @@
 # IrrigationOS Roadmap
 
+## v1.0.56 — Advisory Environmental Scaling for User-Calibrated Baselines
+
+- Compares current normalized FAO-56 ET₀ with explicit reference-period ET₀ evidence; temperature remains descriptive context, not a multiplier.
+- Applies a versioned 0.5–1.5 advisory envelope and preserves raw demand ratio separately from the bounded result.
+- Uses the existing effective-precipitation and forecast-admission policies for measured-rain and forecast-hold outcomes.
+- Adds no runtime bridge, scheduler behavior, controller write, retry, or execution authority.
+
 ## v1.0.55 — Commissioning Completeness & Evidence Admission Policy
 
 - Derives purpose-specific readiness from current active commissioned evidence.
@@ -76,11 +83,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.55
+- **Installable Home Assistant release:** v1.0.56
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
-- **Next milestone:** connect admitted baseline evidence to a scientifically versioned environmental-scaling assessment without inferring runtime authority
+- **Next milestone:** calibrate reference ET₀ and irrigation delivery through guided evidence before any advisory-to-execution bridge
 
 ## Delivery model
 

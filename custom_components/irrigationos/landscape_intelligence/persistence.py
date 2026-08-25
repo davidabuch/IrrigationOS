@@ -8,6 +8,7 @@ from typing import Any
 
 from .commissioning import (
     ZONE_COMMISSIONING_SCHEMA_VERSION,
+    BaselineEnvironmentalReference,
     CanonicalZoneIdentity,
     CommissionedZoneProfile,
     CommissioningConflictCandidate,
@@ -38,7 +39,7 @@ from .models import (
     PlantHealthObservation,
 )
 
-COMMISSIONING_STORE_SCHEMA_VERSION = 3
+COMMISSIONING_STORE_SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,6 +197,7 @@ def _plant_details(value: object) -> PlantCommissioningDetails:
 
 def _baseline(value: object) -> UserCalibratedBaseline:
     item = _mapping("calibrated baseline", value)
+    environmental_reference = item.get("environmental_reference")
     return UserCalibratedBaseline(
         runtime_seconds=int(item["runtime_seconds"]),
         reference_air_temperature_celsius=float(
@@ -206,6 +208,22 @@ def _baseline(value: object) -> UserCalibratedBaseline:
         ),
         reference_condition=str(item["reference_condition"]),
         calibrated_at=_datetime(item["calibrated_at"]),
+        confidence=Confidence(str(item["confidence"])),
+        environmental_reference=(
+            None
+            if environmental_reference is None
+            else _baseline_environmental_reference(environmental_reference)
+        ),
+    )
+
+
+def _baseline_environmental_reference(value: object) -> BaselineEnvironmentalReference:
+    item = _mapping("baseline environmental reference", value)
+    return BaselineEnvironmentalReference(
+        reference_et0_mm=float(item["reference_et0_mm"]),
+        period_hours=int(item["period_hours"]),
+        observed_at=_datetime(item["observed_at"]),
+        source=str(item["source"]),
         confidence=Confidence(str(item["confidence"])),
     )
 
@@ -297,10 +315,10 @@ def _conflict_resolution(value: object) -> CommissioningConflictResolution:
 
 
 def commissioned_zone_from_dict(value: object) -> CommissionedZoneProfile:
-    """Restore schema-1, schema-2, or schema-3 commissioned-zone data."""
+    """Restore supported commissioned-zone data through additive migration."""
     item = _mapping("commissioned zone", value)
     source_schema = int(item["schema_version"])
-    if source_schema not in {1, 2, ZONE_COMMISSIONING_SCHEMA_VERSION}:
+    if source_schema not in {1, 2, 3, ZONE_COMMISSIONING_SCHEMA_VERSION}:
         raise ValueError("commissioned zone schema is unsupported")
     identity = _mapping("canonical zone identity", item["identity"])
     return CommissionedZoneProfile(
@@ -391,7 +409,7 @@ def restore_store_payload(
     if int(item.get("schema_version", 1)) != 1:
         raise ValueError("legacy landscape intelligence schema is unsupported")
     payload_schema = int(item.get("commissioning_store_schema_version", 1))
-    if payload_schema not in {1, 2, COMMISSIONING_STORE_SCHEMA_VERSION}:
+    if payload_schema not in {1, 2, 3, COMMISSIONING_STORE_SCHEMA_VERSION}:
         raise ValueError("commissioning Store schema is unsupported")
     legacy_zone1 = _mapping("legacy zone_1", item["zone_1"])
     raw_zones = item.get("commissioned_zones")

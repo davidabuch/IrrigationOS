@@ -103,7 +103,7 @@ async def test_legacy_schema_one_zone1_store_migrates_additively(
 
     assert len(store.saved) == 1
     assert store.value is not None
-    assert store.value["commissioning_store_schema_version"] == 3
+    assert store.value["commissioning_store_schema_version"] == 4
     assert store.value["zone_1"] == old_zone1
     assert manager.zone1.area_slot == 1
     assert tuple(zone.identity.area_slot for zone in manager.commissioned_zones) == (1,)
@@ -203,7 +203,7 @@ async def test_diagnostics_are_canonical_compact_and_confidence_preserved(
     assert await manager.async_add_zone(_zone2())
 
     summary = manager.diagnostics()["commissioning_summary"]
-    assert summary["store_schema_version"] == 3
+    assert summary["store_schema_version"] == 4
     assert summary["commissioned_zone_count"] == 2
     assert summary["legacy_zone_1_compatible"] is True
     assert summary["zones"][1]["identity"] == {

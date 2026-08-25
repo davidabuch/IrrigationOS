@@ -45,6 +45,8 @@ from .landscape import (
     SunExposure,
 )
 from .landscape_intelligence import (
+    BaselineEnvironmentalReference,
+    BaselineEnvironmentalScalingAssessment,
     CanonicalZoneIdentity,
     CommissionedZoneProfile,
     Confidence,
@@ -109,6 +111,8 @@ CONF_COMMISSIONING_COMPONENT_IDS = "commissioning_component_ids"
 CONF_COMMISSIONING_BASELINE_MINUTES = "commissioning_baseline_minutes"
 CONF_COMMISSIONING_REFERENCE_TEMP_F = "commissioning_reference_temperature_f"
 CONF_COMMISSIONING_RECENT_RAIN_MM = "commissioning_recent_rain_mm"
+CONF_COMMISSIONING_REFERENCE_ET0_MM = "commissioning_reference_et0_mm"
+CONF_COMMISSIONING_REFERENCE_PERIOD_HOURS = "commissioning_reference_period_hours"
 CONF_COMMISSIONING_ASSESSMENT_ID = "commissioning_assessment_id"
 CONF_COMMISSIONING_EVIDENCE_IDS = "commissioning_evidence_ids"
 CONF_COMMISSIONING_AI_PLANT_NAME = "commissioning_ai_plant_name"
@@ -484,7 +488,12 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 {vol.Required(CONF_COMMISSIONING_REVIEW_ACTION): vol.In(actions)}
             ),
             description_placeholders={
-                "review_summary": _commissioning_review_summary(profile)
+                "review_summary": _commissioning_review_summary(
+                    profile,
+                    self.config_entry.runtime_data.landscape_intelligence.baseline_scaling_for(
+                        profile.identity.property_id, profile.identity.zone_id
+                    ),
+                )
             },
         )
 
@@ -1137,6 +1146,12 @@ def _commissioning_schema(
                 vol.Required(CONF_COMMISSIONING_RECENT_RAIN_MM, default=0): vol.All(
                     vol.Coerce(float), vol.Range(min=0)
                 ),
+                vol.Optional(CONF_COMMISSIONING_REFERENCE_ET0_MM, default=""): vol.Any(
+                    "", vol.All(vol.Coerce(float), vol.Range(min=0.001))
+                ),
+                vol.Required(
+                    CONF_COMMISSIONING_REFERENCE_PERIOD_HOURS, default=24
+                ): vol.All(vol.Coerce(int), vol.Range(min=1, max=168)),
             }
         )
     if mode in {
@@ -1264,6 +1279,7 @@ def _map_commissioning_form(
             reference_condition="user-confirmed dry-day reference condition",
             calibrated_at=now,
             confidence=Confidence.HIGH,
+            environmental_reference=_environmental_reference_from_form(values, now),
         )
     if mode in {
         ZoneDemandSourceMode.PHOTO_AI_DERIVED,
@@ -1543,6 +1559,23 @@ def _baseline_from_form(
         reference_condition="user-confirmed dry-day reference condition",
         calibrated_at=now,
         confidence=Confidence.HIGH,
+        environmental_reference=_environmental_reference_from_form(values, now),
+    )
+
+
+def _environmental_reference_from_form(
+    values: dict[str, Any], now: datetime
+) -> BaselineEnvironmentalReference | None:
+    """Map optional explicit ET0 evidence without deriving it from temperature."""
+    raw_et0 = values.get(CONF_COMMISSIONING_REFERENCE_ET0_MM, "")
+    if raw_et0 in {None, ""}:
+        return None
+    return BaselineEnvironmentalReference(
+        reference_et0_mm=float(raw_et0),
+        period_hours=int(values[CONF_COMMISSIONING_REFERENCE_PERIOD_HOURS]),
+        observed_at=now,
+        source="user-confirmed reference environmental evidence",
+        confidence=Confidence.HIGH,
     )
 
 
@@ -1574,6 +1607,22 @@ def _commissioning_baseline_schema(
                     else existing.reference_recent_precipitation_mm
                 ),
             ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+            vol.Optional(
+                CONF_COMMISSIONING_REFERENCE_ET0_MM,
+                default=(
+                    ""
+                    if existing is None or existing.environmental_reference is None
+                    else existing.environmental_reference.reference_et0_mm
+                ),
+            ): vol.Any("", vol.All(vol.Coerce(float), vol.Range(min=0.001))),
+            vol.Required(
+                CONF_COMMISSIONING_REFERENCE_PERIOD_HOURS,
+                default=(
+                    24
+                    if existing is None or existing.environmental_reference is None
+                    else existing.environmental_reference.period_hours
+                ),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=168)),
         }
     )
 
@@ -1603,9 +1652,14 @@ def _commissioning_event_id(
     )
 
 
-def _commissioning_review_summary(profile: CommissionedZoneProfile) -> str:
+def _commissioning_review_summary(
+    profile: CommissionedZoneProfile,
+    scaling: BaselineEnvironmentalScalingAssessment | None = None,
+) -> str:
     """Return bounded human-readable review text for the options flow only."""
-    review = build_commissioning_review(profile)
+    review = build_commissioning_review(
+        profile, baseline_scaling_assessment=scaling
+    )
     lines = [
         f"{review.display_name} ({profile.identity.property_id}/"
         f"{profile.identity.zone_id})",
@@ -1632,6 +1686,14 @@ def _commissioning_review_summary(profile: CommissionedZoneProfile) -> str:
         lines.append(
             f"Baseline: {baseline.runtime_seconds // 60} min at "
             f"{baseline.reference_air_temperature_celsius * 9 / 5 + 32:.1f} °F"
+        )
+        lines.append(
+            "Environmental scaling: "
+            + (
+                "not yet evaluated"
+                if review.baseline_scaling_assessment is None
+                else review.baseline_scaling_assessment.status.value
+            )
         )
     lines.append(f"Unresolved conflicts: {len(review.unresolved_conflicts)}")
     lines.append(

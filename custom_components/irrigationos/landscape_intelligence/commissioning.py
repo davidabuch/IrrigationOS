@@ -21,7 +21,7 @@ from .models import (
     PlantGroup,
 )
 
-ZONE_COMMISSIONING_SCHEMA_VERSION = 3
+ZONE_COMMISSIONING_SCHEMA_VERSION = 4
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
@@ -246,6 +246,28 @@ class PlantCommissioningDetails(SerializableCommissioningModel):
 
 
 @dataclass(frozen=True, slots=True)
+class BaselineEnvironmentalReference(SerializableCommissioningModel):
+    """Measured reference ET0 evidence paired with a user calibration."""
+
+    reference_et0_mm: float
+    period_hours: int
+    observed_at: datetime
+    source: str
+    confidence: Confidence
+
+    def __post_init__(self) -> None:
+        _positive_number("reference_et0_mm", self.reference_et0_mm)
+        if (
+            isinstance(self.period_hours, bool)
+            or not isinstance(self.period_hours, int)
+            or not 1 <= self.period_hours <= 168
+        ):
+            raise ValueError("period_hours must be between 1 and 168")
+        _timestamp("observed_at", self.observed_at)
+        _text("source", self.source)
+
+
+@dataclass(frozen=True, slots=True)
 class UserCalibratedBaseline(SerializableCommissioningModel):
     """User-confirmed reference runtime, not a weather-scaling algorithm."""
 
@@ -255,6 +277,7 @@ class UserCalibratedBaseline(SerializableCommissioningModel):
     reference_condition: str
     calibrated_at: datetime
     confidence: Confidence
+    environmental_reference: BaselineEnvironmentalReference | None = None
 
     def __post_init__(self) -> None:
         if (
