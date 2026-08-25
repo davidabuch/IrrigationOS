@@ -1,3 +1,17 @@
+## [1.0.57] - 2026-08-24
+
+### Added
+- Guided dry-reference capture using exact contiguous normalized ET₀, precipitation, temperature-context, quality, confidence, timestamp, and provenance evidence.
+- Durable generic water-delivery component profiles with explicit unknown, manufacturer-rated, user-estimated, and measured evidence levels.
+- Deterministic collected-volume-over-time flow conversion, raw measurement retention, shared/dedicated component linkage, and Home Assistant calibration workflows.
+
+### Changed
+- Commissioning model and Store schemas advance additively to 5; schemas 1–4 migrate without fabricating missing calibration evidence.
+- Recalibration retains prior environmental references and measured delivery calibrations; the v1.0.56 scaling algorithm and policy remain 1.0.0.
+
+### Safety
+- Calibration remains evidence-only. No application rate, irrigation depth, runtime, schedule, command, transport, network call, retry, execution authorization, or Live authorization is created.
+
 ## [1.0.55] - 2026-08-24
 
 ### Added

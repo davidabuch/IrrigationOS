@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
+from ..water_delivery import WaterDeliveryProfile
 from ..weather import ForecastWindow, ObservationWindow
 from .admission import assess_commissioning
 from .baseline_scaling import (
@@ -49,6 +50,7 @@ class LandscapeIntelligenceManager:
         )
         self._zones: tuple[CommissionedZoneProfile, ...] = ()
         self._deactivated_zones: tuple[DeactivatedCommissionedZone, ...] = ()
+        self._delivery_profiles: tuple[WaterDeliveryProfile, ...] = ()
         self._legacy_zone1: dict[str, Any] = {}
         self._factor_resolutions: dict[tuple[str, str], ZoneFactorResolution] = {}
         self._baseline_scaling: dict[
@@ -77,6 +79,7 @@ class LandscapeIntelligenceManager:
             return
         self._zones = restored.zones
         self._deactivated_zones = restored.deactivated_zones
+        self._delivery_profiles = restored.delivery_profiles
         self._legacy_zone1 = restored.legacy_zone1
         self._refresh_factor_resolutions()
         self._baseline_scaling = {}
@@ -101,6 +104,18 @@ class LandscapeIntelligenceManager:
     def deactivated_zones(self) -> tuple[DeactivatedCommissionedZone, ...]:
         """Return evidence-preserving zone tombstones."""
         return self._deactivated_zones
+
+    @property
+    def delivery_profiles(self) -> tuple[WaterDeliveryProfile, ...]:
+        """Return durable canonical delivery profiles in stable order."""
+        return self._delivery_profiles
+
+    def get_delivery_profile(self, profile_id: str) -> WaterDeliveryProfile | None:
+        """Return one canonical delivery profile."""
+        return next(
+            (profile for profile in self._delivery_profiles if profile.profile_id == profile_id),
+            None,
+        )
 
     def get_zone(self, property_id: str, zone_id: str) -> CommissionedZoneProfile | None:
         """Look up one active zone by stable canonical identity."""
@@ -132,6 +147,7 @@ class LandscapeIntelligenceManager:
             else build_commissioning_review(
                 profile,
                 baseline_scaling_assessment=self._baseline_scaling.get(_key(profile)),
+                delivery_profiles=self._delivery_profiles,
             )
         )
 
@@ -181,6 +197,27 @@ class LandscapeIntelligenceManager:
             return await self.async_add_zone(profile)
         return await self.async_update_zone(profile)
 
+    async def async_update_zone_and_delivery_profile(
+        self,
+        zone: CommissionedZoneProfile,
+        delivery_profile: WaterDeliveryProfile,
+    ) -> bool:
+        """Persist linked zone and delivery evidence atomically before publication."""
+        key = _key(zone)
+        if self.get_zone(*key) is None:
+            return False
+        zones = tuple(zone if _key(item) == key else item for item in self._zones)
+        profiles = tuple(
+            item
+            for item in self._delivery_profiles
+            if item.profile_id != delivery_profile.profile_id
+        )
+        return await self._async_save(
+            zones,
+            self._deactivated_zones,
+            delivery_profiles=(*profiles, delivery_profile),
+        )
+
     async def async_deactivate_zone(
         self,
         property_id: str,
@@ -223,7 +260,9 @@ class LandscapeIntelligenceManager:
             in {HealthState.STRESSED, HealthState.SEVERELY_STRESSED}
         ]
         resolution = self._factor_resolutions.get(_key(commissioned))
-        compatibility = assess_delivery_compatibility(commissioned)
+        compatibility = assess_delivery_compatibility(
+            commissioned, self._delivery_profiles
+        )
         assessment = assess_commissioning(commissioned)
         baseline_scaling = self._baseline_scaling.get(_key(commissioned))
         resolved_conflict_ids = {
@@ -245,6 +284,16 @@ class LandscapeIntelligenceManager:
                 for conflict in commissioned.conflicts
             ),
             "delivery_compatibility_state": compatibility.state.value,
+            "delivery_calibrated_component_count": sum(
+                len(delivery.components)
+                for delivery in self._delivery_profiles
+                if delivery.profile_id
+                in {
+                    link.delivery_profile_id
+                    for link in commissioned.delivery_links
+                    if link.delivery_profile_id is not None
+                }
+            ),
             "commissioning_assessment_status": assessment.status.value,
             "commissioning_ready_purpose_count": sum(
                 item.state.value == "ready" for item in assessment.purpose_readiness
@@ -263,7 +312,7 @@ class LandscapeIntelligenceManager:
             return {}
         summaries = []
         for zone in self._zones:
-            compatibility = assess_delivery_compatibility(zone)
+            compatibility = assess_delivery_compatibility(zone, self._delivery_profiles)
             assessment = assess_commissioning(zone)
             resolved_conflict_ids = {
                 item.conflict_id for item in zone.conflict_resolutions
@@ -307,6 +356,10 @@ class LandscapeIntelligenceManager:
                 "store_schema_version": COMMISSIONING_STORE_SCHEMA_VERSION,
                 "commissioned_zone_count": len(self._zones),
                 "deactivated_zone_count": len(self._deactivated_zones),
+                "water_delivery_profile_count": len(self._delivery_profiles),
+                "water_delivery_profiles": [
+                    profile.to_dict() for profile in self._delivery_profiles
+                ],
                 "zones": summaries,
                 "legacy_zone_1_compatible": self.get_zone(*_ZONE1_KEY) is not None,
                 "last_persistence_error": self.last_persistence_error,
@@ -317,12 +370,16 @@ class LandscapeIntelligenceManager:
         self,
         zones: tuple[CommissionedZoneProfile, ...],
         deactivated_zones: tuple[DeactivatedCommissionedZone, ...],
+        *,
+        delivery_profiles: tuple[WaterDeliveryProfile, ...] | None = None,
     ) -> bool:
+        profiles = self._delivery_profiles if delivery_profiles is None else delivery_profiles
         try:
             payload = build_store_payload(
                 zones,
                 deactivated_zones,
                 legacy_zone1=self._legacy_zone1,
+                delivery_profiles=profiles,
             )
             await self._store.async_save(payload)
         except Exception:
@@ -339,6 +396,9 @@ class LandscapeIntelligenceManager:
                     item.profile.identity.zone_id,
                 ),
             )
+        )
+        self._delivery_profiles = tuple(
+            sorted(profiles, key=lambda profile: profile.profile_id)
         )
         self._refresh_factor_resolutions()
         self._baseline_scaling = {}

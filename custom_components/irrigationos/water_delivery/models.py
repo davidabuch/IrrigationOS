@@ -50,6 +50,15 @@ class FlowBasis(StrEnum):
     UNKNOWN = "unknown"
 
 
+class DeliveryEvidenceLevel(StrEnum):
+    """Strength of one delivery fact without conflating rated and measured data."""
+
+    UNKNOWN = "unknown"
+    MANUFACTURER_RATED = "manufacturer_rated"
+    USER_ESTIMATED = "user_estimated"
+    MEASURED = "measured"
+
+
 class SprayPattern(StrEnum):
     """Canonical delivery coverage patterns."""
 
@@ -119,6 +128,7 @@ class MeasurementUnit(StrEnum):
     COUNT = "count"
     MILLILITERS = "milliliters"
     LITERS = "liters"
+    US_GALLONS = "us_gallons"
     CENTIMETERS = "centimeters"
     METERS = "meters"
     DEGREES = "degrees"
@@ -233,6 +243,7 @@ class DeliveryFact[T](SerializableWaterDeliveryModel):
     confidence: float
     provenance: DeliveryProvenance
     assessed_at: datetime
+    evidence_level: DeliveryEvidenceLevel = DeliveryEvidenceLevel.UNKNOWN
 
     def __post_init__(self) -> None:
         _validate_fact_value(self.value)
@@ -296,6 +307,7 @@ class CalibrationMeasurement(SerializableWaterDeliveryModel):
             CalibrationMeasurementType.COLLECTED_VOLUME: {
                 MeasurementUnit.MILLILITERS,
                 MeasurementUnit.LITERS,
+                MeasurementUnit.US_GALLONS,
             },
             CalibrationMeasurementType.RADIUS: {
                 MeasurementUnit.CENTIMETERS,
@@ -379,6 +391,7 @@ class GuidedCalibration(SerializableWaterDeliveryModel):
             CalibrationTestType.COLLECTED_VOLUME: {
                 MeasurementUnit.MILLILITERS,
                 MeasurementUnit.LITERS,
+                MeasurementUnit.US_GALLONS,
             },
             CalibrationTestType.SPRAY_RADIUS: {
                 MeasurementUnit.CENTIMETERS,

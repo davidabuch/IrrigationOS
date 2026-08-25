@@ -13,6 +13,7 @@ from enum import StrEnum
 from math import isfinite
 from typing import Any
 
+from ..water_delivery import WaterDeliveryProfile
 from .models import (
     Confidence,
     EstablishmentState,
@@ -21,7 +22,7 @@ from .models import (
     PlantGroup,
 )
 
-ZONE_COMMISSIONING_SCHEMA_VERSION = 4
+ZONE_COMMISSIONING_SCHEMA_VERSION = 5
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
@@ -42,6 +43,15 @@ class CommissioningEvidenceSource(StrEnum):
     HUMAN_REVIEWED_PHOTO = "human_reviewed_photo"
     AI_INFERRED = "ai_inferred"
     IMPORTED = "imported"
+
+
+class BaselineReferenceSource(StrEnum):
+    """How a baseline environmental reference was established."""
+
+    OBSERVED_ENVIRONMENT_CAPTURE = "observed_environment_capture"
+    IMPORTED_REFERENCE = "imported_reference"
+    MANUALLY_ENTERED_REFERENCE = "manually_entered_reference"
+    MIGRATED_WITHOUT_REFERENCE = "migrated_without_reference"
 
 
 class DeliveryLinkStatus(StrEnum):
@@ -254,6 +264,13 @@ class BaselineEnvironmentalReference(SerializableCommissioningModel):
     observed_at: datetime
     source: str
     confidence: Confidence
+    observed_air_temperature_celsius: float | None = None
+    quality: str = "user_confirmed"
+    capture_method: BaselineReferenceSource = (
+        BaselineReferenceSource.MANUALLY_ENTERED_REFERENCE
+    )
+    captured_at: datetime | None = None
+    evidence_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _positive_number("reference_et0_mm", self.reference_et0_mm)
@@ -265,6 +282,18 @@ class BaselineEnvironmentalReference(SerializableCommissioningModel):
             raise ValueError("period_hours must be between 1 and 168")
         _timestamp("observed_at", self.observed_at)
         _text("source", self.source)
+        if self.observed_air_temperature_celsius is not None and (
+            isinstance(self.observed_air_temperature_celsius, bool)
+            or not isinstance(self.observed_air_temperature_celsius, int | float)
+            or not isfinite(self.observed_air_temperature_celsius)
+        ):
+            raise ValueError("observed_air_temperature_celsius must be finite")
+        _text("quality", self.quality)
+        if self.captured_at is not None:
+            _timestamp("captured_at", self.captured_at)
+            if self.captured_at < self.observed_at:
+                raise ValueError("captured_at cannot precede observed_at")
+        _unique_ids("evidence_ids", self.evidence_ids)
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,6 +307,7 @@ class UserCalibratedBaseline(SerializableCommissioningModel):
     calibrated_at: datetime
     confidence: Confidence
     environmental_reference: BaselineEnvironmentalReference | None = None
+    reference_history: tuple[BaselineEnvironmentalReference, ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -301,6 +331,13 @@ class UserCalibratedBaseline(SerializableCommissioningModel):
             raise ValueError("reference_recent_precipitation_mm must be nonnegative")
         _text("reference_condition", self.reference_condition)
         _timestamp("calibrated_at", self.calibrated_at)
+        history_times = tuple(
+            item.captured_at or item.observed_at for item in self.reference_history
+        )
+        if history_times != tuple(sorted(history_times)):
+            raise ValueError("reference history must be chronological")
+        if len(self.reference_history) != len(set(self.reference_history)):
+            raise ValueError("reference history must be unique")
 
 
 @dataclass(frozen=True, slots=True)
@@ -515,9 +552,11 @@ class DeactivatedCommissionedZone(SerializableCommissioningModel):
 
 def assess_delivery_compatibility(
     profile: CommissionedZoneProfile,
+    delivery_profiles: tuple[WaterDeliveryProfile, ...] = (),
 ) -> DeliveryCompatibilityAssessment:
     """Assess documentation gaps without inferring hardware performance."""
     links = {item.plant_group_id: item for item in profile.delivery_links}
+    profiles = {item.profile_id: item for item in delivery_profiles}
     advisories: list[DeliveryAdvisory] = []
     for group in profile.landscape_profile.plant_groups:
         if group.irrigation_role is IrrigationRole.INCIDENTAL:
@@ -553,6 +592,30 @@ def assess_delivery_compatibility(
                     "The documented plant-to-delivery relationship requires review.",
                 )
             )
+        delivery_profile = (
+            None
+            if link.delivery_profile_id is None
+            else profiles.get(link.delivery_profile_id)
+        )
+        if delivery_profile is not None:
+            component_ids = set(link.component_ids)
+            components = tuple(
+                component
+                for component in delivery_profile.components
+                if not component_ids or component.component_id in component_ids
+            )
+            if components and all(
+                component.preferred_flow_liters_per_hour is None
+                for component in components
+            ):
+                advisories.append(
+                    DeliveryAdvisory(
+                        "delivery_flow_quantification_unavailable",
+                        group.plant_group_id,
+                        "Delivery is documented, but flow remains unknown; runtime and "
+                        "delivered volume cannot be quantified.",
+                    )
+                )
         if (
             group.establishment_state
             in {EstablishmentState.NEWLY_PLANTED, EstablishmentState.ESTABLISHING}

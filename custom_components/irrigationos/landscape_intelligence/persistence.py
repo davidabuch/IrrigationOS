@@ -6,9 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from ..water_delivery import WaterDeliveryProfile
+from ..water_delivery.persistence import water_delivery_profile_from_dict
 from .commissioning import (
     ZONE_COMMISSIONING_SCHEMA_VERSION,
     BaselineEnvironmentalReference,
+    BaselineReferenceSource,
     CanonicalZoneIdentity,
     CommissionedZoneProfile,
     CommissioningConflictCandidate,
@@ -39,7 +42,7 @@ from .models import (
     PlantHealthObservation,
 )
 
-COMMISSIONING_STORE_SCHEMA_VERSION = 4
+COMMISSIONING_STORE_SCHEMA_VERSION = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +51,7 @@ class CommissioningStoreSnapshot:
 
     zones: tuple[CommissionedZoneProfile, ...]
     deactivated_zones: tuple[DeactivatedCommissionedZone, ...]
+    delivery_profiles: tuple[WaterDeliveryProfile, ...]
     legacy_zone1: dict[str, Any]
     migration_required: bool
 
@@ -214,6 +218,12 @@ def _baseline(value: object) -> UserCalibratedBaseline:
             if environmental_reference is None
             else _baseline_environmental_reference(environmental_reference)
         ),
+        reference_history=tuple(
+            _baseline_environmental_reference(reference)
+            for reference in _sequence(
+                "baseline reference history", item.get("reference_history", [])
+            )
+        ),
     )
 
 
@@ -225,6 +235,17 @@ def _baseline_environmental_reference(value: object) -> BaselineEnvironmentalRef
         observed_at=_datetime(item["observed_at"]),
         source=str(item["source"]),
         confidence=Confidence(str(item["confidence"])),
+        observed_air_temperature_celsius=_optional_float(
+            item.get("observed_air_temperature_celsius")
+        ),
+        quality=str(item.get("quality", "user_confirmed")),
+        capture_method=BaselineReferenceSource(
+            str(item.get("capture_method", "manually_entered_reference"))
+        ),
+        captured_at=(
+            None if item.get("captured_at") is None else _datetime(item["captured_at"])
+        ),
+        evidence_ids=_strings("baseline reference evidence_ids", item.get("evidence_ids", [])),
     )
 
 
@@ -318,7 +339,7 @@ def commissioned_zone_from_dict(value: object) -> CommissionedZoneProfile:
     """Restore supported commissioned-zone data through additive migration."""
     item = _mapping("commissioned zone", value)
     source_schema = int(item["schema_version"])
-    if source_schema not in {1, 2, 3, ZONE_COMMISSIONING_SCHEMA_VERSION}:
+    if source_schema not in {1, 2, 3, 4, ZONE_COMMISSIONING_SCHEMA_VERSION}:
         raise ValueError("commissioned zone schema is unsupported")
     identity = _mapping("canonical zone identity", item["identity"])
     return CommissionedZoneProfile(
@@ -409,8 +430,13 @@ def restore_store_payload(
     if int(item.get("schema_version", 1)) != 1:
         raise ValueError("legacy landscape intelligence schema is unsupported")
     payload_schema = int(item.get("commissioning_store_schema_version", 1))
-    if payload_schema not in {1, 2, 3, COMMISSIONING_STORE_SCHEMA_VERSION}:
+    if payload_schema not in {1, 2, 3, 4, COMMISSIONING_STORE_SCHEMA_VERSION}:
         raise ValueError("commissioning Store schema is unsupported")
+    if (
+        payload_schema == COMMISSIONING_STORE_SCHEMA_VERSION
+        and "water_delivery_profiles" not in item
+    ):
+        raise ValueError("current commissioning Store is missing delivery profiles")
     legacy_zone1 = _mapping("legacy zone_1", item["zone_1"])
     raw_zones = item.get("commissioned_zones")
     zones: tuple[CommissionedZoneProfile, ...]
@@ -445,9 +471,24 @@ def restore_store_payload(
         sorted(deactivated, key=lambda value: _zone_key(value.profile))
     )
     _validate_order(zones)
+    delivery_profiles = tuple(
+        sorted(
+            (
+                water_delivery_profile_from_dict(profile)
+                for profile in _sequence(
+                    "water_delivery_profiles", item.get("water_delivery_profiles", [])
+                )
+            ),
+            key=lambda profile: profile.profile_id,
+        )
+    )
+    profile_ids = tuple(profile.profile_id for profile in delivery_profiles)
+    if len(profile_ids) != len(set(profile_ids)):
+        raise ValueError("water delivery profile IDs must be unique")
     return CommissioningStoreSnapshot(
         zones=zones,
         deactivated_zones=deactivated,
+        delivery_profiles=delivery_profiles,
         legacy_zone1=legacy_zone1,
         migration_required=migration_required,
     )
@@ -458,17 +499,25 @@ def build_store_payload(
     deactivated_zones: tuple[DeactivatedCommissionedZone, ...],
     *,
     legacy_zone1: dict[str, Any],
+    delivery_profiles: tuple[WaterDeliveryProfile, ...] = (),
 ) -> dict[str, Any]:
-    """Build deterministic schema-3 Store data while retaining legacy Zone 1."""
+    """Build deterministic current Store data while retaining legacy Zone 1."""
     ordered = tuple(sorted(zones, key=_zone_key))
     _validate_order(ordered)
     ordered_deactivated = tuple(
         sorted(deactivated_zones, key=lambda value: _zone_key(value.profile))
     )
+    ordered_delivery = tuple(
+        sorted(delivery_profiles, key=lambda profile: profile.profile_id)
+    )
+    profile_ids = tuple(profile.profile_id for profile in ordered_delivery)
+    if len(profile_ids) != len(set(profile_ids)):
+        raise ValueError("water delivery profile IDs must be unique")
     return {
         "schema_version": 1,
         "commissioning_store_schema_version": COMMISSIONING_STORE_SCHEMA_VERSION,
         "zone_1": legacy_zone1,
         "commissioned_zones": [zone.to_dict() for zone in ordered],
         "deactivated_zones": [zone.to_dict() for zone in ordered_deactivated],
+        "water_delivery_profiles": [profile.to_dict() for profile in ordered_delivery],
     }

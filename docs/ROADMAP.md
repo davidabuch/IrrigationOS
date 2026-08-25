@@ -1,5 +1,12 @@
 # IrrigationOS Roadmap
 
+## v1.0.57 — Guided Baseline Reference & Irrigation Delivery Calibration
+
+- Captures exact 24- or 48-hour dry reference ET₀ from fresh, contiguous normalized evidence and retains measured temperature only as context.
+- Preserves reference replacement history and makes the existing v1.0.56 scaling path usable without manual ET₀ calculation.
+- Adds durable generic delivery profiles with unknown, rated, estimated, and measured flow provenance plus deterministic volume-over-time conversion.
+- Supports shared or dedicated component linkage without inventing application rate, efficiency, hydraulics, runtime, scheduling, or execution authority.
+
 ## v1.0.56 — Advisory Environmental Scaling for User-Calibrated Baselines
 
 - Compares current normalized FAO-56 ET₀ with explicit reference-period ET₀ evidence; temperature remains descriptive context, not a multiplier.
@@ -83,11 +90,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.56
+- **Installable Home Assistant release:** v1.0.57
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
-- **Next milestone:** calibrate reference ET₀ and irrigation delivery through guided evidence before any advisory-to-execution bridge
+- **Next milestone:** admit calibrated delivery evidence into a non-authorizing quantitative delivery assessment before any advisory-to-execution bridge
 
 ## Delivery model
 

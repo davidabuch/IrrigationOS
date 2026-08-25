@@ -47,6 +47,7 @@ from .landscape import (
 from .landscape_intelligence import (
     BaselineEnvironmentalReference,
     BaselineEnvironmentalScalingAssessment,
+    BaselineReferenceSource,
     CanonicalZoneIdentity,
     CommissionedZoneProfile,
     Confidence,
@@ -62,7 +63,10 @@ from .landscape_intelligence import (
     UserCalibratedBaseline,
     ZoneDemandSourceMode,
     add_plant_group,
+    apply_baseline_reference_capture,
+    assess_commissioning,
     build_commissioning_review,
+    capture_baseline_environmental_reference,
     edit_plant_group,
     remove_calibrated_baseline,
     remove_plant_group,
@@ -73,11 +77,25 @@ from .landscape_intelligence import (
 from .landscape_intelligence import (
     EstablishmentState as CommissioningEstablishmentState,
 )
+from .landscape_intelligence.baseline_reference import (
+    SUPPORTED_REFERENCE_PERIOD_HOURS,
+    BaselineReferenceCaptureStatus,
+    CaptureBaselineReferenceRequest,
+)
 from .landscape_intelligence.onboarding import (
     ApprovedVisualPlantFinding,
     ManualPlantOnboardingInput,
     ZoneOnboardingRequest,
     map_zone_onboarding,
+)
+from .water_delivery import (
+    DeliveryComponentCalibrationRequest,
+    DeliveryEvidenceLevel,
+    FlowBasis,
+    MeasurementUnit,
+    WaterDeliveryProfile,
+    WaterDeliveryType,
+    calibrate_delivery_component,
 )
 
 CONF_DISPLAY_NAME = "display_name"
@@ -135,6 +153,25 @@ CONF_COMMISSIONING_RESOLUTION_BOTANICAL_NAME = (
     "commissioning_resolution_botanical_name"
 )
 CONF_COMMISSIONING_RESOLUTION_NOTE = "commissioning_resolution_note"
+CONF_COMMISSIONING_CAPTURE_DRY_CONFIRMATION = (
+    "commissioning_capture_dry_confirmation"
+)
+CONF_COMMISSIONING_REPLACE_REFERENCE_CONFIRMATION = (
+    "commissioning_replace_reference_confirmation"
+)
+CONF_COMMISSIONING_DELIVERY_COMPONENT_ID = "commissioning_delivery_component_id"
+CONF_COMMISSIONING_DELIVERY_COMPONENT_NAME = "commissioning_delivery_component_name"
+CONF_COMMISSIONING_DELIVERY_TYPE = "commissioning_delivery_type"
+CONF_COMMISSIONING_COMPONENT_COUNT = "commissioning_component_count"
+CONF_COMMISSIONING_FLOW_EVIDENCE_LEVEL = "commissioning_flow_evidence_level"
+CONF_COMMISSIONING_FLOW_BASIS = "commissioning_flow_basis"
+CONF_COMMISSIONING_FLOW_LPH = "commissioning_flow_liters_per_hour"
+CONF_COMMISSIONING_COLLECTED_VOLUME = "commissioning_collected_volume"
+CONF_COMMISSIONING_COLLECTED_VOLUME_UNIT = (
+    "commissioning_collected_volume_unit"
+)
+CONF_COMMISSIONING_COLLECTION_DURATION = "commissioning_collection_duration_seconds"
+CONF_COMMISSIONING_RADIUS_METERS = "commissioning_radius_meters"
 
 STEP_USER_SCHEMA = vol.Schema(
     {
@@ -452,18 +489,28 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
         profile = self._selected_review_profile()
         if profile is None:
             return await self.async_step_commissioning_review_select()
-        review = build_commissioning_review(profile)
+        manager = self.config_entry.runtime_data.landscape_intelligence
+        review = manager.review_zone(
+            profile.identity.property_id, profile.identity.zone_id
+        )
+        if review is None:
+            return await self.async_step_commissioning_review_select()
         actions: dict[str, str] = {
             "add_plant": "Add plant group",
             "edit_baseline": "Review or edit calibrated baseline",
             "finish": "Finish review",
         }
+        if review.calibrated_baselines:
+            actions["capture_baseline_reference"] = (
+                "Capture current conditions as baseline reference"
+            )
         if review.plants:
             actions.update(
                 {
                     "edit_plant": "Edit plant group",
                     "remove_plant": "Remove plant group",
                     "edit_delivery": "Edit irrigation-delivery link",
+                    "calibrate_delivery": "Calibrate irrigation-delivery evidence",
                 }
             )
         if review.unresolved_conflicts:
@@ -478,6 +525,8 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 return await self.async_step_commissioning_add_plant()
             if action == "edit_baseline":
                 return await self.async_step_commissioning_baseline()
+            if action == "capture_baseline_reference":
+                return await self.async_step_commissioning_baseline_reference()
             if action == "resolve_conflict":
                 return await self.async_step_commissioning_conflict_select()
             self._review_plant_action = action
@@ -490,9 +539,10 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
             description_placeholders={
                 "review_summary": _commissioning_review_summary(
                     profile,
-                    self.config_entry.runtime_data.landscape_intelligence.baseline_scaling_for(
+                    manager.baseline_scaling_for(
                         profile.identity.property_id, profile.identity.zone_id
                     ),
+                    delivery_profiles=manager.delivery_profiles,
                 )
             },
         )
@@ -559,6 +609,8 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 return await self.async_step_commissioning_edit_plant()
             if self._review_plant_action == "remove_plant":
                 return await self.async_step_commissioning_remove_plant()
+            if self._review_plant_action == "calibrate_delivery":
+                return await self.async_step_commissioning_delivery_calibration()
             return await self.async_step_commissioning_delivery()
         return self.async_show_form(
             step_id="commissioning_plant_select",
@@ -739,7 +791,9 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 else:
                     candidate = set_calibrated_baseline(
                         profile,
-                        _baseline_from_form(user_input, datetime.now(UTC)),
+                        _baseline_from_form(
+                            user_input, datetime.now(UTC), existing=existing
+                        ),
                     )
             except (KeyError, TypeError, ValueError):
                 errors["base"] = "invalid_commissioning_edit"
@@ -752,6 +806,196 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
         return self.async_show_form(
             step_id="commissioning_baseline",
             data_schema=_commissioning_baseline_schema(existing),
+            errors=errors,
+        )
+
+    async def async_step_commissioning_baseline_reference(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Capture a dry ET0 reference from current normalized observations."""
+        profile = self._selected_review_profile()
+        if profile is None:
+            return await self.async_step_commissioning_review_select()
+        baseline = next(
+            (
+                source.calibrated_baseline
+                for source in profile.demand_sources
+                if source.calibrated_baseline is not None
+            ),
+            None,
+        )
+        if baseline is None:
+            return await self.async_step_commissioning_baseline()
+        errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {}
+        if user_input is not None:
+            now = datetime.now(UTC)
+            try:
+                result = capture_baseline_environmental_reference(
+                    profile,
+                    assess_commissioning(profile),
+                    CaptureBaselineReferenceRequest(
+                        identity=profile.identity,
+                        expected_baseline_runtime_seconds=baseline.runtime_seconds,
+                        period_hours=int(
+                            user_input[CONF_COMMISSIONING_REFERENCE_PERIOD_HOURS]
+                        ),
+                        representative_dry_condition_confirmed=bool(
+                            user_input[CONF_COMMISSIONING_CAPTURE_DRY_CONFIRMATION]
+                        ),
+                        replace_existing_reference_confirmed=bool(
+                            user_input[
+                                CONF_COMMISSIONING_REPLACE_REFERENCE_CONFIRMATION
+                            ]
+                        ),
+                        captured_at=now,
+                    ),
+                    observations=(
+                        self.config_entry.runtime_data.weather_evidence.observations
+                    ),
+                )
+                if result.status is not BaselineReferenceCaptureStatus.READY:
+                    errors["base"] = "baseline_reference_capture_blocked"
+                    placeholders["blockers"] = ", ".join(result.blocker_codes)
+                else:
+                    candidate = apply_baseline_reference_capture(profile, result)
+                    if candidate == profile:
+                        return await self.async_step_commissioning_review()
+                    manager = self.config_entry.runtime_data.landscape_intelligence
+                    saved = await manager.async_update_zone(candidate)
+                    if saved:
+                        return await self.async_step_commissioning_review()
+                    errors["base"] = "commissioning_persistence_failed"
+            except (KeyError, TypeError, ValueError):
+                errors["base"] = "baseline_reference_capture_blocked"
+                placeholders["blockers"] = "invalid_capture_request"
+        return self.async_show_form(
+            step_id="commissioning_baseline_reference",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_COMMISSIONING_REFERENCE_PERIOD_HOURS, default=24
+                    ): vol.In(SUPPORTED_REFERENCE_PERIOD_HOURS),
+                    vol.Required(
+                        CONF_COMMISSIONING_CAPTURE_DRY_CONFIRMATION, default=False
+                    ): bool,
+                    vol.Required(
+                        CONF_COMMISSIONING_REPLACE_REFERENCE_CONFIRMATION,
+                        default=False,
+                    ): bool,
+                }
+            ),
+            errors=errors,
+            description_placeholders=placeholders,
+        )
+
+    async def async_step_commissioning_delivery_calibration(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Capture explicit component evidence and link it atomically to a plant."""
+        profile = self._selected_review_profile()
+        if profile is None or self._review_plant_group_id is None:
+            return await self.async_step_commissioning_plant_select()
+        manager = self.config_entry.runtime_data.landscape_intelligence
+        existing_link = next(
+            (
+                item
+                for item in profile.delivery_links
+                if item.plant_group_id == self._review_plant_group_id
+            ),
+            None,
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            now = datetime.now(UTC)
+            try:
+                delivery_profile_id = str(
+                    user_input[CONF_COMMISSIONING_DELIVERY_PROFILE_ID]
+                ).strip()
+                component_id = str(
+                    user_input[CONF_COMMISSIONING_DELIVERY_COMPONENT_ID]
+                ).strip()
+                existing_profile = manager.get_delivery_profile(delivery_profile_id)
+                delivery_profile = calibrate_delivery_component(
+                    DeliveryComponentCalibrationRequest(
+                        profile_id=delivery_profile_id,
+                        area_id=profile.identity.zone_id,
+                        component_id=component_id,
+                        display_name=str(
+                            user_input[CONF_COMMISSIONING_DELIVERY_COMPONENT_NAME]
+                        ).strip(),
+                        delivery_type=WaterDeliveryType(
+                            str(user_input[CONF_COMMISSIONING_DELIVERY_TYPE])
+                        ),
+                        component_count=int(
+                            user_input[CONF_COMMISSIONING_COMPONENT_COUNT]
+                        ),
+                        flow_evidence_level=DeliveryEvidenceLevel(
+                            str(user_input[CONF_COMMISSIONING_FLOW_EVIDENCE_LEVEL])
+                        ),
+                        observed_at=now,
+                        flow_basis=FlowBasis(
+                            str(user_input[CONF_COMMISSIONING_FLOW_BASIS])
+                        ),
+                        flow_liters_per_hour=_optional_form_float(
+                            user_input, CONF_COMMISSIONING_FLOW_LPH
+                        ),
+                        collected_volume=_optional_form_float(
+                            user_input, CONF_COMMISSIONING_COLLECTED_VOLUME
+                        ),
+                        collected_volume_unit=(
+                            None
+                            if not str(
+                                user_input.get(
+                                    CONF_COMMISSIONING_COLLECTED_VOLUME_UNIT, ""
+                                )
+                            )
+                            else MeasurementUnit(
+                                str(
+                                    user_input[
+                                        CONF_COMMISSIONING_COLLECTED_VOLUME_UNIT
+                                    ]
+                                )
+                            )
+                        ),
+                        collection_duration_seconds=(
+                            None
+                            if user_input.get(CONF_COMMISSIONING_COLLECTION_DURATION)
+                            in {None, ""}
+                            else int(
+                                user_input[CONF_COMMISSIONING_COLLECTION_DURATION]
+                            )
+                        ),
+                        radius_meters=_optional_form_float(
+                            user_input, CONF_COMMISSIONING_RADIUS_METERS
+                        ),
+                    ),
+                    existing_profile=existing_profile,
+                )
+                candidate = update_delivery_link(
+                    profile,
+                    IrrigationDeliveryLink(
+                        link_id=f"{self._review_plant_group_id}.delivery",
+                        plant_group_id=self._review_plant_group_id,
+                        status=DeliveryLinkStatus.DOCUMENTED,
+                        delivery_profile_id=delivery_profile.profile_id,
+                        component_ids=(component_id,),
+                        dedicated_delivery=bool(
+                            user_input[CONF_COMMISSIONING_DEDICATED_EMITTER]
+                        ),
+                    ),
+                )
+            except (KeyError, TypeError, ValueError):
+                errors["base"] = "invalid_delivery_calibration"
+            else:
+                if await manager.async_update_zone_and_delivery_profile(
+                    candidate, delivery_profile
+                ):
+                    return await self.async_step_commissioning_review()
+                errors["base"] = "commissioning_persistence_failed"
+        return self.async_show_form(
+            step_id="commissioning_delivery_calibration",
+            data_schema=_commissioning_delivery_calibration_schema(existing_link),
             errors=errors,
         )
 
@@ -1544,22 +1788,43 @@ def _commissioning_delivery_schema(
 def _baseline_from_form(
     values: dict[str, Any],
     now: datetime,
+    *,
+    existing: UserCalibratedBaseline | None = None,
 ) -> UserCalibratedBaseline:
-    """Map user calibration exactly; never perform environmental scaling."""
-    return UserCalibratedBaseline(
-        runtime_seconds=int(values[CONF_COMMISSIONING_BASELINE_MINUTES]) * 60,
-        reference_air_temperature_celsius=(
-            float(values[CONF_COMMISSIONING_REFERENCE_TEMP_F]) - 32
+    """Map user calibration and preserve or retire reference evidence explicitly."""
+    reference = _environmental_reference_from_form(values, now)
+    history = () if existing is None else existing.reference_history
+    runtime_seconds = int(values[CONF_COMMISSIONING_BASELINE_MINUTES]) * 60
+    reference_temperature = (
+        float(values[CONF_COMMISSIONING_REFERENCE_TEMP_F]) - 32
+    ) * 5 / 9
+    recent_rain = float(values[CONF_COMMISSIONING_RECENT_RAIN_MM])
+    if existing is not None and existing.environmental_reference is not None:
+        prior_reference = existing.environmental_reference
+        unchanged_context = (
+            runtime_seconds == existing.runtime_seconds
+            and reference_temperature
+            == existing.reference_air_temperature_celsius
+            and recent_rain == existing.reference_recent_precipitation_mm
         )
-        * 5
-        / 9,
-        reference_recent_precipitation_mm=float(
-            values[CONF_COMMISSIONING_RECENT_RAIN_MM]
-        ),
+        same_explicit_reference = (
+            reference is not None
+            and reference.reference_et0_mm == prior_reference.reference_et0_mm
+            and reference.period_hours == prior_reference.period_hours
+        )
+        if same_explicit_reference or (reference is None and unchanged_context):
+            reference = prior_reference
+        elif reference != prior_reference:
+            history = (*history, prior_reference)
+    return UserCalibratedBaseline(
+        runtime_seconds=runtime_seconds,
+        reference_air_temperature_celsius=reference_temperature,
+        reference_recent_precipitation_mm=recent_rain,
         reference_condition="user-confirmed dry-day reference condition",
         calibrated_at=now,
         confidence=Confidence.HIGH,
-        environmental_reference=_environmental_reference_from_form(values, now),
+        environmental_reference=reference,
+        reference_history=history,
     )
 
 
@@ -1576,6 +1841,9 @@ def _environmental_reference_from_form(
         observed_at=now,
         source="user-confirmed reference environmental evidence",
         confidence=Confidence.HIGH,
+        quality="user_confirmed",
+        capture_method=BaselineReferenceSource.MANUALLY_ENTERED_REFERENCE,
+        captured_at=now,
     )
 
 
@@ -1627,6 +1895,87 @@ def _commissioning_baseline_schema(
     )
 
 
+def _commissioning_delivery_calibration_schema(
+    existing: IrrigationDeliveryLink | None,
+) -> vol.Schema:
+    """Build one bounded evidence form; blank quantitative fields stay unknown."""
+    profile_default = (
+        "delivery.profile"
+        if existing is None or existing.delivery_profile_id is None
+        else existing.delivery_profile_id
+    )
+    component_default = (
+        "delivery.component"
+        if existing is None or not existing.component_ids
+        else existing.component_ids[0]
+    )
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_COMMISSIONING_DELIVERY_PROFILE_ID, default=profile_default
+            ): str,
+            vol.Required(
+                CONF_COMMISSIONING_DELIVERY_COMPONENT_ID,
+                default=component_default,
+            ): str,
+            vol.Required(
+                CONF_COMMISSIONING_DELIVERY_COMPONENT_NAME,
+                default="Irrigation component",
+            ): str,
+            vol.Required(
+                CONF_COMMISSIONING_DELIVERY_TYPE,
+                default=WaterDeliveryType.UNKNOWN.value,
+            ): vol.In([item.value for item in WaterDeliveryType]),
+            vol.Required(CONF_COMMISSIONING_COMPONENT_COUNT, default=1): vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=1000)
+            ),
+            vol.Required(
+                CONF_COMMISSIONING_FLOW_EVIDENCE_LEVEL,
+                default=DeliveryEvidenceLevel.UNKNOWN.value,
+            ): vol.In([item.value for item in DeliveryEvidenceLevel]),
+            vol.Required(
+                CONF_COMMISSIONING_FLOW_BASIS,
+                default=FlowBasis.COMPONENT_TOTAL.value,
+            ): vol.In(
+                {
+                    FlowBasis.COMPONENT_TOTAL.value: "Total for this component group",
+                    FlowBasis.PER_EMITTER.value: "Per physical emitter",
+                }
+            ),
+            vol.Optional(CONF_COMMISSIONING_FLOW_LPH, default=""): vol.Any(
+                "", vol.All(vol.Coerce(float), vol.Range(min=0.000001))
+            ),
+            vol.Optional(CONF_COMMISSIONING_COLLECTED_VOLUME, default=""): vol.Any(
+                "", vol.All(vol.Coerce(float), vol.Range(min=0.000001))
+            ),
+            vol.Optional(
+                CONF_COMMISSIONING_COLLECTED_VOLUME_UNIT, default=""
+            ): vol.In(
+                {
+                    "": "Not a collected-volume measurement",
+                    MeasurementUnit.MILLILITERS.value: "Milliliters",
+                    MeasurementUnit.LITERS.value: "Liters",
+                    MeasurementUnit.US_GALLONS.value: "US gallons",
+                }
+            ),
+            vol.Optional(CONF_COMMISSIONING_COLLECTION_DURATION, default=""): vol.Any(
+                "", vol.All(vol.Coerce(int), vol.Range(min=1, max=86400))
+            ),
+            vol.Optional(CONF_COMMISSIONING_RADIUS_METERS, default=""): vol.Any(
+                "", vol.All(vol.Coerce(float), vol.Range(min=0.000001))
+            ),
+            vol.Required(
+                CONF_COMMISSIONING_DEDICATED_EMITTER,
+                default=(
+                    False
+                    if existing is None or existing.dedicated_delivery is None
+                    else existing.dedicated_delivery
+                ),
+            ): bool,
+        }
+    )
+
+
 def _next_plant_group_id(profile: CommissionedZoneProfile) -> str:
     """Allocate a stable slot-like plant ID independent of mutable names."""
     known = {
@@ -1655,10 +2004,14 @@ def _commissioning_event_id(
 def _commissioning_review_summary(
     profile: CommissionedZoneProfile,
     scaling: BaselineEnvironmentalScalingAssessment | None = None,
+    *,
+    delivery_profiles: tuple[WaterDeliveryProfile, ...] = (),
 ) -> str:
     """Return bounded human-readable review text for the options flow only."""
     review = build_commissioning_review(
-        profile, baseline_scaling_assessment=scaling
+        profile,
+        baseline_scaling_assessment=scaling,
+        delivery_profiles=delivery_profiles,
     )
     lines = [
         f"{review.display_name} ({profile.identity.property_id}/"
@@ -1687,6 +2040,17 @@ def _commissioning_review_summary(
             f"Baseline: {baseline.runtime_seconds // 60} min at "
             f"{baseline.reference_air_temperature_celsius * 9 / 5 + 32:.1f} °F"
         )
+        reference = baseline.environmental_reference
+        lines.append(
+            "Environmental reference: "
+            + (
+                "not captured"
+                if reference is None
+                else f"{reference.reference_et0_mm:.3f} mm ET₀ over "
+                f"{reference.period_hours} h; {reference.capture_method.value}; "
+                f"quality={reference.quality}"
+            )
+        )
         lines.append(
             "Environmental scaling: "
             + (
@@ -1701,6 +2065,7 @@ def _commissioning_review_summary(
         + (", ".join(item.code for item in review.advisories) or "none")
     )
     lines.append(f"Recent landscape events: {len(review.recent_landscape_events)}")
+    lines.append(f"Stored delivery profiles: {len(delivery_profiles)}")
     if review.commissioning_assessment.follow_up_requirements:
         lines.append("Next information:")
         lines.extend(

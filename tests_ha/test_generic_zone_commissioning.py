@@ -10,20 +10,39 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.irrigationos.config_flow import (
+    CONF_COMMISSIONING_BASELINE_ACTION,
+    CONF_COMMISSIONING_BASELINE_MINUTES,
     CONF_COMMISSIONING_BOTANICAL_NAME,
+    CONF_COMMISSIONING_CAPTURE_DRY_CONFIRMATION,
+    CONF_COMMISSIONING_COLLECTED_VOLUME,
+    CONF_COMMISSIONING_COLLECTED_VOLUME_UNIT,
+    CONF_COMMISSIONING_COLLECTION_DURATION,
+    CONF_COMMISSIONING_COMPONENT_COUNT,
     CONF_COMMISSIONING_COMPONENT_IDS,
     CONF_COMMISSIONING_CONTAINER_GALLONS,
     CONF_COMMISSIONING_DEDICATED_EMITTER,
+    CONF_COMMISSIONING_DELIVERY_COMPONENT_ID,
+    CONF_COMMISSIONING_DELIVERY_COMPONENT_NAME,
     CONF_COMMISSIONING_DELIVERY_PROFILE_ID,
     CONF_COMMISSIONING_DELIVERY_STATUS,
+    CONF_COMMISSIONING_DELIVERY_TYPE,
     CONF_COMMISSIONING_DIRECT_IRRIGATION,
     CONF_COMMISSIONING_EMITTER_TYPE,
     CONF_COMMISSIONING_ESTABLISHMENT,
+    CONF_COMMISSIONING_FLOW_BASIS,
+    CONF_COMMISSIONING_FLOW_EVIDENCE_LEVEL,
+    CONF_COMMISSIONING_FLOW_LPH,
     CONF_COMMISSIONING_HEIGHT_FEET,
     CONF_COMMISSIONING_IRRIGATION_ROLE,
     CONF_COMMISSIONING_PLANT_NAME,
     CONF_COMMISSIONING_PLANT_TARGET,
     CONF_COMMISSIONING_PLANTED_DATE,
+    CONF_COMMISSIONING_RADIUS_METERS,
+    CONF_COMMISSIONING_RECENT_RAIN_MM,
+    CONF_COMMISSIONING_REFERENCE_ET0_MM,
+    CONF_COMMISSIONING_REFERENCE_PERIOD_HOURS,
+    CONF_COMMISSIONING_REFERENCE_TEMP_F,
+    CONF_COMMISSIONING_REPLACE_REFERENCE_CONFIRMATION,
     CONF_COMMISSIONING_REVIEW_ACTION,
     CONF_COMMISSIONING_REVIEW_TARGET,
     CONF_COMMISSIONING_ZONE_NAME,
@@ -36,6 +55,7 @@ from custom_components.irrigationos.landscape_intelligence import (
     Confidence,
     EstablishmentState,
     PlantAdditionInput,
+    UserCalibratedBaseline,
     ZoneDemandSourceMode,
     add_plant_group,
 )
@@ -46,6 +66,23 @@ from custom_components.irrigationos.landscape_intelligence.onboarding import (
     ManualPlantOnboardingInput,
     ZoneOnboardingRequest,
     map_zone_onboarding,
+)
+from custom_components.irrigationos.water_delivery import (
+    DeliveryComponentCalibrationRequest,
+    DeliveryEvidenceLevel,
+    WaterDeliveryType,
+    calibrate_delivery_component,
+)
+from custom_components.irrigationos.weather import (
+    EnvironmentalWeatherFacts,
+    HistoricalWeatherObservation,
+    ObservationWindow,
+    WeatherFact,
+    WeatherProvenance,
+    WeatherQualityMetadata,
+    WeatherQualityStatus,
+    WeatherSourceType,
+    WeatherVerificationStatus,
 )
 
 NOW = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
@@ -90,6 +127,78 @@ def _zone2() -> Any:
     )
 
 
+def _baseline_zone() -> Any:
+    return map_zone_onboarding(
+        ZoneOnboardingRequest(
+            CanonicalZoneIdentity("property.primary", "zone.4", 1, 4),
+            "Baseline lawn",
+            ZoneDemandSourceMode.USER_CALIBRATED_BASELINE,
+            NOW - timedelta(days=30),
+            calibrated_baseline=UserCalibratedBaseline(
+                720,
+                (75 - 32) * 5 / 9,
+                0,
+                "representative dry day",
+                NOW - timedelta(days=30),
+                Confidence.HIGH,
+            ),
+        )
+    )
+
+
+def _weather_fact(value: object, observed_at: datetime) -> Any:
+    return WeatherFact(
+        value=value,
+        confidence=0.9,
+        provenance=WeatherProvenance(
+            "normalized.synthetic.station", WeatherSourceType.STATION
+        ),
+        verification_status=WeatherVerificationStatus.PROVIDER_VALIDATED,
+        observed_at=observed_at,
+        quality=WeatherQualityMetadata(WeatherQualityStatus.GOOD),
+    )
+
+
+def _baseline_observations() -> ObservationWindow:
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=24)
+    observations = []
+    for index in range(24):
+        observed_at = start + timedelta(hours=index)
+        unknown = WeatherFact(
+            value=None,
+            confidence=0,
+            provenance=WeatherProvenance("synthetic", WeatherSourceType.OTHER),
+            verification_status=WeatherVerificationStatus.UNVERIFIED,
+            observed_at=observed_at,
+            quality=WeatherQualityMetadata(
+                WeatherQualityStatus.UNAVAILABLE, reason="not used"
+            ),
+        )
+        values = {
+            name: unknown for name in EnvironmentalWeatherFacts.__dataclass_fields__
+        }
+        values["reference_evapotranspiration_mm"] = _weather_fact(0.2, observed_at)
+        values["precipitation_mm"] = _weather_fact(0.0, observed_at)
+        values["air_temperature_celsius"] = _weather_fact(23.7, observed_at)
+        observations.append(
+            HistoricalWeatherObservation(
+                f"observation.{index}",
+                "location.synthetic",
+                observed_at,
+                observed_at + timedelta(minutes=1),
+                EnvironmentalWeatherFacts(**values),
+            )
+        )
+    return ObservationWindow(
+        "window.synthetic",
+        "location.synthetic",
+        start,
+        end,
+        tuple(observations),
+    )
+
+
 @pytest.mark.asyncio
 async def test_legacy_schema_one_zone1_store_migrates_additively(
     hass: HomeAssistant,
@@ -103,7 +212,7 @@ async def test_legacy_schema_one_zone1_store_migrates_additively(
 
     assert len(store.saved) == 1
     assert store.value is not None
-    assert store.value["commissioning_store_schema_version"] == 4
+    assert store.value["commissioning_store_schema_version"] == 5
     assert store.value["zone_1"] == old_zone1
     assert manager.zone1.area_slot == 1
     assert tuple(zone.identity.area_slot for zone in manager.commissioned_zones) == (1,)
@@ -203,7 +312,7 @@ async def test_diagnostics_are_canonical_compact_and_confidence_preserved(
     assert await manager.async_add_zone(_zone2())
 
     summary = manager.diagnostics()["commissioning_summary"]
-    assert summary["store_schema_version"] == 4
+    assert summary["store_schema_version"] == 5
     assert summary["commissioned_zone_count"] == 2
     assert summary["legacy_zone_1_compatible"] is True
     assert summary["zones"][1]["identity"] == {
@@ -334,3 +443,153 @@ async def test_options_review_flow_adds_second_plant_without_replacing_first(
         if link.plant_group_id == "zone.2.plant.1"
     )
     assert avocado_link.delivery_profile_id == "delivery.zone.2.avocado"
+
+
+@pytest.mark.asyncio
+async def test_options_flow_guides_dry_baseline_reference_capture(
+    hass: HomeAssistant,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "baseline-capture")
+    store = _Store(None)
+    manager._store = store  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    assert await manager.async_add_zone(_baseline_zone())
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = SimpleNamespace(
+        landscape_intelligence=manager,
+        weather_evidence=SimpleNamespace(observations=_baseline_observations()),
+    )
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+
+    await flow.async_step_commissioning_review_select(
+        {CONF_COMMISSIONING_REVIEW_TARGET: "property.primary|zone.4"}
+    )
+    form = await flow.async_step_commissioning_review(
+        {CONF_COMMISSIONING_REVIEW_ACTION: "capture_baseline_reference"}
+    )
+    assert form["step_id"] == "commissioning_baseline_reference"
+    result = await flow.async_step_commissioning_baseline_reference(
+        {
+            CONF_COMMISSIONING_REFERENCE_PERIOD_HOURS: 24,
+            CONF_COMMISSIONING_CAPTURE_DRY_CONFIRMATION: True,
+            CONF_COMMISSIONING_REPLACE_REFERENCE_CONFIRMATION: False,
+        }
+    )
+    assert result["step_id"] == "commissioning_review"
+    updated = manager.get_zone("property.primary", "zone.4")
+    assert updated is not None
+    reference = updated.demand_sources[0].calibrated_baseline.environmental_reference
+    assert reference.reference_et0_mm == pytest.approx(4.8)
+    assert reference.capture_method.value == "observed_environment_capture"
+    assert updated.execution_authorized is False
+
+    await flow.async_step_commissioning_review(
+        {CONF_COMMISSIONING_REVIEW_ACTION: "edit_baseline"}
+    )
+    unchanged = await flow.async_step_commissioning_baseline(
+        {
+            CONF_COMMISSIONING_BASELINE_ACTION: "set",
+            CONF_COMMISSIONING_BASELINE_MINUTES: 12,
+            CONF_COMMISSIONING_REFERENCE_TEMP_F: 75,
+            CONF_COMMISSIONING_RECENT_RAIN_MM: 0,
+            CONF_COMMISSIONING_REFERENCE_ET0_MM: reference.reference_et0_mm,
+            CONF_COMMISSIONING_REFERENCE_PERIOD_HOURS: 24,
+        }
+    )
+    assert unchanged["step_id"] == "commissioning_review"
+    preserved = manager.get_zone("property.primary", "zone.4")
+    preserved_baseline = preserved.demand_sources[0].calibrated_baseline
+    assert preserved_baseline.environmental_reference == reference
+    assert preserved_baseline.reference_history == ()
+
+
+@pytest.mark.asyncio
+async def test_options_flow_calibrates_measured_shared_delivery_atomically(
+    hass: HomeAssistant,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "delivery-calibration")
+    store = _Store(None)
+    manager._store = store  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    assert await manager.async_add_zone(_zone2())
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = SimpleNamespace(landscape_intelligence=manager)
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+
+    await flow.async_step_commissioning_review_select(
+        {CONF_COMMISSIONING_REVIEW_TARGET: "property.primary|zone.2"}
+    )
+    await flow.async_step_commissioning_review(
+        {CONF_COMMISSIONING_REVIEW_ACTION: "calibrate_delivery"}
+    )
+    form = await flow.async_step_commissioning_plant_select(
+        {CONF_COMMISSIONING_PLANT_TARGET: "podocarpus"}
+    )
+    assert form["step_id"] == "commissioning_delivery_calibration"
+    result = await flow.async_step_commissioning_delivery_calibration(
+        {
+            CONF_COMMISSIONING_DELIVERY_PROFILE_ID: "delivery.zone.2",
+            CONF_COMMISSIONING_DELIVERY_COMPONENT_ID: "component.microjet.shared.1",
+            CONF_COMMISSIONING_DELIVERY_COMPONENT_NAME: "Shared microjet",
+            CONF_COMMISSIONING_DELIVERY_TYPE: "microjet",
+            CONF_COMMISSIONING_COMPONENT_COUNT: 1,
+            CONF_COMMISSIONING_FLOW_EVIDENCE_LEVEL: "measured",
+            CONF_COMMISSIONING_FLOW_BASIS: "component_total",
+            CONF_COMMISSIONING_FLOW_LPH: "",
+            CONF_COMMISSIONING_COLLECTED_VOLUME: 1,
+            CONF_COMMISSIONING_COLLECTED_VOLUME_UNIT: "us_gallons",
+            CONF_COMMISSIONING_COLLECTION_DURATION: 300,
+            CONF_COMMISSIONING_RADIUS_METERS: 0.9144,
+            CONF_COMMISSIONING_DEDICATED_EMITTER: False,
+        }
+    )
+    assert result["step_id"] == "commissioning_review"
+    delivery = manager.get_delivery_profile("delivery.zone.2")
+    assert delivery is not None
+    assert delivery.components[0].measured_flow_liters_per_hour.value == pytest.approx(
+        45.424941408
+    )
+    updated = manager.get_zone("property.primary", "zone.2")
+    assert updated is not None
+    assert updated.delivery_links[0].component_ids == (
+        "component.microjet.shared.1",
+    )
+    assert updated.delivery_links[0].dedicated_delivery is False
+    assert updated.execution_authorized is False
+    assert store.value["water_delivery_profiles"][0] == delivery.to_dict()
+
+
+@pytest.mark.asyncio
+async def test_delivery_calibration_save_failure_publishes_neither_zone_nor_profile(
+    hass: HomeAssistant,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "delivery-save-failure")
+    store = _Store(None)
+    manager._store = store  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    assert await manager.async_add_zone(_zone2())
+    original = manager.get_zone("property.primary", "zone.2")
+    assert original is not None
+    delivery = calibrate_delivery_component(
+        DeliveryComponentCalibrationRequest(
+            "delivery.zone.2",
+            "zone.2",
+            "component.microjet.1",
+            "Microjet",
+            WaterDeliveryType.MICROJET,
+            1,
+            DeliveryEvidenceLevel.UNKNOWN,
+            NOW,
+        )
+    )
+    store.fail_save = True
+
+    assert not await manager.async_update_zone_and_delivery_profile(original, delivery)
+    assert manager.get_zone("property.primary", "zone.2") == original
+    assert manager.delivery_profiles == ()

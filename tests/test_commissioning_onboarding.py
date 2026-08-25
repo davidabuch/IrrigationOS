@@ -245,7 +245,7 @@ def test_schema_two_round_trip_and_deterministic_multi_property_order() -> None:
     )
     restored = P.restore_store_payload(payload, fallback_zone1=zone1)
 
-    assert payload["commissioning_store_schema_version"] == 4
+    assert payload["commissioning_store_schema_version"] == 5
     assert tuple(
         (zone.identity.property_id, zone.identity.zone_id) for zone in restored.zones
     ) == (
@@ -276,6 +276,19 @@ def test_two_properties_cannot_claim_the_same_installed_controller_area() -> Non
             (),
             legacy_zone1=zone1.to_landscape_intelligence_profile().to_dict(),
         )
+
+
+def test_current_store_missing_delivery_collection_fails_closed() -> None:
+    zone1 = Z.build_zone_1_commissioning_profile(NOW)
+    payload = P.build_store_payload(
+        (zone1,),
+        (),
+        legacy_zone1=zone1.to_landscape_intelligence_profile().to_dict(),
+    )
+    payload.pop("water_delivery_profiles")
+
+    with pytest.raises(ValueError, match="missing delivery profiles"):
+        P.restore_store_payload(payload, fallback_zone1=zone1)
 
 
 def test_legacy_and_v1052_payloads_migrate_without_zone1_evidence_loss() -> None:
@@ -328,3 +341,21 @@ def test_legacy_and_v1052_payloads_migrate_without_zone1_evidence_loss() -> None
     )
     assert migrated_zone.schema_version == C.ZONE_COMMISSIONING_SCHEMA_VERSION
     assert migrated_zone.conflict_resolutions == ()
+
+    v1056_zone = deepcopy(_manual_zone().to_dict())
+    v1056_zone["schema_version"] = 4
+    v1056 = P.restore_store_payload(
+        {
+            "schema_version": 1,
+            "commissioning_store_schema_version": 4,
+            "zone_1": legacy_profile,
+            "commissioned_zones": [v1056_zone],
+            "deactivated_zones": [],
+        },
+        fallback_zone1=zone1,
+    )
+    assert v1056.migration_required is True
+    assert v1056.delivery_profiles == ()
+    assert next(
+        zone for zone in v1056.zones if zone.identity.zone_id == "zone.2"
+    ).schema_version == C.ZONE_COMMISSIONING_SCHEMA_VERSION

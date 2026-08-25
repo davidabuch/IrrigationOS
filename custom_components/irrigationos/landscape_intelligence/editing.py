@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime
 
+from ..water_delivery import WaterDeliveryProfile
 from .admission import CommissioningAssessment, assess_commissioning
 from .baseline_scaling import BaselineEnvironmentalScalingAssessment
 from .commissioning import (
@@ -180,6 +181,7 @@ def build_commissioning_review(
     *,
     recent_event_limit: int = 10,
     baseline_scaling_assessment: BaselineEnvironmentalScalingAssessment | None = None,
+    delivery_profiles: tuple[WaterDeliveryProfile, ...] = (),
 ) -> CommissionedZoneReview:
     """Build one bounded deterministic review without mutating evidence."""
     if not 1 <= recent_event_limit <= 20:
@@ -188,7 +190,7 @@ def build_commissioning_review(
     resolved_ids = {
         resolution.conflict_id for resolution in profile.conflict_resolutions
     }
-    compatibility = assess_delivery_compatibility(profile)
+    compatibility = assess_delivery_compatibility(profile, delivery_profiles)
     visual_ids = tuple(
         sorted(
             {

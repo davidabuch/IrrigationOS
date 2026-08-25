@@ -1,5 +1,10 @@
 """Canonical water-delivery domain for IrrigationOS."""
 
+from .calibration import (
+    DeliveryComponentCalibrationRequest,
+    calibrate_delivery_component,
+    derive_collected_volume_flow_liters_per_hour,
+)
 from .models import (
     AreaUnit,
     CalibrationMeasurement,
@@ -9,6 +14,7 @@ from .models import (
     CalibrationTestType,
     CloggingRisk,
     DeliveryComponent,
+    DeliveryEvidenceLevel,
     DeliveryFact,
     DeliveryProvenance,
     DeliveryQuantityMode,
@@ -30,6 +36,8 @@ __all__ = [
     "CalibrationTestType",
     "CloggingRisk",
     "DeliveryComponent",
+    "DeliveryComponentCalibrationRequest",
+    "DeliveryEvidenceLevel",
     "DeliveryFact",
     "DeliveryProvenance",
     "DeliveryQuantityMode",
@@ -40,4 +48,6 @@ __all__ = [
     "SprayPattern",
     "WaterDeliveryProfile",
     "WaterDeliveryType",
+    "calibrate_delivery_component",
+    "derive_collected_volume_flow_liters_per_hour",
 ]
