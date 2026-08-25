@@ -46,11 +46,27 @@ from .landscape import (
 )
 from .landscape_intelligence import (
     CanonicalZoneIdentity,
+    CommissionedZoneProfile,
     Confidence,
+    ConflictResolutionInput,
     DeliveryLinkStatus,
     IrrigationDeliveryLink,
+    IrrigationRole,
+    PlantAdditionInput,
+    PlantCommissioningDetails,
+    PlantEditInput,
+    PlantGroup,
+    PlantRemovalInput,
     UserCalibratedBaseline,
     ZoneDemandSourceMode,
+    add_plant_group,
+    build_commissioning_review,
+    edit_plant_group,
+    remove_calibrated_baseline,
+    remove_plant_group,
+    resolve_identity_conflict,
+    set_calibrated_baseline,
+    update_delivery_link,
 )
 from .landscape_intelligence import (
     EstablishmentState as CommissioningEstablishmentState,
@@ -99,6 +115,22 @@ CONF_COMMISSIONING_AI_PLANT_NAME = "commissioning_ai_plant_name"
 CONF_COMMISSIONING_AI_BOTANICAL_NAME = "commissioning_ai_botanical_name"
 CONF_COMMISSIONING_AI_CONFIDENCE = "commissioning_ai_confidence"
 CONF_COMMISSIONING_VISIBLE_IRRIGATION = "commissioning_visible_irrigation"
+CONF_COMMISSIONING_REVIEW_TARGET = "commissioning_review_target"
+CONF_COMMISSIONING_REVIEW_ACTION = "commissioning_review_action"
+CONF_COMMISSIONING_PLANT_TARGET = "commissioning_plant_target"
+CONF_COMMISSIONING_IRRIGATION_ROLE = "commissioning_irrigation_role"
+CONF_COMMISSIONING_DIRECT_IRRIGATION = "commissioning_direct_irrigation"
+CONF_COMMISSIONING_DEDICATED_EMITTER = "commissioning_dedicated_emitter"
+CONF_COMMISSIONING_EMITTER_TYPE = "commissioning_emitter_type"
+CONF_COMMISSIONING_REMOVE_CONFIRMATION = "commissioning_remove_confirmation"
+CONF_COMMISSIONING_DELIVERY_STATUS = "commissioning_delivery_status"
+CONF_COMMISSIONING_BASELINE_ACTION = "commissioning_baseline_action"
+CONF_COMMISSIONING_CONFLICT_TARGET = "commissioning_conflict_target"
+CONF_COMMISSIONING_RESOLUTION_COMMON_NAME = "commissioning_resolution_common_name"
+CONF_COMMISSIONING_RESOLUTION_BOTANICAL_NAME = (
+    "commissioning_resolution_botanical_name"
+)
+CONF_COMMISSIONING_RESOLUTION_NOTE = "commissioning_resolution_note"
 
 STEP_USER_SCHEMA = vol.Schema(
     {
@@ -240,6 +272,11 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
         self._commissioning_area_slot: int | None = None
         self._commissioning_area_name: str | None = None
         self._commissioning_mode: ZoneDemandSourceMode | None = None
+        self._review_property_id: str | None = None
+        self._review_zone_id: str | None = None
+        self._review_plant_group_id: str | None = None
+        self._review_plant_action: str | None = None
+        self._review_conflict_id: str | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -252,6 +289,8 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 return await self.async_step_landscape()
             if action == "commissioning":
                 return await self.async_step_commissioning()
+            if action == "commissioning_review":
+                return await self.async_step_commissioning_review_select()
             return await self.async_step_first_live_trial()
         return self.async_show_form(
             step_id="init",
@@ -261,6 +300,7 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                         {
                             "landscape": "Edit Landscape Digital Twin",
                             "commissioning": "Commission generic zone knowledge",
+                            "commissioning_review": "Review or edit commissioned zones",
                             "first_live_trial": "Run supervised first-live watering trial",
                         }
                     )
@@ -310,7 +350,11 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 {
                     vol.Required(CONF_COMMISSIONING_TARGET): vol.In(choices),
                     vol.Required(CONF_COMMISSIONING_MODE): vol.In(
-                        [item.value for item in ZoneDemandSourceMode]
+                        [
+                            item.value
+                            for item in ZoneDemandSourceMode
+                            if item is not ZoneDemandSourceMode.UNRESOLVED
+                        ]
                     ),
                 }
             ),
@@ -357,6 +401,459 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 self._commissioning_area_name or f"Zone {self._commissioning_area_slot}",
             ),
             errors=errors,
+        )
+
+    def _selected_review_profile(self) -> CommissionedZoneProfile | None:
+        """Return the selected generic profile without provider-native identity."""
+        if self._review_property_id is None or self._review_zone_id is None:
+            return None
+        return self.config_entry.runtime_data.landscape_intelligence.get_zone(
+            self._review_property_id,
+            self._review_zone_id,
+        )
+
+    async def async_step_commissioning_review_select(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Select one durable canonical zone for detailed review."""
+        manager = self.config_entry.runtime_data.landscape_intelligence
+        choices = {
+            f"{zone.identity.property_id}|{zone.identity.zone_id}": (
+                f"{zone.display_name} — controller "
+                f"{zone.identity.controller_slot or 'unbound'}, area "
+                f"{zone.identity.area_slot}"
+            )
+            for zone in manager.commissioned_zones
+        }
+        if not choices:
+            return self.async_abort(reason="no_commissioned_zones")
+        if user_input is not None:
+            property_id, zone_id = str(
+                user_input[CONF_COMMISSIONING_REVIEW_TARGET]
+            ).split("|", 1)
+            self._review_property_id = property_id
+            self._review_zone_id = zone_id
+            return await self.async_step_commissioning_review()
+        return self.async_show_form(
+            step_id="commissioning_review_select",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_COMMISSIONING_REVIEW_TARGET): vol.In(choices)}
+            ),
+        )
+
+    async def async_step_commissioning_review(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Review bounded facts and choose one explicit edit operation."""
+        profile = self._selected_review_profile()
+        if profile is None:
+            return await self.async_step_commissioning_review_select()
+        review = build_commissioning_review(profile)
+        actions: dict[str, str] = {
+            "add_plant": "Add plant group",
+            "edit_baseline": "Review or edit calibrated baseline",
+            "finish": "Finish review",
+        }
+        if review.plants:
+            actions.update(
+                {
+                    "edit_plant": "Edit plant group",
+                    "remove_plant": "Remove plant group",
+                    "edit_delivery": "Edit irrigation-delivery link",
+                }
+            )
+        if review.unresolved_conflicts:
+            actions["resolve_conflict"] = "Review or resolve evidence conflict"
+        if user_input is not None:
+            action = str(user_input[CONF_COMMISSIONING_REVIEW_ACTION])
+            if action == "finish":
+                return self.async_create_entry(
+                    title="", data=dict(self.config_entry.options)
+                )
+            if action == "add_plant":
+                return await self.async_step_commissioning_add_plant()
+            if action == "edit_baseline":
+                return await self.async_step_commissioning_baseline()
+            if action == "resolve_conflict":
+                return await self.async_step_commissioning_conflict_select()
+            self._review_plant_action = action
+            return await self.async_step_commissioning_plant_select()
+        return self.async_show_form(
+            step_id="commissioning_review",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_COMMISSIONING_REVIEW_ACTION): vol.In(actions)}
+            ),
+            description_placeholders={
+                "review_summary": _commissioning_review_summary(profile)
+            },
+        )
+
+    async def async_step_commissioning_add_plant(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Add one user-confirmed plant without replacing existing groups."""
+        profile = self._selected_review_profile()
+        if profile is None:
+            return await self.async_step_commissioning_review_select()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            now = datetime.now(UTC)
+            plant_id = _next_plant_group_id(profile)
+            try:
+                plant = _manual_plant_from_form(
+                    user_input,
+                    plant_group_id=plant_id,
+                    now=now,
+                    timezone=ZoneInfo(self.hass.config.time_zone),
+                )
+                candidate = add_plant_group(
+                    profile,
+                    PlantAdditionInput(
+                        _commissioning_event_id(profile, "add", now),
+                        plant,
+                        now,
+                        _delivery_link_from_form(user_input, plant_id),
+                    ),
+                )
+            except (KeyError, TypeError, ValueError):
+                errors["base"] = "invalid_commissioning_edit"
+            else:
+                if await self.config_entry.runtime_data.landscape_intelligence.async_update_zone(
+                    candidate
+                ):
+                    return await self.async_step_commissioning_review()
+                errors["base"] = "commissioning_persistence_failed"
+        return self.async_show_form(
+            step_id="commissioning_add_plant",
+            data_schema=_commissioning_plant_schema(),
+            errors=errors,
+        )
+
+    async def async_step_commissioning_plant_select(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Select one active plant for edit, removal, or delivery review."""
+        profile = self._selected_review_profile()
+        if profile is None or self._review_plant_action is None:
+            return await self.async_step_commissioning_review()
+        choices = {
+            plant.plant_group_id: plant.common_name
+            for plant in profile.landscape_profile.plant_groups
+        }
+        if not choices:
+            return await self.async_step_commissioning_review()
+        if user_input is not None:
+            self._review_plant_group_id = str(
+                user_input[CONF_COMMISSIONING_PLANT_TARGET]
+            )
+            if self._review_plant_action == "edit_plant":
+                return await self.async_step_commissioning_edit_plant()
+            if self._review_plant_action == "remove_plant":
+                return await self.async_step_commissioning_remove_plant()
+            return await self.async_step_commissioning_delivery()
+        return self.async_show_form(
+            step_id="commissioning_plant_select",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_COMMISSIONING_PLANT_TARGET): vol.In(choices)}
+            ),
+        )
+
+    async def async_step_commissioning_edit_plant(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Edit scientifically relevant plant facts with prior-state history."""
+        profile = self._selected_review_profile()
+        if profile is None or self._review_plant_group_id is None:
+            return await self.async_step_commissioning_plant_select()
+        group = next(
+            (
+                item
+                for item in profile.landscape_profile.plant_groups
+                if item.plant_group_id == self._review_plant_group_id
+            ),
+            None,
+        )
+        details = next(
+            (
+                item
+                for item in profile.plant_details
+                if item.plant_group_id == self._review_plant_group_id
+            ),
+            None,
+        )
+        delivery = next(
+            (
+                item
+                for item in profile.delivery_links
+                if item.plant_group_id == self._review_plant_group_id
+            ),
+            None,
+        )
+        if group is None or details is None:
+            return await self.async_step_commissioning_review()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            now = datetime.now(UTC)
+            try:
+                plant = _manual_plant_from_form(
+                    user_input,
+                    plant_group_id=group.plant_group_id,
+                    now=now,
+                    timezone=ZoneInfo(self.hass.config.time_zone),
+                )
+                candidate = edit_plant_group(
+                    profile,
+                    PlantEditInput(
+                        _commissioning_event_id(profile, "update", now),
+                        plant,
+                        now,
+                    ),
+                )
+                candidate = update_delivery_link(
+                    candidate,
+                    _delivery_link_from_form(user_input, group.plant_group_id),
+                )
+            except (KeyError, TypeError, ValueError):
+                errors["base"] = "invalid_commissioning_edit"
+            else:
+                if await self.config_entry.runtime_data.landscape_intelligence.async_update_zone(
+                    candidate
+                ):
+                    return await self.async_step_commissioning_review()
+                errors["base"] = "commissioning_persistence_failed"
+        return self.async_show_form(
+            step_id="commissioning_edit_plant",
+            data_schema=_commissioning_plant_schema(
+                group=group,
+                details=details,
+                delivery=delivery,
+            ),
+            errors=errors,
+        )
+
+    async def async_step_commissioning_remove_plant(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Remove one current plant while retaining its immutable snapshot."""
+        profile = self._selected_review_profile()
+        if profile is None or self._review_plant_group_id is None:
+            return await self.async_step_commissioning_plant_select()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if user_input.get(CONF_COMMISSIONING_REMOVE_CONFIRMATION) is not True:
+                errors["base"] = "commissioning_removal_not_confirmed"
+            else:
+                now = datetime.now(UTC)
+                try:
+                    candidate = remove_plant_group(
+                        profile,
+                        PlantRemovalInput(
+                            _commissioning_event_id(profile, "remove", now),
+                            self._review_plant_group_id,
+                            now,
+                        ),
+                    )
+                except (KeyError, TypeError, ValueError):
+                    errors["base"] = "invalid_commissioning_edit"
+                else:
+                    manager = self.config_entry.runtime_data.landscape_intelligence
+                    if await manager.async_update_zone(candidate):
+                        return await self.async_step_commissioning_review()
+                    errors["base"] = "commissioning_persistence_failed"
+        return self.async_show_form(
+            step_id="commissioning_remove_plant",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_COMMISSIONING_REMOVE_CONFIRMATION): bool}
+            ),
+            errors=errors,
+        )
+
+    async def async_step_commissioning_delivery(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Review or replace a plant's canonical delivery association."""
+        profile = self._selected_review_profile()
+        if profile is None or self._review_plant_group_id is None:
+            return await self.async_step_commissioning_plant_select()
+        existing = next(
+            (
+                item
+                for item in profile.delivery_links
+                if item.plant_group_id == self._review_plant_group_id
+            ),
+            None,
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                candidate = update_delivery_link(
+                    profile,
+                    _delivery_link_from_form(
+                        user_input,
+                        self._review_plant_group_id,
+                    ),
+                )
+            except (KeyError, TypeError, ValueError):
+                errors["base"] = "invalid_commissioning_edit"
+            else:
+                if await self.config_entry.runtime_data.landscape_intelligence.async_update_zone(
+                    candidate
+                ):
+                    return await self.async_step_commissioning_review()
+                errors["base"] = "commissioning_persistence_failed"
+        return self.async_show_form(
+            step_id="commissioning_delivery",
+            data_schema=_commissioning_delivery_schema(existing),
+            errors=errors,
+        )
+
+    async def async_step_commissioning_baseline(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Add, update, or remove user-calibrated baseline evidence."""
+        profile = self._selected_review_profile()
+        if profile is None:
+            return await self.async_step_commissioning_review_select()
+        existing = next(
+            (
+                source.calibrated_baseline
+                for source in profile.demand_sources
+                if source.calibrated_baseline is not None
+            ),
+            None,
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                if str(user_input[CONF_COMMISSIONING_BASELINE_ACTION]) == "remove":
+                    candidate = remove_calibrated_baseline(profile)
+                else:
+                    candidate = set_calibrated_baseline(
+                        profile,
+                        _baseline_from_form(user_input, datetime.now(UTC)),
+                    )
+            except (KeyError, TypeError, ValueError):
+                errors["base"] = "invalid_commissioning_edit"
+            else:
+                if await self.config_entry.runtime_data.landscape_intelligence.async_update_zone(
+                    candidate
+                ):
+                    return await self.async_step_commissioning_review()
+                errors["base"] = "commissioning_persistence_failed"
+        return self.async_show_form(
+            step_id="commissioning_baseline",
+            data_schema=_commissioning_baseline_schema(existing),
+            errors=errors,
+        )
+
+    async def async_step_commissioning_conflict_select(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Select one unresolved conflict without hiding its candidates."""
+        profile = self._selected_review_profile()
+        if profile is None:
+            return await self.async_step_commissioning_review_select()
+        review = build_commissioning_review(profile)
+        choices = {
+            conflict.conflict_id: " vs. ".join(
+                candidate.value for candidate in conflict.candidates
+            )
+            for conflict in review.unresolved_conflicts
+        }
+        if not choices:
+            return await self.async_step_commissioning_review()
+        if user_input is not None:
+            self._review_conflict_id = str(
+                user_input[CONF_COMMISSIONING_CONFLICT_TARGET]
+            )
+            return await self.async_step_commissioning_conflict_resolve()
+        return self.async_show_form(
+            step_id="commissioning_conflict_select",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_COMMISSIONING_CONFLICT_TARGET): vol.In(choices)}
+            ),
+        )
+
+    async def async_step_commissioning_conflict_resolve(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Record explicit correction while preserving every original candidate."""
+        profile = self._selected_review_profile()
+        if profile is None or self._review_conflict_id is None:
+            return await self.async_step_commissioning_conflict_select()
+        conflict = next(
+            (
+                item
+                for item in profile.conflicts
+                if item.conflict_id == self._review_conflict_id
+            ),
+            None,
+        )
+        if conflict is None:
+            return await self.async_step_commissioning_review()
+        group = next(
+            item
+            for item in profile.landscape_profile.plant_groups
+            if item.plant_group_id == conflict.plant_group_id
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            now = datetime.now(UTC)
+            try:
+                candidate = resolve_identity_conflict(
+                    profile,
+                    ConflictResolutionInput(
+                        resolution_id=_commissioning_event_id(
+                            profile, "resolution", now
+                        ),
+                        event_id=_commissioning_event_id(
+                            profile, "correction", now
+                        ),
+                        conflict_id=conflict.conflict_id,
+                        confirmed_common_name=str(
+                            user_input[CONF_COMMISSIONING_RESOLUTION_COMMON_NAME]
+                        ).strip(),
+                        confirmed_botanical_name=_optional_form_text(
+                            user_input,
+                            CONF_COMMISSIONING_RESOLUTION_BOTANICAL_NAME,
+                        ),
+                        resolved_at=now,
+                        note=_optional_form_text(
+                            user_input, CONF_COMMISSIONING_RESOLUTION_NOTE
+                        ),
+                    ),
+                )
+            except (KeyError, StopIteration, TypeError, ValueError):
+                errors["base"] = "invalid_commissioning_edit"
+            else:
+                if await self.config_entry.runtime_data.landscape_intelligence.async_update_zone(
+                    candidate
+                ):
+                    return await self.async_step_commissioning_review()
+                errors["base"] = "commissioning_persistence_failed"
+        return self.async_show_form(
+            step_id="commissioning_conflict_resolve",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_COMMISSIONING_RESOLUTION_COMMON_NAME,
+                        default=group.common_name,
+                    ): str,
+                    vol.Optional(
+                        CONF_COMMISSIONING_RESOLUTION_BOTANICAL_NAME,
+                        default=group.botanical_name or "",
+                    ): str,
+                    vol.Optional(CONF_COMMISSIONING_RESOLUTION_NOTE, default=""): str,
+                }
+            ),
+            errors=errors,
+            description_placeholders={
+                "conflict_summary": " | ".join(
+                    f"{candidate.source.value}: {candidate.value} "
+                    f"({candidate.confidence.value})"
+                    for candidate in conflict.candidates
+                )
+            },
         )
 
     async def async_step_landscape(
@@ -831,3 +1328,312 @@ def _map_commissioning_form(
             delivery_links=delivery_links,
         )
     )
+
+
+def _commissioning_plant_schema(
+    *,
+    group: PlantGroup | None = None,
+    details: PlantCommissioningDetails | None = None,
+    delivery: IrrigationDeliveryLink | None = None,
+) -> vol.Schema:
+    """Build the generic plant add/edit form with existing facts as defaults."""
+    planted_date = ""
+    if details is not None and details.planted_at is not None:
+        planted_date = details.planted_at.date().isoformat()
+    height_feet: str | float = ""
+    if details is not None and details.current_height_meters is not None:
+        height_feet = details.current_height_meters / 0.3048
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_COMMISSIONING_PLANT_NAME,
+                default="" if group is None else group.common_name,
+            ): str,
+            vol.Optional(
+                CONF_COMMISSIONING_BOTANICAL_NAME,
+                default="" if group is None else group.botanical_name or "",
+            ): str,
+            vol.Required(
+                CONF_COMMISSIONING_ESTABLISHMENT,
+                default=(
+                    CommissioningEstablishmentState.UNKNOWN.value
+                    if group is None
+                    else group.establishment_state.value
+                ),
+            ): vol.In([item.value for item in CommissioningEstablishmentState]),
+            vol.Required(
+                CONF_COMMISSIONING_IRRIGATION_ROLE,
+                default=(
+                    IrrigationRole.PRIMARY_TARGET.value
+                    if group is None
+                    else group.irrigation_role.value
+                ),
+            ): vol.In([item.value for item in IrrigationRole]),
+            vol.Optional(
+                CONF_COMMISSIONING_PLANTED_DATE, default=planted_date
+            ): str,
+            vol.Optional(
+                CONF_COMMISSIONING_CONTAINER_GALLONS,
+                default=(
+                    ""
+                    if details is None or details.source_container_gallons is None
+                    else details.source_container_gallons
+                ),
+            ): vol.Any("", vol.Coerce(float)),
+            vol.Optional(
+                CONF_COMMISSIONING_HEIGHT_FEET, default=height_feet
+            ): vol.Any("", vol.Coerce(float)),
+            vol.Required(
+                CONF_COMMISSIONING_DIRECT_IRRIGATION,
+                default=True if group is None else group.direct_irrigation,
+            ): bool,
+            vol.Required(
+                CONF_COMMISSIONING_DEDICATED_EMITTER,
+                default=False if group is None else group.dedicated_emitter,
+            ): bool,
+            vol.Optional(
+                CONF_COMMISSIONING_EMITTER_TYPE,
+                default="" if group is None else group.emitter_type or "",
+            ): str,
+            vol.Required(
+                CONF_COMMISSIONING_DELIVERY_STATUS,
+                default=(
+                    DeliveryLinkStatus.UNRESOLVED.value
+                    if delivery is None
+                    else delivery.status.value
+                ),
+            ): vol.In([item.value for item in DeliveryLinkStatus]),
+            vol.Optional(
+                CONF_COMMISSIONING_DELIVERY_PROFILE_ID,
+                default=(
+                    ""
+                    if delivery is None or delivery.delivery_profile_id is None
+                    else delivery.delivery_profile_id
+                ),
+            ): str,
+            vol.Optional(
+                CONF_COMMISSIONING_COMPONENT_IDS,
+                default=(
+                    "" if delivery is None else ", ".join(delivery.component_ids)
+                ),
+            ): str,
+        }
+    )
+
+
+def _manual_plant_from_form(
+    values: dict[str, Any],
+    *,
+    plant_group_id: str,
+    now: datetime,
+    timezone: ZoneInfo,
+) -> ManualPlantOnboardingInput:
+    """Map plant edit form values without changing evidence implicitly."""
+    height = _optional_form_float(values, CONF_COMMISSIONING_HEIGHT_FEET)
+    return ManualPlantOnboardingInput(
+        plant_group_id=plant_group_id,
+        common_name=str(values[CONF_COMMISSIONING_PLANT_NAME]).strip(),
+        botanical_name=_optional_form_text(
+            values, CONF_COMMISSIONING_BOTANICAL_NAME
+        ),
+        establishment_state=CommissioningEstablishmentState(
+            str(values[CONF_COMMISSIONING_ESTABLISHMENT])
+        ),
+        observed_at=now,
+        planted_at=_planting_datetime(values, timezone),
+        source_container_gallons=_optional_form_float(
+            values, CONF_COMMISSIONING_CONTAINER_GALLONS
+        ),
+        current_height_meters=None if height is None else height * 0.3048,
+        irrigation_role=IrrigationRole(
+            str(values[CONF_COMMISSIONING_IRRIGATION_ROLE])
+        ),
+        direct_irrigation=bool(values[CONF_COMMISSIONING_DIRECT_IRRIGATION]),
+        dedicated_emitter=bool(values[CONF_COMMISSIONING_DEDICATED_EMITTER]),
+        emitter_type=_optional_form_text(values, CONF_COMMISSIONING_EMITTER_TYPE),
+    )
+
+
+def _delivery_link_from_form(
+    values: dict[str, Any],
+    plant_group_id: str,
+) -> IrrigationDeliveryLink:
+    """Map explicit delivery linkage without inventing component properties."""
+    status = DeliveryLinkStatus(str(values[CONF_COMMISSIONING_DELIVERY_STATUS]))
+    if status is DeliveryLinkStatus.UNRESOLVED:
+        return IrrigationDeliveryLink(
+            link_id=f"{plant_group_id}.delivery",
+            plant_group_id=plant_group_id,
+            status=status,
+        )
+    profile_id = _optional_form_text(
+        values, CONF_COMMISSIONING_DELIVERY_PROFILE_ID
+    )
+    if profile_id is None:
+        raise ValueError("documented delivery requires a canonical profile ID")
+    return IrrigationDeliveryLink(
+        link_id=f"{plant_group_id}.delivery",
+        plant_group_id=plant_group_id,
+        status=status,
+        delivery_profile_id=profile_id,
+        component_ids=_form_ids(values, CONF_COMMISSIONING_COMPONENT_IDS),
+        dedicated_delivery=(
+            bool(values[CONF_COMMISSIONING_DEDICATED_EMITTER])
+            if CONF_COMMISSIONING_DEDICATED_EMITTER in values
+            else None
+        ),
+    )
+
+
+def _commissioning_delivery_schema(
+    existing: IrrigationDeliveryLink | None,
+) -> vol.Schema:
+    """Build a delivery-link-only review form."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_COMMISSIONING_DELIVERY_STATUS,
+                default=(
+                    DeliveryLinkStatus.UNRESOLVED.value
+                    if existing is None
+                    else existing.status.value
+                ),
+            ): vol.In([item.value for item in DeliveryLinkStatus]),
+            vol.Optional(
+                CONF_COMMISSIONING_DELIVERY_PROFILE_ID,
+                default=(
+                    ""
+                    if existing is None or existing.delivery_profile_id is None
+                    else existing.delivery_profile_id
+                ),
+            ): str,
+            vol.Optional(
+                CONF_COMMISSIONING_COMPONENT_IDS,
+                default=(
+                    "" if existing is None else ", ".join(existing.component_ids)
+                ),
+            ): str,
+            vol.Required(
+                CONF_COMMISSIONING_DEDICATED_EMITTER,
+                default=(
+                    False
+                    if existing is None or existing.dedicated_delivery is None
+                    else existing.dedicated_delivery
+                ),
+            ): bool,
+        }
+    )
+
+
+def _baseline_from_form(
+    values: dict[str, Any],
+    now: datetime,
+) -> UserCalibratedBaseline:
+    """Map user calibration exactly; never perform environmental scaling."""
+    return UserCalibratedBaseline(
+        runtime_seconds=int(values[CONF_COMMISSIONING_BASELINE_MINUTES]) * 60,
+        reference_air_temperature_celsius=(
+            float(values[CONF_COMMISSIONING_REFERENCE_TEMP_F]) - 32
+        )
+        * 5
+        / 9,
+        reference_recent_precipitation_mm=float(
+            values[CONF_COMMISSIONING_RECENT_RAIN_MM]
+        ),
+        reference_condition="user-confirmed dry-day reference condition",
+        calibrated_at=now,
+        confidence=Confidence.HIGH,
+    )
+
+
+def _commissioning_baseline_schema(
+    existing: UserCalibratedBaseline | None,
+) -> vol.Schema:
+    """Build baseline add/edit/remove form without calculation controls."""
+    reference_temp_f = 75.0
+    if existing is not None:
+        reference_temp_f = existing.reference_air_temperature_celsius * 9 / 5 + 32
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_COMMISSIONING_BASELINE_ACTION, default="set"
+            ): vol.In({"set": "Add or update baseline", "remove": "Remove baseline"}),
+            vol.Required(
+                CONF_COMMISSIONING_BASELINE_MINUTES,
+                default=(12 if existing is None else existing.runtime_seconds // 60),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=1440)),
+            vol.Required(
+                CONF_COMMISSIONING_REFERENCE_TEMP_F,
+                default=reference_temp_f,
+            ): vol.Coerce(float),
+            vol.Required(
+                CONF_COMMISSIONING_RECENT_RAIN_MM,
+                default=(
+                    0
+                    if existing is None
+                    else existing.reference_recent_precipitation_mm
+                ),
+            ): vol.All(vol.Coerce(float), vol.Range(min=0)),
+        }
+    )
+
+
+def _next_plant_group_id(profile: CommissionedZoneProfile) -> str:
+    """Allocate a stable slot-like plant ID independent of mutable names."""
+    known = {
+        group.plant_group_id for group in profile.landscape_profile.plant_groups
+    }
+    index = 1
+    while f"{profile.identity.zone_id}.plant.{index}" in known:
+        index += 1
+    return f"{profile.identity.zone_id}.plant.{index}"
+
+
+def _commissioning_event_id(
+    profile: CommissionedZoneProfile,
+    action: str,
+    observed_at: datetime,
+) -> str:
+    """Create a unique stable audit ID without names or provider identifiers."""
+    controller_slot = profile.identity.controller_slot or 0
+    stamp = observed_at.strftime("%Y%m%dT%H%M%S%f")
+    return (
+        f"event.c{controller_slot}.a{profile.identity.area_slot}."
+        f"{action}.{stamp}"
+    )
+
+
+def _commissioning_review_summary(profile: CommissionedZoneProfile) -> str:
+    """Return bounded human-readable review text for the options flow only."""
+    review = build_commissioning_review(profile)
+    lines = [
+        f"{review.display_name} ({profile.identity.property_id}/"
+        f"{profile.identity.zone_id})",
+        f"Demand modes: {', '.join(mode.value for mode in review.demand_source_modes)}",
+    ]
+    for plant in review.plants[:12]:
+        link_status = (
+            "missing"
+            if plant.delivery_link is None
+            else plant.delivery_link.status.value
+        )
+        lines.append(
+            f"Plant: {plant.plant_group.common_name}; "
+            f"establishment={plant.plant_group.establishment_state.value}; "
+            f"source={plant.commissioning_details.source.value}; "
+            f"confidence={plant.commissioning_details.confidence.value}; "
+            f"delivery={link_status}"
+        )
+    if review.calibrated_baselines:
+        baseline = review.calibrated_baselines[0]
+        lines.append(
+            f"Baseline: {baseline.runtime_seconds // 60} min at "
+            f"{baseline.reference_air_temperature_celsius * 9 / 5 + 32:.1f} °F"
+        )
+    lines.append(f"Unresolved conflicts: {len(review.unresolved_conflicts)}")
+    lines.append(
+        "Advisories: "
+        + (", ".join(item.code for item in review.advisories) or "none")
+    )
+    lines.append(f"Recent landscape events: {len(review.recent_landscape_events)}")
+    return "\n".join(lines)[:4000]

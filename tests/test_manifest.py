@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INTEGRATION = ROOT / "custom_components" / "irrigationos"
-CURRENT_VERSION = "1.0.53"
+CURRENT_VERSION = "1.0.54"
 
 
 def test_manifest_is_valid() -> None:

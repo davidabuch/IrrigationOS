@@ -1,3 +1,17 @@
+## [1.0.54] - 2026-08-24
+
+### Added
+- Generic bounded commissioning review for canonical zones, active plant facts, provenance, delivery status, baselines, conflicts, advisories, and recent landscape events.
+- Multi-plant add/edit/remove operations, canonical delivery-link editing, calibrated-baseline lifecycle, and explicit human conflict-resolution records.
+- Home Assistant multi-step options workflow using the same generic operations for Zone 1 and arbitrary properties.
+
+### Changed
+- Commissioning model and additive payload schemas advance to 3; schema-1 and schema-2 records migrate without losing Zone 1 or original evidence.
+- Meaningful plant edits retain the prior snapshot as an immutable update event; removals continue to preserve complete historical snapshots.
+
+### Safety
+- Review and editing remain advisory only. No weather scaling, runtime calculation, scheduling, Rachio write, external AI call, retry, or execution authority was added.
+
 ## [1.0.53] - 2026-08-24
 
 ### Added

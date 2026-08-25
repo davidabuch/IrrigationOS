@@ -1,5 +1,13 @@
 # IrrigationOS Roadmap
 
+## v1.0.54 — Commissioning Review & Multi-Plant Editing
+
+- Adds a generic multi-step review/edit workflow for realistic multi-plant commissioned zones.
+- Preserves prior plant facts through immutable add/update/remove history and retains original conflict candidates after explicit human resolution.
+- Supports calibrated-baseline and canonical delivery-link editing without environmental scaling or hydraulic inference.
+- Migrates commissioning payload/model schemas additively from 1/2 to 3 while preserving Zone 1.
+- Adds no command, scheduler, controller-write, retry, or autonomous authority.
+
 ## v1.0.53 — Generic Commissioning Persistence & Onboarding
 
 - Persists arbitrary generic commissioned-zone aggregates through an additive, deterministic Store schema.
@@ -60,11 +68,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.53
+- **Installable Home Assistant release:** v1.0.54
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
-- **Next milestone:** connect persisted calibrated demand and documented delivery evidence to explicit, provider-neutral scientific policies without expanding execution authority
+- **Next milestone:** add commissioning completeness and evidence-admission policy before calibrated baseline or delivery evidence can influence scientific demand
 
 ## Delivery model
 

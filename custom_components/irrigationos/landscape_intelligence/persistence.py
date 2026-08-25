@@ -11,6 +11,7 @@ from .commissioning import (
     CanonicalZoneIdentity,
     CommissionedZoneProfile,
     CommissioningConflictCandidate,
+    CommissioningConflictResolution,
     CommissioningEvidenceConflict,
     CommissioningEvidenceSource,
     DeactivatedCommissionedZone,
@@ -37,7 +38,7 @@ from .models import (
     PlantHealthObservation,
 )
 
-COMMISSIONING_STORE_SCHEMA_VERSION = 2
+COMMISSIONING_STORE_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,11 +283,24 @@ def _conflict(value: object) -> CommissioningEvidenceConflict:
     )
 
 
+def _conflict_resolution(value: object) -> CommissioningConflictResolution:
+    item = _mapping("commissioning conflict resolution", value)
+    return CommissioningConflictResolution(
+        resolution_id=str(item["resolution_id"]),
+        conflict_id=str(item["conflict_id"]),
+        selected_value=str(item["selected_value"]),
+        resolved_at=_datetime(item["resolved_at"]),
+        source=CommissioningEvidenceSource(str(item["source"])),
+        confidence=Confidence(str(item["confidence"])),
+        note=_optional_string(item.get("note")),
+    )
+
+
 def commissioned_zone_from_dict(value: object) -> CommissionedZoneProfile:
-    """Restore schema-1 or schema-2 commissioned-zone data."""
+    """Restore schema-1, schema-2, or schema-3 commissioned-zone data."""
     item = _mapping("commissioned zone", value)
     source_schema = int(item["schema_version"])
-    if source_schema not in {1, ZONE_COMMISSIONING_SCHEMA_VERSION}:
+    if source_schema not in {1, 2, ZONE_COMMISSIONING_SCHEMA_VERSION}:
         raise ValueError("commissioned zone schema is unsupported")
     identity = _mapping("canonical zone identity", item["identity"])
     return CommissionedZoneProfile(
@@ -322,6 +336,12 @@ def commissioned_zone_from_dict(value: object) -> CommissionedZoneProfile:
         conflicts=tuple(
             _conflict(conflict)
             for conflict in _sequence("conflicts", item.get("conflicts", []))
+        ),
+        conflict_resolutions=tuple(
+            _conflict_resolution(resolution)
+            for resolution in _sequence(
+                "conflict_resolutions", item.get("conflict_resolutions", [])
+            )
         ),
         execution_authorized=_boolean(
             "execution_authorized", item.get("execution_authorized", False)
@@ -371,7 +391,7 @@ def restore_store_payload(
     if int(item.get("schema_version", 1)) != 1:
         raise ValueError("legacy landscape intelligence schema is unsupported")
     payload_schema = int(item.get("commissioning_store_schema_version", 1))
-    if payload_schema not in {1, COMMISSIONING_STORE_SCHEMA_VERSION}:
+    if payload_schema not in {1, 2, COMMISSIONING_STORE_SCHEMA_VERSION}:
         raise ValueError("commissioning Store schema is unsupported")
     legacy_zone1 = _mapping("legacy zone_1", item["zone_1"])
     raw_zones = item.get("commissioned_zones")
@@ -421,7 +441,7 @@ def build_store_payload(
     *,
     legacy_zone1: dict[str, Any],
 ) -> dict[str, Any]:
-    """Build deterministic schema-2 Store data while retaining legacy Zone 1."""
+    """Build deterministic schema-3 Store data while retaining legacy Zone 1."""
     ordered = tuple(sorted(zones, key=_zone_key))
     _validate_order(ordered)
     ordered_deactivated = tuple(

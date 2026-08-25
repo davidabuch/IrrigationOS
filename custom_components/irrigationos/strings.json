@@ -107,6 +107,106 @@
           "commissioning_visible_irrigation": "Visible irrigation method (optional)"
         }
       },
+      "commissioning_review_select": {
+        "title": "Review commissioned zone",
+        "description": "Select a canonical commissioned zone. Detailed facts remain outside Recorder-facing entity attributes.",
+        "data": {
+          "commissioning_review_target": "Commissioned zone"
+        }
+      },
+      "commissioning_review": {
+        "title": "Commissioning review",
+        "description": "{review_summary}",
+        "data": {
+          "commissioning_review_action": "Review action"
+        }
+      },
+      "commissioning_add_plant": {
+        "title": "Add plant group",
+        "description": "Add one user-confirmed plant group without replacing existing plants. Missing delivery information remains an advisory.",
+        "data": {
+          "commissioning_plant_name": "Common or group name",
+          "commissioning_botanical_name": "Botanical name (optional)",
+          "commissioning_establishment": "Establishment state",
+          "commissioning_irrigation_role": "Irrigation role",
+          "commissioning_planted_date": "Planting date, YYYY-MM-DD (optional)",
+          "commissioning_container_gallons": "Source container gallons (optional)",
+          "commissioning_height_feet": "Current height in feet (optional)",
+          "commissioning_direct_irrigation": "Directly irrigated",
+          "commissioning_dedicated_emitter": "Dedicated delivery",
+          "commissioning_emitter_type": "Emitter or delivery method (optional)",
+          "commissioning_delivery_status": "Delivery evidence status",
+          "commissioning_delivery_profile_id": "Canonical delivery profile ID (optional)",
+          "commissioning_component_ids": "Canonical component IDs, comma-separated (optional)"
+        }
+      },
+      "commissioning_plant_select": {
+        "title": "Select plant group",
+        "data": {
+          "commissioning_plant_target": "Plant group"
+        }
+      },
+      "commissioning_edit_plant": {
+        "title": "Edit plant group",
+        "description": "Scientifically relevant changes retain the previous plant facts as an immutable history event.",
+        "data": {
+          "commissioning_plant_name": "Common or group name",
+          "commissioning_botanical_name": "Botanical name (optional)",
+          "commissioning_establishment": "Establishment state",
+          "commissioning_irrigation_role": "Irrigation role",
+          "commissioning_planted_date": "Planting date, YYYY-MM-DD (optional)",
+          "commissioning_container_gallons": "Source container gallons (optional)",
+          "commissioning_height_feet": "Current height in feet (optional)",
+          "commissioning_direct_irrigation": "Directly irrigated",
+          "commissioning_dedicated_emitter": "Dedicated delivery",
+          "commissioning_emitter_type": "Emitter or delivery method (optional)",
+          "commissioning_delivery_status": "Delivery evidence status",
+          "commissioning_delivery_profile_id": "Canonical delivery profile ID (optional)",
+          "commissioning_component_ids": "Canonical component IDs, comma-separated (optional)"
+        }
+      },
+      "commissioning_remove_plant": {
+        "title": "Remove plant group",
+        "description": "The plant leaves current state, but its complete prior facts remain in immutable landscape history.",
+        "data": {
+          "commissioning_remove_confirmation": "Confirm plant removal"
+        }
+      },
+      "commissioning_delivery": {
+        "title": "Edit irrigation-delivery link",
+        "description": "Record only known canonical delivery associations. IrrigationOS will not infer hydraulic properties.",
+        "data": {
+          "commissioning_delivery_status": "Delivery evidence status",
+          "commissioning_delivery_profile_id": "Canonical delivery profile ID (optional)",
+          "commissioning_component_ids": "Canonical component IDs, comma-separated (optional)",
+          "commissioning_dedicated_emitter": "Dedicated delivery"
+        }
+      },
+      "commissioning_baseline": {
+        "title": "Review calibrated baseline",
+        "description": "This records the user's reference runtime and conditions only. No weather scaling or watering calculation occurs.",
+        "data": {
+          "commissioning_baseline_action": "Baseline action",
+          "commissioning_baseline_minutes": "Baseline runtime in minutes",
+          "commissioning_reference_temperature_f": "Reference outdoor temperature (°F)",
+          "commissioning_recent_rain_mm": "Recent rain in reference condition (mm)"
+        }
+      },
+      "commissioning_conflict_select": {
+        "title": "Review evidence conflict",
+        "data": {
+          "commissioning_conflict_target": "Unresolved conflict"
+        }
+      },
+      "commissioning_conflict_resolve": {
+        "title": "Confirm or correct plant identity",
+        "description": "Original evidence remains retained. Candidates: {conflict_summary}",
+        "data": {
+          "commissioning_resolution_common_name": "Confirmed common or group name",
+          "commissioning_resolution_botanical_name": "Confirmed botanical name (optional)",
+          "commissioning_resolution_note": "Resolution note (optional)"
+        }
+      },
       "first_live_trial": {
         "title": "Supervised first-live watering trial",
         "description": "Current commissioning status: {commissioning_status}. Select exactly one observed Rachio zone and a runtime of 1-120 seconds. To authorize this single supervised attempt, type exactly: {confirmation_phrase}",
@@ -121,11 +221,14 @@
       "invalid_profile": "One or more landscape profile values are outside the allowed range.",
       "invalid_commissioning_input": "The commissioning evidence is incomplete, inconsistent, or invalid.",
       "commissioning_persistence_failed": "The commissioning evidence could not be saved. No new zone knowledge was activated.",
+      "invalid_commissioning_edit": "The requested commissioning edit is incomplete or inconsistent. Existing evidence was not changed.",
+      "commissioning_removal_not_confirmed": "Plant removal was not explicitly confirmed.",
       "first_live_confirmation_mismatch": "The exact supervised-trial confirmation phrase was not entered.",
       "first_live_trial_invalid": "The selected trial target or request is no longer valid."
     },
     "abort": {
       "no_areas": "No irrigation areas are currently available.",
+      "no_commissioned_zones": "No commissioned zones are currently available for review.",
       "no_first_live_targets": "No configured irrigation zones are currently available for a supervised trial.",
       "first_live_trial_start_dispatched": "The one-shot start command was accepted for {runtime_seconds} seconds. Blockers: {blockers}. The approval and commissioning window are now closed.",
       "first_live_trial_blocked": "The supervised trial was blocked. Blockers: {blockers}. No watering command was dispatched.",

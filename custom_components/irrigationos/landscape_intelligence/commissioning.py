@@ -21,7 +21,7 @@ from .models import (
     PlantGroup,
 )
 
-ZONE_COMMISSIONING_SCHEMA_VERSION = 2
+ZONE_COMMISSIONING_SCHEMA_VERSION = 3
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
@@ -32,6 +32,7 @@ class ZoneDemandSourceMode(StrEnum):
     USER_CALIBRATED_BASELINE = "user_calibrated_baseline"
     MANUAL_PLANT_PROFILE = "manual_plant_profile"
     HYBRID = "hybrid"
+    UNRESOLVED = "unresolved"
 
 
 class CommissioningEvidenceSource(StrEnum):
@@ -55,6 +56,7 @@ class LandscapeEventType(StrEnum):
     """Immutable landscape-change event types."""
 
     PLANT_GROUP_ADDED = "plant_group_added"
+    PLANT_GROUP_UPDATED = "plant_group_updated"
     PLANT_GROUP_REMOVED = "plant_group_removed"
 
 
@@ -160,7 +162,33 @@ class CommissioningEvidenceConflict(SerializableCommissioningModel):
         if len(candidate_keys) != len(set(candidate_keys)):
             raise ValueError("commissioning conflict candidates must be unique")
         if not self.unresolved:
-            raise ValueError("conflict resolution policy is not implemented")
+            raise ValueError("original conflict evidence must remain unresolved and immutable")
+
+
+@dataclass(frozen=True, slots=True)
+class CommissioningConflictResolution(SerializableCommissioningModel):
+    """Explicit user resolution retaining the original conflicting evidence."""
+
+    resolution_id: str
+    conflict_id: str
+    selected_value: str
+    resolved_at: datetime
+    source: CommissioningEvidenceSource
+    confidence: Confidence
+    note: str | None = None
+
+    def __post_init__(self) -> None:
+        _identifier("resolution_id", self.resolution_id)
+        _identifier("conflict_id", self.conflict_id)
+        _text("selected_value", self.selected_value)
+        _timestamp("resolved_at", self.resolved_at)
+        if self.source not in {
+            CommissioningEvidenceSource.USER_CONFIRMED,
+            CommissioningEvidenceSource.HUMAN_REVIEWED_PHOTO,
+        }:
+            raise ValueError("conflict resolution requires explicit human confirmation")
+        if self.note is not None:
+            _text("note", self.note)
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,7 +299,10 @@ class ZoneDemandSource(SerializableCommissioningModel):
         has_plants = bool(self.plant_group_ids)
         has_visual = bool(self.structured_visual_assessment_ids)
         has_baseline = self.calibrated_baseline is not None
-        if self.mode is ZoneDemandSourceMode.MANUAL_PLANT_PROFILE:
+        if self.mode is ZoneDemandSourceMode.UNRESOLVED:
+            if has_plants or has_visual or has_baseline:
+                raise ValueError("unresolved mode cannot claim demand evidence")
+        elif self.mode is ZoneDemandSourceMode.MANUAL_PLANT_PROFILE:
             if not has_plants or has_visual or has_baseline:
                 raise ValueError("manual plant mode requires only plant-group references")
         elif self.mode is ZoneDemandSourceMode.PHOTO_AI_DERIVED:
@@ -377,6 +408,7 @@ class CommissionedZoneProfile(SerializableCommissioningModel):
     delivery_links: tuple[IrrigationDeliveryLink, ...]
     landscape_events: tuple[LandscapeChangeEvent, ...] = ()
     conflicts: tuple[CommissioningEvidenceConflict, ...] = ()
+    conflict_resolutions: tuple[CommissioningConflictResolution, ...] = ()
     execution_authorized: bool = False
     live_control_authorized: bool = False
 
@@ -396,11 +428,15 @@ class CommissionedZoneProfile(SerializableCommissioningModel):
         link_ids = tuple(item.link_id for item in self.delivery_links)
         event_ids = tuple(item.event_id for item in self.landscape_events)
         conflict_ids = tuple(item.conflict_id for item in self.conflicts)
+        resolution_ids = tuple(
+            item.resolution_id for item in self.conflict_resolutions
+        )
         for name, values in (
             ("demand source IDs", source_ids),
             ("delivery link IDs", link_ids),
             ("landscape event IDs", event_ids),
             ("commissioning conflict IDs", conflict_ids),
+            ("commissioning conflict resolution IDs", resolution_ids),
         ):
             if len(values) != len(set(values)):
                 raise ValueError(f"{name} must be unique")
@@ -416,6 +452,14 @@ class CommissionedZoneProfile(SerializableCommissioningModel):
             raise ValueError("delivery link references an unknown current plant group")
         if any(conflict.plant_group_id not in current_ids for conflict in self.conflicts):
             raise ValueError("commissioning conflict references an unknown current plant group")
+        known_conflicts = set(conflict_ids)
+        resolved_conflicts = tuple(
+            resolution.conflict_id for resolution in self.conflict_resolutions
+        )
+        if any(conflict_id not in known_conflicts for conflict_id in resolved_conflicts):
+            raise ValueError("conflict resolution references an unknown conflict")
+        if len(resolved_conflicts) != len(set(resolved_conflicts)):
+            raise ValueError("each commissioning conflict may be resolved only once")
         if len({link.plant_group_id for link in self.delivery_links}) != len(
             self.delivery_links
         ):
@@ -465,6 +509,18 @@ def assess_delivery_compatibility(
                     "assessing compatibility.",
                 )
             )
+            if group.establishment_state in {
+                EstablishmentState.NEWLY_PLANTED,
+                EstablishmentState.ESTABLISHING,
+            }:
+                advisories.append(
+                    DeliveryAdvisory(
+                        "establishment_delivery_information_required",
+                        group.plant_group_id,
+                        "Document whether dedicated delivery can meet establishment "
+                        "needs without increasing water to the entire mixed zone.",
+                    )
+                )
             continue
         if link.status is DeliveryLinkStatus.REVIEW_REQUIRED:
             advisories.append(
