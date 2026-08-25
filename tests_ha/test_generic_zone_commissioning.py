@@ -6,7 +6,9 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
+import voluptuous_serialize
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.irrigationos.config_flow import (
@@ -46,7 +48,12 @@ from custom_components.irrigationos.config_flow import (
     CONF_COMMISSIONING_REVIEW_ACTION,
     CONF_COMMISSIONING_REVIEW_TARGET,
     CONF_COMMISSIONING_ZONE_NAME,
+    CONF_OPTIONS_ACTION,
     IrrigationOSOptionsFlow,
+    _commissioning_baseline_schema,
+    _commissioning_delivery_calibration_schema,
+    _commissioning_plant_schema,
+    _commissioning_schema,
     _map_commissioning_form,
 )
 from custom_components.irrigationos.const import DOMAIN
@@ -593,3 +600,78 @@ async def test_delivery_calibration_save_failure_publishes_neither_zone_nor_prof
     assert not await manager.async_update_zone_and_delivery_profile(original, delivery)
     assert manager.get_zone("property.primary", "zone.2") == original
     assert manager.delivery_profiles == ()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("review_action", "expected_step"),
+    [
+        ("calibrate_delivery", "commissioning_delivery_calibration"),
+        ("edit_delivery", "commissioning_delivery"),
+    ],
+)
+async def test_framework_options_flow_accepts_zone1_plant_selection(
+    hass: HomeAssistant,
+    review_action: str,
+    expected_step: str,
+) -> None:
+    """Exercise HA's schema validation rather than calling flow methods directly."""
+    manager = LandscapeIntelligenceManager(hass, f"selector-{review_action}")
+    manager._store = _Store(None)  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = SimpleNamespace(landscape_intelligence=manager)
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["step_id"] == "init"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_OPTIONS_ACTION: "commissioning_review"}
+    )
+    assert result["step_id"] == "commissioning_review_select"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_COMMISSIONING_REVIEW_TARGET: "property.primary|zone.1"},
+    )
+    assert result["step_id"] == "commissioning_review"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_COMMISSIONING_REVIEW_ACTION: review_action}
+    )
+    assert result["step_id"] == "commissioning_plant_select"
+    assert result["data_schema"](
+        {CONF_COMMISSIONING_PLANT_TARGET: "podocarpus"}
+    ) == {CONF_COMMISSIONING_PLANT_TARGET: "podocarpus"}
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_COMMISSIONING_PLANT_TARGET: "podocarpus"},
+    )
+    assert result["step_id"] == expected_step
+    serialized_schema = voluptuous_serialize.convert(
+        result["data_schema"], custom_serializer=cv.custom_serializer
+    )
+    assert serialized_schema
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [
+        _commissioning_delivery_calibration_schema(None),
+        _commissioning_baseline_schema(None),
+        _commissioning_plant_schema(),
+        _commissioning_schema(
+            ZoneDemandSourceMode.MANUAL_PLANT_PROFILE, "Manual zone"
+        ),
+        _commissioning_schema(
+            ZoneDemandSourceMode.USER_CALIBRATED_BASELINE, "Baseline zone"
+        ),
+        _commissioning_schema(ZoneDemandSourceMode.HYBRID, "Hybrid zone"),
+    ],
+)
+def test_commissioning_optional_numeric_forms_serialize_for_ha(schema: Any) -> None:
+    """Keep every commissioning numeric form inside HA's serialization contract."""
+    serialized_schema = voluptuous_serialize.convert(
+        schema, custom_serializer=cv.custom_serializer
+    )
+
+    assert serialized_schema

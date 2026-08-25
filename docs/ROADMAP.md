@@ -1,5 +1,11 @@
 # IrrigationOS Roadmap
 
+## v1.0.58 — Options-Flow Numeric Schema Hotfix
+
+- Uses Home Assistant-serializable optional numeric schemas throughout generic commissioning forms.
+- Restores the Zone 1 plant-to-delivery calibration transition without changing calibration evidence, persistence, or authority.
+- Adds no controller write, scheduling behavior, network call, retry, or execution authority.
+
 ## v1.0.57 — Guided Baseline Reference & Irrigation Delivery Calibration
 
 - Captures exact 24- or 48-hour dry reference ET₀ from fresh, contiguous normalized evidence and retains measured temperature only as context.
@@ -90,7 +96,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.57
+- **Installable Home Assistant release:** v1.0.58
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
