@@ -630,3 +630,16 @@ All notable changes to IrrigationOS will be documented here.
 
 ### Safety
 - Advisory equivalent runtime is transient evidence only. Execution and Live authorization remain false, and no scheduler, command, transport, network, or retry path consumes it.
+## [1.0.59] - 2026-08-25
+
+### Added
+- Plain-language guided commissioning mapped into the existing canonical zone and Water Delivery models, with explicit review and confirmation.
+- Provider-neutral approved visual-delivery findings, high-value follow-up questions, and explicit delivery-pattern conflicts.
+- Approximate flow-range evidence for documented generic references without fabricated exact flow claims.
+
+### Changed
+- Commissioning model and Store schemas advance additively to 6; schemas 1–5 remain loadable.
+- Advanced commissioning and calibration remain available unchanged.
+
+### Safety
+- Conversational proposals are evidence-only and add no network call, task, scheduler behavior, controller write, retry, or authority.

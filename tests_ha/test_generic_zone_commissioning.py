@@ -49,12 +49,25 @@ from custom_components.irrigationos.config_flow import (
     CONF_COMMISSIONING_REVIEW_TARGET,
     CONF_COMMISSIONING_ZONE_NAME,
     CONF_OPTIONS_ACTION,
+    CONF_SIMPLE_CONFIRM,
+    CONF_SIMPLE_CONTAINER_GALLONS,
+    CONF_SIMPLE_DELIVERY_TYPE,
+    CONF_SIMPLE_DESCRIPTION,
+    CONF_SIMPLE_EMITTER_CLASS,
+    CONF_SIMPLE_HEIGHT_FEET,
+    CONF_SIMPLE_PLANT_NAME,
+    CONF_SIMPLE_PLANTED_DATE,
+    CONF_SIMPLE_PLANTS_PER_EMITTER,
+    CONF_SIMPLE_SHARING,
+    CONF_SIMPLE_SPRAY_PATTERN,
+    CONF_SIMPLE_THROW_FEET,
     IrrigationOSOptionsFlow,
     _commissioning_baseline_schema,
     _commissioning_delivery_calibration_schema,
     _commissioning_plant_schema,
     _commissioning_schema,
     _map_commissioning_form,
+    _simple_commissioning_schema,
 )
 from custom_components.irrigationos.const import DOMAIN
 from custom_components.irrigationos.landscape_intelligence import (
@@ -93,6 +106,103 @@ from custom_components.irrigationos.weather import (
 )
 
 NOW = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_simple_commissioning_review_confirms_canonical_evidence(
+    hass: HomeAssistant,
+) -> None:
+    """The simple path hides canonical IDs and atomically publishes after confirmation."""
+    voluptuous_serialize.convert(
+        _simple_commissioning_schema(), custom_serializer=cv.custom_serializer
+    )
+    manager = LandscapeIntelligenceManager(hass, "simple-commissioning")
+    store = _Store(None)
+    manager._store = store  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = SimpleNamespace(landscape_intelligence=manager)
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+    flow._commissioning_controller_slot = 1
+    flow._commissioning_area_slot = 7
+    flow._commissioning_area_name = "Front planter"
+
+    result = await flow.async_step_commissioning_simple_input(
+        {
+            CONF_SIMPLE_DESCRIPTION: (
+                "Podocarpus planted last year from 5-gallon pots; one blue "
+                "two-sided microjet serves two plants."
+            ),
+            CONF_SIMPLE_PLANT_NAME: "Podocarpus",
+            CONF_SIMPLE_PLANTED_DATE: "2025-08-24",
+            CONF_SIMPLE_CONTAINER_GALLONS: 5,
+            CONF_SIMPLE_HEIGHT_FEET: 6,
+            CONF_SIMPLE_DELIVERY_TYPE: "microjet",
+            CONF_SIMPLE_EMITTER_CLASS: "blue",
+            CONF_SIMPLE_THROW_FEET: 3.5,
+            CONF_SIMPLE_SPRAY_PATTERN: "part_circle",
+            CONF_SIMPLE_SHARING: "shared",
+            CONF_SIMPLE_PLANTS_PER_EMITTER: 2,
+        }
+    )
+    assert result["type"] == "form"
+    assert result["step_id"] == "commissioning_simple_review"
+    assert "zone.7" not in result["description_placeholders"]["understood"]
+    confirmed = await flow.async_step_commissioning_simple_review(
+        {CONF_SIMPLE_CONFIRM: True}
+    )
+    assert confirmed["type"] == "create_entry"
+    saved = manager.get_zone("property.primary", "zone.7")
+    assert saved is not None
+    assert saved.landscape_profile.plant_groups[0].common_name == "Podocarpus"
+    assert manager.delivery_profiles[0].components[0].measured_flow_liters_per_hour.value is None
+    assert not saved.execution_authorized
+    assert not saved.live_control_authorized
+
+
+@pytest.mark.asyncio
+async def test_simple_commissioning_persistence_failure_publishes_nothing(
+    hass: HomeAssistant,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "simple-failure")
+    store = _Store(None)
+    manager._store = store  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = SimpleNamespace(landscape_intelligence=manager)
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+    flow._commissioning_controller_slot = 1
+    flow._commissioning_area_slot = 8
+    flow._commissioning_area_name = "Back planter"
+    await flow.async_step_commissioning_simple_input(
+        {
+            CONF_SIMPLE_DESCRIPTION: "Shrubs with shared spray",
+            CONF_SIMPLE_PLANT_NAME: "Shrubs",
+            CONF_SIMPLE_PLANTED_DATE: "",
+            CONF_SIMPLE_CONTAINER_GALLONS: "",
+            CONF_SIMPLE_HEIGHT_FEET: "",
+            CONF_SIMPLE_DELIVERY_TYPE: "spray",
+            CONF_SIMPLE_EMITTER_CLASS: "",
+            CONF_SIMPLE_THROW_FEET: "",
+            CONF_SIMPLE_SPRAY_PATTERN: "unknown",
+            CONF_SIMPLE_SHARING: "shared",
+            CONF_SIMPLE_PLANTS_PER_EMITTER: "",
+        }
+    )
+    store.fail_save = True
+    result = await flow.async_step_commissioning_simple_review(
+        {CONF_SIMPLE_CONFIRM: True}
+    )
+    assert result["type"] == "form"
+    assert result["errors"] == {"base": "commissioning_persistence_failed"}
+    assert manager.get_zone("property.primary", "zone.8") is None
+    assert not any(item.area_id == "zone.8" for item in manager.delivery_profiles)
 
 
 class _Store:
@@ -219,7 +329,7 @@ async def test_legacy_schema_one_zone1_store_migrates_additively(
 
     assert len(store.saved) == 1
     assert store.value is not None
-    assert store.value["commissioning_store_schema_version"] == 5
+    assert store.value["commissioning_store_schema_version"] == 6
     assert store.value["zone_1"] == old_zone1
     assert manager.zone1.area_slot == 1
     assert tuple(zone.identity.area_slot for zone in manager.commissioned_zones) == (1,)
@@ -319,7 +429,7 @@ async def test_diagnostics_are_canonical_compact_and_confidence_preserved(
     assert await manager.async_add_zone(_zone2())
 
     summary = manager.diagnostics()["commissioning_summary"]
-    assert summary["store_schema_version"] == 5
+    assert summary["store_schema_version"] == 6
     assert summary["commissioned_zone_count"] == 2
     assert summary["legacy_zone_1_compatible"] is True
     assert summary["zones"][1]["identity"] == {

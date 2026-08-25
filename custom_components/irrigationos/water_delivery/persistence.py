@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Any, overload
 
 from .models import (
+    ApproximateFlowRange,
     AreaUnit,
     CalibrationMeasurement,
     CalibrationMeasurementType,
@@ -52,6 +53,7 @@ def water_delivery_profile_from_dict(value: object) -> WaterDeliveryProfile:
 def _component(value: object) -> DeliveryComponent:
     item = _mapping(value)
     served_area = item.get("served_area_unit")
+    flow_range = item.get("approximate_flow_range")
     return DeliveryComponent(
         component_id=str(item["component_id"]),
         area_id=str(item["area_id"]),
@@ -79,6 +81,35 @@ def _component(value: object) -> DeliveryComponent:
         served_area_unit=None if served_area is None else AreaUnit(str(served_area)),
         manufacturer=None if item.get("manufacturer") is None else str(item["manufacturer"]),
         model=None if item.get("model") is None else str(item["model"]),
+        approximate_flow_range=(
+            None if flow_range is None else _flow_range(flow_range)
+        ),
+        emitter_class=(
+            None if item.get("emitter_class") is None else str(item["emitter_class"])
+        ),
+        plants_per_emitter=_optional_integer(item.get("plants_per_emitter")),
+        visual_assessment_ids=tuple(
+            str(value) for value in _sequence(item.get("visual_assessment_ids", []))
+        ),
+        visual_evidence_ids=tuple(
+            str(value) for value in _sequence(item.get("visual_evidence_ids", []))
+        ),
+    )
+
+
+def _flow_range(value: object) -> ApproximateFlowRange:
+    item = _mapping(value)
+    provenance = _mapping(item["provenance"])
+    return ApproximateFlowRange(
+        minimum_liters_per_hour=float(item["minimum_liters_per_hour"]),
+        maximum_liters_per_hour=float(item["maximum_liters_per_hour"]),
+        reference_id=str(item["reference_id"]),
+        confidence=float(item["confidence"]),
+        provenance=DeliveryProvenance(
+            source=str(provenance["source"]),
+            detail=None if provenance.get("detail") is None else str(provenance["detail"]),
+        ),
+        assessed_at=_datetime(item["assessed_at"]),
     )
 
 
