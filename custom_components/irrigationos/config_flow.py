@@ -1610,7 +1610,10 @@ def _commissioning_review_summary(profile: CommissionedZoneProfile) -> str:
         f"{review.display_name} ({profile.identity.property_id}/"
         f"{profile.identity.zone_id})",
         f"Demand modes: {', '.join(mode.value for mode in review.demand_source_modes)}",
+        f"Commissioning status: {review.commissioning_assessment.status.value}",
     ]
+    for readiness in review.commissioning_assessment.purpose_readiness:
+        lines.append(f"{readiness.purpose.value}: {readiness.state.value}")
     for plant in review.plants[:12]:
         link_status = (
             "missing"
@@ -1636,4 +1639,10 @@ def _commissioning_review_summary(profile: CommissionedZoneProfile) -> str:
         + (", ".join(item.code for item in review.advisories) or "none")
     )
     lines.append(f"Recent landscape events: {len(review.recent_landscape_events)}")
+    if review.commissioning_assessment.follow_up_requirements:
+        lines.append("Next information:")
+        lines.extend(
+            f"- {item.code}: {item.prompt}"
+            for item in review.commissioning_assessment.follow_up_requirements[:8]
+        )
     return "\n".join(lines)[:4000]

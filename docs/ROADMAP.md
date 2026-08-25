@@ -1,5 +1,13 @@
 # IrrigationOS Roadmap
 
+## v1.0.55 — Commissioning Completeness & Evidence Admission Policy
+
+- Derives purpose-specific readiness from current active commissioned evidence.
+- Preserves provenance and confidence while withholding conflicted, inactive, or below-policy evidence.
+- Produces deterministic blockers, advisories, and useful next-information requests without LLM logic.
+- Keeps factor resolution, water-balance science, delivery hydraulics, and execution authority separate.
+- Adds no command, scheduler, controller-write, retry, or autonomous authority.
+
 ## v1.0.54 — Commissioning Review & Multi-Plant Editing
 
 - Adds a generic multi-step review/edit workflow for realistic multi-plant commissioned zones.
@@ -68,11 +76,11 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.54
+- **Installable Home Assistant release:** v1.0.55
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
-- **Next milestone:** add commissioning completeness and evidence-admission policy before calibrated baseline or delivery evidence can influence scientific demand
+- **Next milestone:** connect admitted baseline evidence to a scientifically versioned environmental-scaling assessment without inferring runtime authority
 
 ## Delivery model
 

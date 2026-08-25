@@ -214,6 +214,13 @@ async def test_diagnostics_are_canonical_compact_and_confidence_preserved(
     }
     assert "controller_id" not in repr(summary)
     assert "native_id" not in repr(summary)
+    zone_summary = manager.compact_summary(2)
+    assert zone_summary is not None
+    assert zone_summary["commissioning_assessment_status"] == "purpose_ready"
+    assert zone_summary["commissioning_ready_purpose_count"] >= 1
+    assert zone_summary["commissioning_follow_up_count"] >= 1
+    assert "commissioning_assessment" in summary["zones"][1]
+    assert len(repr(zone_summary)) < 2048
     assert _zone2().plant_details[0].confidence is Confidence.HIGH
 
 
@@ -267,6 +274,10 @@ async def test_options_review_flow_adds_second_plant_without_replacing_first(
     )
     assert selected["type"] == "form"
     assert selected["step_id"] == "commissioning_review"
+    summary = selected["description_placeholders"]["review_summary"]
+    assert "Commissioning status: purpose_ready" in summary
+    assert "delivery_quantification: not_ready" in summary
+    assert "document_irrigation_delivery" in summary
     add_form = await flow.async_step_commissioning_review(
         {CONF_COMMISSIONING_REVIEW_ACTION: "add_plant"}
     )

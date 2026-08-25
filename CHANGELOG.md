@@ -1,3 +1,17 @@
+## [1.0.55] - 2026-08-24
+
+### Added
+- Immutable purpose-specific commissioning assessments for landscape understanding, plant demand, calibrated-baseline scaling, delivery quantification, water balance, and advisory use.
+- Explicit admitted/withheld evidence snapshots with provenance, confidence, blocker/advisory codes, and structured follow-up requirements.
+- Bounded commissioning readiness and next-information summaries in the Home Assistant review workflow and diagnostics.
+
+### Changed
+- Commissioning review now distinguishes evidence fitness from downstream scientific resolution and execution authority.
+- High-confidence approved visual findings may be admitted; unresolved manual/visual conflicts remain withheld until explicit human resolution.
+
+### Safety
+- Completeness is derived rather than persisted and cannot authorize execution. No weather scaling, hydraulic calculation, scheduling, network call, controller write, retry, or autonomous authority was added.
+
 ## [1.0.54] - 2026-08-24
 
 ### Added
