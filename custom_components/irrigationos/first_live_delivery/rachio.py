@@ -10,6 +10,7 @@ from aiohttp import ClientError, ClientSession, ClientTimeout
 RACHIO_PUBLIC_BASE_URL: Final = "https://api.rach.io/1/public"
 FIRST_LIVE_NETWORK_TIMEOUT_SECONDS: Final = 20
 MAX_TRANSPORT_RUNTIME_SECONDS: Final = 120
+MAX_GUIDED_OBSERVATION_RUNTIME_SECONDS: Final = 180
 
 
 class FirstLiveTransportError(RuntimeError):
@@ -51,6 +52,19 @@ class RachioFirstLiveTransport:
         if not target:
             raise ValueError("device_id must not be blank")
         await self._async_put("/device/stop_water", {"id": target})
+
+    async def async_start_guided_observation(
+        self, *, zone_id: str, runtime_seconds: int
+    ) -> None:
+        """Start one operator-selected zone within the three-minute ceiling."""
+        target = zone_id.strip()
+        if not target:
+            raise ValueError("zone_id must not be blank")
+        if not 1 <= runtime_seconds <= MAX_GUIDED_OBSERVATION_RUNTIME_SECONDS:
+            raise ValueError("runtime_seconds must be between 1 and 180")
+        await self._async_put(
+            "/zone/start", {"id": target, "duration": runtime_seconds}
+        )
 
     async def _async_put(self, path: str, payload: dict[str, object]) -> None:
         headers: Mapping[str, str] = {

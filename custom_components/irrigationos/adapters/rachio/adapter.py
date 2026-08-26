@@ -22,6 +22,10 @@ from ...controllers import (
     RealtimeRegistrationHealth,
     VendorBinding,
 )
+from ...first_live_delivery.rachio import (
+    FirstLiveTransportError,
+    RachioFirstLiveTransport,
+)
 from .api import RachioApiClient, RachioApiError
 from .realtime import RachioWebhookRegistrar
 
@@ -38,9 +42,11 @@ class RachioControllerAdapter:
         self,
         client: RachioApiClient,
         identities: ControllerIdentityRegistry,
+        guided_transport: RachioFirstLiveTransport | None = None,
     ) -> None:
         self._client = client
         self._identities = identities
+        self._guided_transport = guided_transport
         self._webhooks = RachioWebhookRegistrar(client)
 
     async def async_reconcile_realtime(
@@ -77,6 +83,36 @@ class RachioControllerAdapter:
         """Fetch and normalize the latest Rachio account snapshot."""
         payload = await self._client.async_get_person(account_id)
         return await self._async_snapshot_from_payload(payload)
+
+    async def async_start_guided_observation(
+        self, *, area_binding: VendorBinding, duration_seconds: int
+    ) -> None:
+        """Start the exact provider-bound area for an operator observation."""
+        if area_binding.provider != PROVIDER:
+            raise ValueError("guided observation area provider mismatch")
+        if self._guided_transport is None:
+            raise RachioApiError("Guided observation transport is unavailable")
+        try:
+            await self._guided_transport.async_start_guided_observation(
+                zone_id=area_binding.native_id, runtime_seconds=duration_seconds
+            )
+        except FirstLiveTransportError as err:
+            raise RachioApiError("Guided observation start failed") from err
+
+    async def async_stop_guided_observation(
+        self, *, controller_binding: VendorBinding
+    ) -> None:
+        """Use Rachio's controller-wide stop for the current observation."""
+        if controller_binding.provider != PROVIDER:
+            raise ValueError("guided observation controller provider mismatch")
+        if self._guided_transport is None:
+            raise RachioApiError("Guided observation transport is unavailable")
+        try:
+            await self._guided_transport.async_emergency_stop(
+                device_id=controller_binding.native_id
+            )
+        except FirstLiveTransportError as err:
+            raise RachioApiError("Guided observation stop failed") from err
 
     async def _async_snapshot_from_payload(
         self, payload: dict[str, Any]
@@ -200,6 +236,8 @@ def _controller_from_api(
         capabilities=ControllerCapabilities(
             observe_current_watering=True,
             observe_last_watered=True,
+            supports_start_area=True,
+            supports_stop_all=True,
         ),
         areas=areas,
     )

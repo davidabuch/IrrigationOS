@@ -6,6 +6,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from ..visual_assessment import (
+    PhotoEvidence,
+    PhotoEvidenceType,
+    PhotoSource,
+    PrivacyClassification,
+    RetentionPolicy,
+)
 from ..water_delivery import WaterDeliveryProfile
 from ..water_delivery.persistence import water_delivery_profile_from_dict
 from .commissioning import (
@@ -42,7 +49,7 @@ from .models import (
     PlantHealthObservation,
 )
 
-COMMISSIONING_STORE_SCHEMA_VERSION = 6
+COMMISSIONING_STORE_SCHEMA_VERSION = 7
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +59,7 @@ class CommissioningStoreSnapshot:
     zones: tuple[CommissionedZoneProfile, ...]
     deactivated_zones: tuple[DeactivatedCommissionedZone, ...]
     delivery_profiles: tuple[WaterDeliveryProfile, ...]
+    photo_evidence: tuple[PhotoEvidence, ...]
     legacy_zone1: dict[str, Any]
     migration_required: bool
 
@@ -95,6 +103,33 @@ def _boolean(name: str, value: object) -> bool:
     if not isinstance(value, bool):
         raise ValueError(f"{name} must be boolean")
     return value
+
+
+def _photo_evidence(value: object) -> PhotoEvidence:
+    item = _mapping("photo evidence", value)
+    return PhotoEvidence(
+        evidence_id=str(item["evidence_id"]),
+        area_id=str(item["area_id"]),
+        evidence_type=PhotoEvidenceType(str(item["evidence_type"])),
+        captured_at=_datetime(item["captured_at"]),
+        source=PhotoSource(str(item["source"])),
+        privacy_classification=PrivacyClassification(
+            str(item["privacy_classification"])
+        ),
+        retention_policy=RetentionPolicy(str(item["retention_policy"])),
+        content_reference=_optional_string(item.get("content_reference")),
+        retention_days=(
+            None if item.get("retention_days") is None else int(item["retention_days"])
+        ),
+        user_note=_optional_string(item.get("user_note")),
+        property_id=_optional_string(item.get("property_id")),
+        commissioning_session_id=_optional_string(
+            item.get("commissioning_session_id")
+        ),
+        zone_running_context=_boolean(
+            "zone_running_context", item.get("zone_running_context", False)
+        ),
+    )
 
 
 def _datetime(value: object) -> datetime:
@@ -430,7 +465,7 @@ def restore_store_payload(
     if int(item.get("schema_version", 1)) != 1:
         raise ValueError("legacy landscape intelligence schema is unsupported")
     payload_schema = int(item.get("commissioning_store_schema_version", 1))
-    if payload_schema not in {1, 2, 3, 4, 5, COMMISSIONING_STORE_SCHEMA_VERSION}:
+    if payload_schema not in {1, 2, 3, 4, 5, 6, COMMISSIONING_STORE_SCHEMA_VERSION}:
         raise ValueError("commissioning Store schema is unsupported")
     if (
         payload_schema == COMMISSIONING_STORE_SCHEMA_VERSION
@@ -485,10 +520,23 @@ def restore_store_payload(
     profile_ids = tuple(profile.profile_id for profile in delivery_profiles)
     if len(profile_ids) != len(set(profile_ids)):
         raise ValueError("water delivery profile IDs must be unique")
+    photo_evidence = tuple(
+        sorted(
+            (
+                _photo_evidence(photo)
+                for photo in _sequence("photo_evidence", item.get("photo_evidence", []))
+            ),
+            key=lambda photo: (photo.captured_at, photo.evidence_id),
+        )
+    )
+    evidence_ids = tuple(photo.evidence_id for photo in photo_evidence)
+    if len(evidence_ids) != len(set(evidence_ids)):
+        raise ValueError("photo evidence IDs must be unique")
     return CommissioningStoreSnapshot(
         zones=zones,
         deactivated_zones=deactivated,
         delivery_profiles=delivery_profiles,
+        photo_evidence=photo_evidence,
         legacy_zone1=legacy_zone1,
         migration_required=migration_required,
     )
@@ -500,6 +548,7 @@ def build_store_payload(
     *,
     legacy_zone1: dict[str, Any],
     delivery_profiles: tuple[WaterDeliveryProfile, ...] = (),
+    photo_evidence: tuple[PhotoEvidence, ...] = (),
 ) -> dict[str, Any]:
     """Build deterministic current Store data while retaining legacy Zone 1."""
     ordered = tuple(sorted(zones, key=_zone_key))
@@ -513,6 +562,12 @@ def build_store_payload(
     profile_ids = tuple(profile.profile_id for profile in ordered_delivery)
     if len(profile_ids) != len(set(profile_ids)):
         raise ValueError("water delivery profile IDs must be unique")
+    ordered_photos = tuple(
+        sorted(photo_evidence, key=lambda photo: (photo.captured_at, photo.evidence_id))
+    )
+    evidence_ids = tuple(photo.evidence_id for photo in ordered_photos)
+    if len(evidence_ids) != len(set(evidence_ids)):
+        raise ValueError("photo evidence IDs must be unique")
     return {
         "schema_version": 1,
         "commissioning_store_schema_version": COMMISSIONING_STORE_SCHEMA_VERSION,
@@ -520,4 +575,5 @@ def build_store_payload(
         "commissioned_zones": [zone.to_dict() for zone in ordered],
         "deactivated_zones": [zone.to_dict() for zone in ordered_deactivated],
         "water_delivery_profiles": [profile.to_dict() for profile in ordered_delivery],
+        "photo_evidence": [photo.to_dict() for photo in ordered_photos],
     }

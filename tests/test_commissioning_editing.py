@@ -356,7 +356,7 @@ def test_schema_three_round_trip_after_edits_and_zone_one_compatibility() -> Non
     )
     restored = P.restore_store_payload(payload, fallback_zone1=zone1)
 
-    assert payload["commissioning_store_schema_version"] == 6
+    assert payload["commissioning_store_schema_version"] == 7
     assert restored.zones[0] == edited
     assert restored.zones[0].identity.zone_id == "zone.front"
     assert restored.zones[1].identity.zone_id == "zone.1"

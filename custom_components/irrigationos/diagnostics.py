@@ -161,6 +161,7 @@ async def async_get_config_entry_diagnostics(
                 entry.runtime_data.unattended_canary_acceptance.diagnostics()
             ),
             "supervised_operation": entry.runtime_data.supervised_operation.diagnostics(),
+            "guided_observation": entry.runtime_data.guided_observation.diagnostics(),
             "supervised_operation_acceptance": (
                 entry.runtime_data.supervised_operation_acceptance.diagnostics()
             ),

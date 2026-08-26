@@ -6,6 +6,7 @@ from .base import (
     ControllerInvalidResponseError,
     ControllerProviderError,
     ControllerRateLimitError,
+    GuidedObservationAdapter,
     RealtimeObservationAdapter,
 )
 from .identity import ControllerIdentityRegistry
@@ -35,6 +36,7 @@ __all__ = [
     "ControllerProviderError",
     "ControllerRateLimitError",
     "ControllerRegistrySnapshot",
+    "GuidedObservationAdapter",
     "IrrigationArea",
     "IrrigationAreaState",
     "IrrigationController",

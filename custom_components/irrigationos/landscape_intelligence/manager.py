@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
+from ..visual_assessment import PhotoEvidence
 from ..water_delivery import WaterDeliveryProfile
 from ..weather import ForecastWindow, ObservationWindow
 from .admission import assess_commissioning
@@ -51,6 +52,7 @@ class LandscapeIntelligenceManager:
         self._zones: tuple[CommissionedZoneProfile, ...] = ()
         self._deactivated_zones: tuple[DeactivatedCommissionedZone, ...] = ()
         self._delivery_profiles: tuple[WaterDeliveryProfile, ...] = ()
+        self._photo_evidence: tuple[PhotoEvidence, ...] = ()
         self._legacy_zone1: dict[str, Any] = {}
         self._factor_resolutions: dict[tuple[str, str], ZoneFactorResolution] = {}
         self._baseline_scaling: dict[
@@ -80,6 +82,7 @@ class LandscapeIntelligenceManager:
         self._zones = restored.zones
         self._deactivated_zones = restored.deactivated_zones
         self._delivery_profiles = restored.delivery_profiles
+        self._photo_evidence = restored.photo_evidence
         self._legacy_zone1 = restored.legacy_zone1
         self._refresh_factor_resolutions()
         self._baseline_scaling = {}
@@ -109,6 +112,29 @@ class LandscapeIntelligenceManager:
     def delivery_profiles(self) -> tuple[WaterDeliveryProfile, ...]:
         """Return durable canonical delivery profiles in stable order."""
         return self._delivery_profiles
+
+    @property
+    def photo_evidence(self) -> tuple[PhotoEvidence, ...]:
+        """Return lightweight photo references in deterministic order."""
+        return self._photo_evidence
+
+    def photos_for_zone(self, property_id: str, zone_id: str) -> tuple[PhotoEvidence, ...]:
+        """Return only photo metadata associated with one canonical zone."""
+        return tuple(
+            photo for photo in self._photo_evidence
+            if photo.property_id == property_id and photo.area_id == zone_id
+        )
+
+    async def async_add_photo_evidence(self, photos: tuple[PhotoEvidence, ...]) -> bool:
+        """Persist new opaque photo references before publishing them in memory."""
+        existing = {photo.evidence_id for photo in self._photo_evidence}
+        if not photos or any(photo.evidence_id in existing for photo in photos):
+            return False
+        return await self._async_save(
+            self._zones,
+            self._deactivated_zones,
+            photo_evidence=(*self._photo_evidence, *photos),
+        )
 
     def get_delivery_profile(self, profile_id: str) -> WaterDeliveryProfile | None:
         """Return one canonical delivery profile."""
@@ -376,6 +402,7 @@ class LandscapeIntelligenceManager:
                 "commissioned_zone_count": len(self._zones),
                 "deactivated_zone_count": len(self._deactivated_zones),
                 "water_delivery_profile_count": len(self._delivery_profiles),
+                "photo_reference_count": len(self._photo_evidence),
                 "water_delivery_profiles": [
                     profile.to_dict() for profile in self._delivery_profiles
                 ],
@@ -391,14 +418,17 @@ class LandscapeIntelligenceManager:
         deactivated_zones: tuple[DeactivatedCommissionedZone, ...],
         *,
         delivery_profiles: tuple[WaterDeliveryProfile, ...] | None = None,
+        photo_evidence: tuple[PhotoEvidence, ...] | None = None,
     ) -> bool:
         profiles = self._delivery_profiles if delivery_profiles is None else delivery_profiles
+        photos = self._photo_evidence if photo_evidence is None else photo_evidence
         try:
             payload = build_store_payload(
                 zones,
                 deactivated_zones,
                 legacy_zone1=self._legacy_zone1,
                 delivery_profiles=profiles,
+                photo_evidence=photos,
             )
             await self._store.async_save(payload)
         except Exception:
@@ -418,6 +448,9 @@ class LandscapeIntelligenceManager:
         )
         self._delivery_profiles = tuple(
             sorted(profiles, key=lambda profile: profile.profile_id)
+        )
+        self._photo_evidence = tuple(
+            sorted(photos, key=lambda photo: (photo.captured_at, photo.evidence_id))
         )
         self._refresh_factor_resolutions()
         self._baseline_scaling = {}
