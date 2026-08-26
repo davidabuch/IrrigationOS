@@ -1,3 +1,16 @@
+## [1.0.60] - 2026-08-25
+
+### Added
+
+- A permanent zone-centric **Manage zones** options workflow for both commissioned and uncommissioned controller zones.
+- Plain-language canonical review, simple update prepopulation, private opaque multi-photo references, and a provider-neutral guided-observation boundary.
+- One explicit, non-retrying three-minute observation run with immediate operator stop and transient fail-closed state.
+
+### Safety
+
+- No autonomous authority, scheduler bridge, recommendation dispatch, retry, background loop, raw-photo persistence, or restart restoration was added.
+- `execution_authorized` and `live_control_authorized` remain false.
+
 ## [1.0.58] - 2026-08-24
 
 ### Fixed

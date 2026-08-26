@@ -392,6 +392,9 @@ class PhotoEvidence(SerializableModel):
     content_reference: str | None = None
     retention_days: int | None = None
     user_note: str | None = None
+    property_id: str | None = None
+    commissioning_session_id: str | None = None
+    zone_running_context: bool = False
 
     def __post_init__(self) -> None:
         _validate_identifier("evidence_id", self.evidence_id)
@@ -415,6 +418,10 @@ class PhotoEvidence(SerializableModel):
             raise ValueError("retention_days is only valid for configurable retention")
         if self.user_note is not None:
             _validate_text("user_note", self.user_note)
+        if self.property_id is not None:
+            _validate_identifier("property_id", self.property_id)
+        if self.commissioning_session_id is not None:
+            _validate_identifier("commissioning_session_id", self.commissioning_session_id)
 
 
 @dataclass(frozen=True, slots=True)

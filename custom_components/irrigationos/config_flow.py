@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, date, datetime, time
 from typing import Any
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .adapters.factory import DEFAULT_PROVIDER_FACTORY
@@ -37,6 +40,11 @@ from .first_live_delivery.operator import (
     FIRST_LIVE_OPERATOR_CONFIRMATION,
     async_run_supervised_first_live_trial,
 )
+from .guided_observation import (
+    GuidedObservationState,
+    async_start_guided_observation,
+    async_stop_guided_observation,
+)
 from .landscape import (
     EstablishmentStage,
     IrrigationMethod,
@@ -58,6 +66,9 @@ from .landscape_intelligence import (
     DeliverySharing,
     IrrigationDeliveryLink,
     IrrigationRole,
+    LandscapeChangeEvent,
+    LandscapeEventType,
+    LandscapePlantSnapshot,
     PlantAdditionInput,
     PlantCommissioningDetails,
     PlantEditInput,
@@ -93,6 +104,13 @@ from .landscape_intelligence.onboarding import (
     ManualPlantOnboardingInput,
     ZoneOnboardingRequest,
     map_zone_onboarding,
+)
+from .visual_assessment import (
+    PhotoEvidence,
+    PhotoEvidenceType,
+    PhotoSource,
+    PrivacyClassification,
+    RetentionPolicy,
 )
 from .water_delivery import (
     DeliveryComponentCalibrationRequest,
@@ -191,6 +209,11 @@ CONF_SIMPLE_SPRAY_PATTERN = "simple_spray_pattern"
 CONF_SIMPLE_SHARING = "simple_sharing"
 CONF_SIMPLE_PLANTS_PER_EMITTER = "simple_plants_per_emitter"
 CONF_SIMPLE_CONFIRM = "simple_confirm"
+CONF_MANAGE_ZONE_ACTION = "manage_zone_action"
+CONF_MANAGE_PLANT = "manage_plant"
+CONF_ZONE_PHOTOS = "zone_photos"
+CONF_ZONE_PHOTO_NOTE = "zone_photo_note"
+CONF_ZONE_PHOTO_RUNNING = "zone_photo_running"
 
 STEP_USER_SCHEMA = vol.Schema(
     {
@@ -338,6 +361,9 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
         self._review_plant_action: str | None = None
         self._review_conflict_id: str | None = None
         self._simple_proposal: ConversationalCommissioningProposal | None = None
+        self._manage_controller_slot: int | None = None
+        self._manage_area_slot: int | None = None
+        self._manage_plant_group_id: str | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -346,6 +372,8 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
 
         if user_input is not None:
             action = str(user_input[CONF_OPTIONS_ACTION])
+            if action == "manage_zones":
+                return await self.async_step_manage_zones()
             if action == "landscape":
                 return await self.async_step_landscape()
             if action == "commissioning":
@@ -361,6 +389,7 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 {
                     vol.Required(CONF_OPTIONS_ACTION): vol.In(
                         {
+                            "manage_zones": "Manage zones",
                             "landscape": "Edit Landscape Digital Twin",
                             "commissioning": "Commission generic zone knowledge",
                             "commissioning_simple": "Simple guided zone setup",
@@ -370,6 +399,241 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                     )
                 }
             ),
+        )
+
+    async def async_step_manage_zones(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Show every configured zone through one permanent simple entry point."""
+        choices: dict[str, str] = {}
+        manager = self.config_entry.runtime_data.landscape_intelligence
+        for controller_slot, controller in enumerate(
+            self.config_entry.runtime_data.data.controllers, start=1
+        ):
+            for area in controller.areas:
+                if not area.configured or area.binding is None:
+                    continue
+                profile = manager.get_zone_by_slots(controller_slot, area.slot_number)
+                status = _plain_zone_status(profile)
+                choices[f"{controller_slot}|{area.slot_number}"] = (
+                    f"{area.vendor_name or area.name} — {status}"
+                )
+        if not choices:
+            return self.async_abort(reason="no_areas")
+        if user_input is not None:
+            controller, area = str(user_input[CONF_COMMISSIONING_TARGET]).split("|", 1)
+            self._manage_controller_slot = int(controller)
+            self._manage_area_slot = int(area)
+            self._commissioning_controller_slot = int(controller)
+            self._commissioning_area_slot = int(area)
+            selected_label = choices[str(user_input[CONF_COMMISSIONING_TARGET])]
+            self._commissioning_area_name = selected_label.split(" — ", 1)[0]
+            return await self.async_step_manage_zone()
+        return self.async_show_form(
+            step_id="manage_zones",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_COMMISSIONING_TARGET): vol.In(choices)}
+            ),
+        )
+
+    async def async_step_manage_zone(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Offer plain-language actions for one selected zone."""
+        if self._manage_controller_slot is None or self._manage_area_slot is None:
+            return await self.async_step_manage_zones()
+        coordinator = self.config_entry.runtime_data
+        manager = coordinator.landscape_intelligence
+        profile = manager.get_zone_by_slots(
+            self._manage_controller_slot, self._manage_area_slot
+        )
+        run = coordinator.guided_observation.snapshot
+        active_here = (
+            run.controller_slot == self._manage_controller_slot
+            and run.area_slot == self._manage_area_slot
+            and run.state in {
+                GuidedObservationState.STARTING,
+                GuidedObservationState.RUNNING,
+                GuidedObservationState.STOPPING,
+                GuidedObservationState.UNCERTAIN,
+            }
+        )
+        actions = {
+            "tell": (
+                "Tell IrrigationOS about this zone"
+                if profile is None
+                else "Update plants and irrigation"
+            ),
+            "photos": "Take or add photos",
+            "stop" if active_here else "run": (
+                f"Stop {self._commissioning_area_name}" if active_here
+                else f"Run {self._commissioning_area_name} for 3 minutes"
+            ),
+            "review": "Review what IrrigationOS understands",
+            "advanced": "Advanced",
+            "done": "Done",
+        }
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            action = str(user_input[CONF_MANAGE_ZONE_ACTION])
+            if action == "tell":
+                if profile is not None and len(profile.landscape_profile.plant_groups) > 1:
+                    return await self.async_step_manage_zone_plant()
+                if profile is not None and profile.landscape_profile.plant_groups:
+                    self._manage_plant_group_id = (
+                        profile.landscape_profile.plant_groups[0].plant_group_id
+                    )
+                return await self.async_step_commissioning_simple_input()
+            if action == "photos":
+                return await self.async_step_manage_zone_photos()
+            if action == "review":
+                return await self.async_step_manage_zone_review()
+            if action == "advanced":
+                if profile is None:
+                    return await self.async_step_commissioning()
+                self._review_property_id = profile.identity.property_id
+                self._review_zone_id = profile.identity.zone_id
+                return await self.async_step_commissioning_review()
+            if action == "done":
+                return self.async_create_entry(title="", data=dict(self.config_entry.options))
+            result = (
+                await async_stop_guided_observation(
+                    coordinator,
+                    controller_slot=self._manage_controller_slot,
+                    area_slot=self._manage_area_slot,
+                )
+                if action == "stop"
+                else await async_start_guided_observation(
+                    coordinator,
+                    controller_slot=self._manage_controller_slot,
+                    area_slot=self._manage_area_slot,
+                )
+            )
+            if result.blocker_codes:
+                errors["base"] = result.blocker_codes[0]
+            else:
+                return await self.async_step_manage_zone()
+        return self.async_show_form(
+            step_id="manage_zone",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_MANAGE_ZONE_ACTION): vol.In(actions)}
+            ),
+            errors=errors,
+            description_placeholders={
+                "zone_name": self._commissioning_area_name or "Zone",
+                "status": _plain_zone_status(profile),
+            },
+        )
+
+    async def async_step_manage_zone_plant(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Select an existing plant by plain name before a simple update."""
+        manager = self.config_entry.runtime_data.landscape_intelligence
+        profile = manager.get_zone_by_slots(
+            self._manage_controller_slot or 0, self._manage_area_slot or 0
+        )
+        if profile is None:
+            return await self.async_step_commissioning_simple_input()
+        choices = {
+            plant.plant_group_id: plant.common_name
+            for plant in profile.landscape_profile.plant_groups
+        }
+        choices["__add_new__"] = "Add another plant group"
+        if user_input is not None:
+            self._manage_plant_group_id = str(user_input[CONF_MANAGE_PLANT])
+            return await self.async_step_commissioning_simple_input()
+        return self.async_show_form(
+            step_id="manage_zone_plant",
+            data_schema=vol.Schema({vol.Required(CONF_MANAGE_PLANT): vol.In(choices)}),
+        )
+
+    async def async_step_manage_zone_photos(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Persist only opaque HA media references, never image bytes."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            manager = self.config_entry.runtime_data.landscape_intelligence
+            profile = manager.get_zone_by_slots(
+                self._manage_controller_slot or 0, self._manage_area_slot or 0
+            )
+            property_id = "property.primary" if profile is None else profile.identity.property_id
+            zone_id = (
+                f"zone.{self._manage_area_slot}"
+                if profile is None
+                else profile.identity.zone_id
+            )
+            raw = user_input[CONF_ZONE_PHOTOS]
+            selected = raw if isinstance(raw, list) else [raw]
+            photos = tuple(
+                PhotoEvidence(
+                    evidence_id=f"photo.{uuid4().hex}",
+                    area_id=zone_id,
+                    property_id=property_id,
+                    evidence_type=(
+                        PhotoEvidenceType.RUNNING_CONDITION
+                        if bool(user_input.get(CONF_ZONE_PHOTO_RUNNING, False))
+                        else PhotoEvidenceType.AREA_OVERVIEW
+                    ),
+                    captured_at=datetime.now(UTC),
+                    source=PhotoSource.USER_SELECTED,
+                    privacy_classification=PrivacyClassification.PRIVATE,
+                    retention_policy=RetentionPolicy.UNTIL_DELETED,
+                    content_reference=_media_content_id(item),
+                    user_note=_optional_form_text(user_input, CONF_ZONE_PHOTO_NOTE),
+                    zone_running_context=bool(
+                        user_input.get(CONF_ZONE_PHOTO_RUNNING, False)
+                    ),
+                )
+                for item in selected
+            )
+            if await manager.async_add_photo_evidence(photos):
+                return await self.async_step_manage_zone_review()
+            errors["base"] = "commissioning_persistence_failed"
+        return self.async_show_form(
+            step_id="manage_zone_photos",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ZONE_PHOTOS): selector.MediaSelector(
+                        selector.MediaSelectorConfig(accept=["image/*"], multiple=True)
+                    ),
+                    vol.Optional(CONF_ZONE_PHOTO_NOTE, default=""): str,
+                    vol.Required(CONF_ZONE_PHOTO_RUNNING, default=False): bool,
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_manage_zone_review(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Show a compact plain-language reconstruction from canonical state."""
+        del user_input
+        manager = self.config_entry.runtime_data.landscape_intelligence
+        profile = manager.get_zone_by_slots(
+            self._manage_controller_slot or 0, self._manage_area_slot or 0
+        )
+        if profile is None:
+            summary = "IrrigationOS does not have landscape details for this zone yet."
+            questions = "Tell IrrigationOS what you know about the plants and irrigation."
+        else:
+            review = manager.review_zone(profile.identity.property_id, profile.identity.zone_id)
+            assert review is not None
+            summary = "; ".join(
+                f"{item.plant_group.common_name} "
+                f"({item.plant_group.establishment_state.value.replace('_', ' ')})"
+                for item in review.plants
+            ) or "No active plants documented"
+            questions = " | ".join(
+                item.prompt for item in review.commissioning_assessment.follow_up_requirements[:3]
+            ) or "No high-priority questions right now."
+            photos = manager.photos_for_zone(profile.identity.property_id, profile.identity.zone_id)
+            summary = f"Plants: {summary}. Photos saved: {len(photos)}."
+        return self.async_show_form(
+            step_id="manage_zone_review",
+            data_schema=vol.Schema({}),
+            description_placeholders={"understood": summary, "questions": questions},
         )
 
     async def async_step_commissioning_simple(
@@ -416,7 +680,7 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
-                self._simple_proposal = _map_simple_commissioning_form(
+                proposal = _map_simple_commissioning_form(
                     user_input,
                     controller_slot=self._commissioning_controller_slot,
                     area_slot=self._commissioning_area_slot,
@@ -425,13 +689,40 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                     now=datetime.now(UTC),
                     timezone=ZoneInfo(self.hass.config.time_zone),
                 )
+                existing = self.config_entry.runtime_data.landscape_intelligence.get_zone_by_slots(
+                    self._commissioning_controller_slot,
+                    self._commissioning_area_slot,
+                )
+                self._simple_proposal = (
+                    proposal
+                    if existing is None
+                    else _merge_simple_update(
+                        existing,
+                        proposal,
+                        datetime.now(UTC),
+                        plant_group_id=self._manage_plant_group_id,
+                    )
+                )
+                if existing is not None:
+                    self._simple_proposal = _preserve_existing_delivery_calibration(
+                        self.config_entry.runtime_data.landscape_intelligence,
+                        existing,
+                        self._simple_proposal,
+                        plant_group_id=self._manage_plant_group_id,
+                    )
             except (KeyError, TypeError, ValueError):
                 errors["base"] = "invalid_commissioning_input"
             else:
                 return await self.async_step_commissioning_simple_review()
         return self.async_show_form(
             step_id="commissioning_simple_input",
-            data_schema=_simple_commissioning_schema(),
+            data_schema=_simple_commissioning_schema(
+                self.config_entry.runtime_data.landscape_intelligence.get_zone_by_slots(
+                    self._commissioning_controller_slot,
+                    self._commissioning_area_slot,
+                ),
+                plant_group_id=self._manage_plant_group_id,
+            ),
             errors=errors,
         )
 
@@ -448,11 +739,25 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 errors["base"] = "confirmation_required"
             else:
                 manager = self.config_entry.runtime_data.landscape_intelligence
+                existing = manager.get_zone(
+                    proposal.zone_profile.identity.property_id,
+                    proposal.zone_profile.identity.zone_id,
+                )
                 if proposal.delivery_profile is None:
-                    saved = await manager.async_add_zone(proposal.zone_profile)
+                    saved = (
+                        await manager.async_add_zone(proposal.zone_profile)
+                        if existing is None
+                        else await manager.async_update_zone(proposal.zone_profile)
+                    )
                 else:
-                    saved = await manager.async_add_zone_and_delivery_profile(
-                        proposal.zone_profile, proposal.delivery_profile
+                    saved = (
+                        await manager.async_add_zone_and_delivery_profile(
+                            proposal.zone_profile, proposal.delivery_profile
+                        )
+                        if existing is None
+                        else await manager.async_update_zone_and_delivery_profile(
+                            proposal.zone_profile, proposal.delivery_profile
+                        )
                     )
                 if saved:
                     return self.async_create_entry(
@@ -1549,15 +1854,79 @@ def _commissioning_schema(
     return vol.Schema(fields)
 
 
-def _simple_commissioning_schema() -> vol.Schema:
+def _simple_commissioning_schema(
+    profile: CommissionedZoneProfile | None = None,
+    *,
+    plant_group_id: str | None = None,
+) -> vol.Schema:
     """Return the serializable plain-language simple commissioning form."""
+    plant = (
+        None
+        if profile is None or not profile.landscape_profile.plant_groups
+        else next(
+            (
+                item
+                for item in profile.landscape_profile.plant_groups
+                if item.plant_group_id == plant_group_id
+            ),
+            profile.landscape_profile.plant_groups[0],
+        )
+    )
+    details = (
+        None
+        if profile is None or plant is None
+        else next(
+            item
+            for item in profile.plant_details
+            if item.plant_group_id == plant.plant_group_id
+        )
+    )
+    link = (
+        None
+        if profile is None or plant is None
+        else next(
+            (
+                item
+                for item in profile.delivery_links
+                if item.plant_group_id == plant.plant_group_id
+            ),
+            None,
+        )
+    )
     return vol.Schema(
         {
-            vol.Required(CONF_SIMPLE_DESCRIPTION): str,
-            vol.Required(CONF_SIMPLE_PLANT_NAME): str,
-            vol.Optional(CONF_SIMPLE_PLANTED_DATE, default=""): str,
-            _optional_numeric_field(CONF_SIMPLE_CONTAINER_GALLONS): vol.Coerce(float),
-            _optional_numeric_field(CONF_SIMPLE_HEIGHT_FEET): vol.Coerce(float),
+            vol.Required(
+                CONF_SIMPLE_DESCRIPTION,
+                default="Tell IrrigationOS what changed" if profile else "Describe this zone",
+            ): str,
+            vol.Required(
+                CONF_SIMPLE_PLANT_NAME,
+                default="" if plant is None else plant.common_name,
+            ): str,
+            vol.Optional(
+                CONF_SIMPLE_PLANTED_DATE,
+                default=(
+                    ""
+                    if details is None or details.planted_at is None
+                    else details.planted_at.date().isoformat()
+                ),
+            ): str,
+            vol.Optional(
+                CONF_SIMPLE_CONTAINER_GALLONS,
+                default=(
+                    ""
+                    if details is None or details.source_container_gallons is None
+                    else details.source_container_gallons
+                ),
+            ): vol.Coerce(float),
+            vol.Optional(
+                CONF_SIMPLE_HEIGHT_FEET,
+                default=(
+                    ""
+                    if details is None or details.current_height_meters is None
+                    else round(details.current_height_meters / 0.3048, 2)
+                ),
+            ): vol.Coerce(float),
             vol.Required(
                 CONF_SIMPLE_DELIVERY_TYPE, default=WaterDeliveryType.UNKNOWN.value
             ): vol.In([item.value for item in WaterDeliveryType]),
@@ -1566,7 +1935,16 @@ def _simple_commissioning_schema() -> vol.Schema:
             vol.Required(
                 CONF_SIMPLE_SPRAY_PATTERN, default=SprayPattern.UNKNOWN.value
             ): vol.In([item.value for item in SprayPattern]),
-            vol.Required(CONF_SIMPLE_SHARING, default=DeliverySharing.UNKNOWN.value): vol.In(
+            vol.Required(
+                CONF_SIMPLE_SHARING,
+                default=(
+                    DeliverySharing.UNKNOWN.value
+                    if link is None or link.dedicated_delivery is None
+                    else DeliverySharing.DEDICATED.value
+                    if link.dedicated_delivery
+                    else DeliverySharing.SHARED.value
+                ),
+            ): vol.In(
                 [item.value for item in DeliverySharing]
             ),
             _optional_numeric_field(CONF_SIMPLE_PLANTS_PER_EMITTER): vol.Coerce(int),
@@ -1638,6 +2016,222 @@ def _map_simple_commissioning_form(
             delivery=delivery,
         )
     )
+
+
+def _merge_simple_update(
+    existing: CommissionedZoneProfile,
+    proposal: ConversationalCommissioningProposal,
+    effective_at: datetime,
+    *,
+    plant_group_id: str | None = None,
+) -> ConversationalCommissioningProposal:
+    """Merge simple evidence into a zone and retain the previous plant snapshot."""
+    incoming = proposal.zone_profile.landscape_profile.plant_groups[0]
+    incoming_details = proposal.zone_profile.plant_details[0]
+    if plant_group_id == "__add_new__":
+        incoming_link = (
+            None
+            if not proposal.zone_profile.delivery_links
+            else proposal.zone_profile.delivery_links[0]
+        )
+        zone = add_plant_group(
+            existing,
+            PlantAdditionInput(
+                event_id=f"event.{uuid4().hex}",
+                plant=ManualPlantOnboardingInput(
+                    plant_group_id=incoming.plant_group_id,
+                    common_name=incoming.common_name,
+                    botanical_name=incoming.botanical_name,
+                    establishment_state=incoming.establishment_state,
+                    observed_at=incoming_details.observed_at,
+                    planted_at=incoming_details.planted_at,
+                    source_container_gallons=incoming_details.source_container_gallons,
+                    current_height_meters=incoming_details.current_height_meters,
+                    irrigation_role=incoming.irrigation_role,
+                    direct_irrigation=incoming.direct_irrigation,
+                    dedicated_emitter=incoming.dedicated_emitter,
+                    emitter_type=incoming.emitter_type,
+                ),
+                effective_at=effective_at,
+                delivery_link=incoming_link,
+            ),
+        )
+        return replace(proposal, zone_profile=zone)
+    current = next(
+        (
+            plant
+            for plant in existing.landscape_profile.plant_groups
+            if (
+                plant.plant_group_id == plant_group_id
+                if plant_group_id is not None
+                else plant.common_name.casefold() == incoming.common_name.casefold()
+            )
+        ),
+        existing.landscape_profile.plant_groups[0],
+    )
+    current_details = next(
+        item
+        for item in existing.plant_details
+        if item.plant_group_id == current.plant_group_id
+    )
+    updated_plant = replace(incoming, plant_group_id=current.plant_group_id)
+    updated_details = replace(incoming_details, plant_group_id=current.plant_group_id)
+    plants = tuple(
+        updated_plant if item.plant_group_id == current.plant_group_id else item
+        for item in existing.landscape_profile.plant_groups
+    )
+    details = tuple(
+        updated_details if item.plant_group_id == current.plant_group_id else item
+        for item in existing.plant_details
+    )
+    event = LandscapeChangeEvent(
+        event_id=f"event.{uuid4().hex}",
+        event_type=LandscapeEventType.PLANT_GROUP_UPDATED,
+        effective_at=effective_at,
+        plant_snapshot=LandscapePlantSnapshot(current, current_details),
+    )
+    links = existing.delivery_links
+    if proposal.zone_profile.delivery_links:
+        incoming_link = replace(
+            proposal.zone_profile.delivery_links[0],
+            plant_group_id=current.plant_group_id,
+            link_id=f"{current.plant_group_id}.delivery",
+        )
+        links = (
+            *(item for item in links if item.plant_group_id != current.plant_group_id),
+            incoming_link,
+        )
+    zone = replace(
+        existing,
+        landscape_profile=replace(existing.landscape_profile, plant_groups=plants),
+        plant_details=details,
+        delivery_links=tuple(sorted(links, key=lambda item: item.link_id)),
+        landscape_events=tuple(
+            sorted(
+                (*existing.landscape_events, event),
+                key=lambda item: (item.effective_at, item.event_id),
+            )
+        ),
+        execution_authorized=False,
+        live_control_authorized=False,
+    )
+    return replace(proposal, zone_profile=zone)
+
+
+def _plain_zone_status(profile: CommissionedZoneProfile | None) -> str:
+    """Return a homeowner-facing setup status from canonical evidence."""
+    if profile is None:
+        return "Not set up"
+    assessment = assess_commissioning(profile)
+    resolved = {item.conflict_id for item in profile.conflict_resolutions}
+    if any(item.conflict_id not in resolved for item in profile.conflicts):
+        return "Needs review"
+    if assessment.follow_up_requirements:
+        return "Partially set up"
+    return "Set up"
+
+
+def _preserve_existing_delivery_calibration(
+    manager: Any,
+    existing: CommissionedZoneProfile,
+    proposal: ConversationalCommissioningProposal,
+    *,
+    plant_group_id: str | None,
+) -> ConversationalCommissioningProposal:
+    """Refine observable delivery facts without replacing stronger calibration."""
+    if proposal.delivery_profile is None:
+        return proposal
+    selected_id = plant_group_id or existing.landscape_profile.plant_groups[0].plant_group_id
+    current_link = next(
+        (item for item in existing.delivery_links if item.plant_group_id == selected_id),
+        None,
+    )
+    if (
+        current_link is None
+        or current_link.delivery_profile_id is None
+        or not current_link.component_ids
+    ):
+        return proposal
+    current_profile = manager.get_delivery_profile(current_link.delivery_profile_id)
+    if current_profile is None:
+        return proposal
+    current_component = next(
+        (
+            item
+            for item in current_profile.components
+            if item.component_id == current_link.component_ids[0]
+        ),
+        None,
+    )
+    if current_component is None:
+        return proposal
+    observed = proposal.delivery_profile.components[0]
+    merged_component = replace(
+        observed,
+        component_id=current_component.component_id,
+        area_id=current_component.area_id,
+        nominal_flow_liters_per_hour=current_component.nominal_flow_liters_per_hour,
+        measured_flow_liters_per_hour=current_component.measured_flow_liters_per_hour,
+        application_rate_mm_per_hour=current_component.application_rate_mm_per_hour,
+        efficiency=current_component.efficiency,
+        pressure_compensation=current_component.pressure_compensation,
+        clogging_risk=current_component.clogging_risk,
+        calibration_ids=current_component.calibration_ids,
+        manufacturer=current_component.manufacturer,
+        model=current_component.model,
+        approximate_flow_range=(
+            observed.approximate_flow_range or current_component.approximate_flow_range
+        ),
+        visual_assessment_ids=tuple(
+            sorted(
+                set(current_component.visual_assessment_ids)
+                | set(observed.visual_assessment_ids)
+            )
+        ),
+        visual_evidence_ids=tuple(
+            sorted(
+                set(current_component.visual_evidence_ids)
+                | set(observed.visual_evidence_ids)
+            )
+        ),
+    )
+    delivery_profile = replace(
+        current_profile,
+        assessed_at=proposal.delivery_profile.assessed_at,
+        components=tuple(
+            merged_component if item.component_id == current_component.component_id else item
+            for item in current_profile.components
+        ),
+    )
+    proposed_link = next(
+        item
+        for item in proposal.zone_profile.delivery_links
+        if item.plant_group_id == selected_id
+    )
+    retained_link = replace(
+        current_link,
+        status=proposed_link.status,
+        dedicated_delivery=proposed_link.dedicated_delivery,
+    )
+    zone = replace(
+        proposal.zone_profile,
+        delivery_links=tuple(
+            retained_link if item.plant_group_id == selected_id else item
+            for item in proposal.zone_profile.delivery_links
+        ),
+    )
+    return replace(proposal, zone_profile=zone, delivery_profile=delivery_profile)
+
+
+def _media_content_id(value: object) -> str:
+    """Extract the opaque HA media reference without storing media metadata."""
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, dict):
+        content_id = value.get("media_content_id")
+        if isinstance(content_id, str) and content_id.strip():
+            return content_id.strip()
+    raise ValueError("photo selection is missing an opaque media reference")
 
 
 def _optional_form_text(values: dict[str, Any], key: str) -> str | None:

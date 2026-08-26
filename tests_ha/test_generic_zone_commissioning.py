@@ -47,6 +47,7 @@ from custom_components.irrigationos.config_flow import (
     CONF_COMMISSIONING_REPLACE_REFERENCE_CONFIRMATION,
     CONF_COMMISSIONING_REVIEW_ACTION,
     CONF_COMMISSIONING_REVIEW_TARGET,
+    CONF_COMMISSIONING_TARGET,
     CONF_COMMISSIONING_ZONE_NAME,
     CONF_OPTIONS_ACTION,
     CONF_SIMPLE_CONFIRM,
@@ -61,6 +62,9 @@ from custom_components.irrigationos.config_flow import (
     CONF_SIMPLE_SHARING,
     CONF_SIMPLE_SPRAY_PATTERN,
     CONF_SIMPLE_THROW_FEET,
+    CONF_ZONE_PHOTO_NOTE,
+    CONF_ZONE_PHOTO_RUNNING,
+    CONF_ZONE_PHOTOS,
     IrrigationOSOptionsFlow,
     _commissioning_baseline_schema,
     _commissioning_delivery_calibration_schema,
@@ -70,6 +74,7 @@ from custom_components.irrigationos.config_flow import (
     _simple_commissioning_schema,
 )
 from custom_components.irrigationos.const import DOMAIN
+from custom_components.irrigationos.guided_observation import GuidedObservationManager
 from custom_components.irrigationos.landscape_intelligence import (
     CanonicalZoneIdentity,
     Confidence,
@@ -205,6 +210,139 @@ async def test_simple_commissioning_persistence_failure_publishes_nothing(
     assert not any(item.area_id == "zone.8" for item in manager.delivery_profiles)
 
 
+@pytest.mark.asyncio
+async def test_zone_photo_references_are_private_atomic_and_ha_serializable(
+    hass: HomeAssistant,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "zone-photos")
+    store = _Store(None)
+    manager._store = store  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = SimpleNamespace(landscape_intelligence=manager)
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+    flow._manage_controller_slot = 1
+    flow._manage_area_slot = 1
+
+    form = await flow.async_step_manage_zone_photos()
+    assert voluptuous_serialize.convert(
+        form["data_schema"], custom_serializer=cv.custom_serializer
+    )
+    result = await flow.async_step_manage_zone_photos(
+        {
+            CONF_ZONE_PHOTOS: [
+                {"media_content_id": "media-source://media_source/local/zone1.jpg"},
+                {"media_content_id": "media-source://media_source/local/zone1-running.jpg"},
+            ],
+            CONF_ZONE_PHOTO_NOTE: "Wide view",
+            CONF_ZONE_PHOTO_RUNNING: True,
+        }
+    )
+    assert result["step_id"] == "manage_zone_review"
+    photos = manager.photos_for_zone("property.primary", "zone.1")
+    assert len(photos) == 2
+    assert all(photo.zone_running_context for photo in photos)
+    assert all(
+        photo.content_reference
+        and not photo.content_reference.startswith("data:")
+        for photo in photos
+    )
+    assert store.value is not None
+    assert all("private-zone" not in str(item) for item in store.value["photo_evidence"])
+
+
+@pytest.mark.asyncio
+async def test_all_zone_management_forms_cross_ha_serialization_boundary(
+    hass: HomeAssistant,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "manage-zone-forms")
+    manager._store = _Store(None)  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    area = SimpleNamespace(
+        configured=True,
+        enabled=True,
+        binding=object(),
+        slot_number=1,
+        vendor_name="Zone 1",
+        name="Zone 1",
+    )
+    runtime = SimpleNamespace(
+        landscape_intelligence=manager,
+        data=SimpleNamespace(controllers=(SimpleNamespace(areas=(area,)),)),
+        guided_observation=GuidedObservationManager(),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = runtime
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+
+    zones = await flow.async_step_manage_zones()
+    zone = await flow.async_step_manage_zones(
+        {CONF_COMMISSIONING_TARGET: "1|1"}
+    )
+    review = await flow.async_step_manage_zone_review()
+    for result in (zones, zone, review):
+        assert voluptuous_serialize.convert(
+            result["data_schema"], custom_serializer=cv.custom_serializer
+        ) is not None
+
+
+@pytest.mark.asyncio
+async def test_existing_zone_simple_update_preserves_identity_and_history(
+    hass: HomeAssistant,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "simple-revisit")
+    manager._store = _Store(None)  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    before = manager.get_zone("property.primary", "zone.1")
+    assert before is not None
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = SimpleNamespace(landscape_intelligence=manager)
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+    flow._commissioning_controller_slot = 1
+    flow._commissioning_area_slot = 1
+    flow._commissioning_area_name = "Zone 1"
+    flow._manage_plant_group_id = "podocarpus"
+    original_event_count = len(before.landscape_events)
+
+    review = await flow.async_step_commissioning_simple_input(
+        {
+            CONF_SIMPLE_DESCRIPTION: "The Podocarpus are now about 6 feet tall.",
+            CONF_SIMPLE_PLANT_NAME: "Podocarpus",
+            CONF_SIMPLE_PLANTED_DATE: "2025-08-25",
+            CONF_SIMPLE_CONTAINER_GALLONS: 5,
+            CONF_SIMPLE_HEIGHT_FEET: 6,
+            CONF_SIMPLE_DELIVERY_TYPE: "microjet",
+            CONF_SIMPLE_EMITTER_CLASS: "blue",
+            CONF_SIMPLE_THROW_FEET: 3.5,
+            CONF_SIMPLE_SPRAY_PATTERN: "part_circle",
+            CONF_SIMPLE_SHARING: "shared",
+            CONF_SIMPLE_PLANTS_PER_EMITTER: 2,
+        }
+    )
+    assert review["step_id"] == "commissioning_simple_review"
+    saved = await flow.async_step_commissioning_simple_review(
+        {CONF_SIMPLE_CONFIRM: True}
+    )
+    assert saved["type"] == "create_entry"
+    after = manager.get_zone("property.primary", "zone.1")
+    assert after is not None
+    assert len(manager.commissioned_zones) == 1
+    assert len(after.landscape_events) == original_event_count + 1
+    podocarpus = next(
+        item for item in after.plant_details if item.plant_group_id == "podocarpus"
+    )
+    assert podocarpus.current_height_meters == pytest.approx(1.8288)
+
+
 class _Store:
     def __init__(self, value: dict[str, Any] | None, *, fail_save: bool = False) -> None:
         self.value = value
@@ -329,7 +467,7 @@ async def test_legacy_schema_one_zone1_store_migrates_additively(
 
     assert len(store.saved) == 1
     assert store.value is not None
-    assert store.value["commissioning_store_schema_version"] == 6
+    assert store.value["commissioning_store_schema_version"] == 7
     assert store.value["zone_1"] == old_zone1
     assert manager.zone1.area_slot == 1
     assert tuple(zone.identity.area_slot for zone in manager.commissioned_zones) == (1,)
@@ -429,7 +567,7 @@ async def test_diagnostics_are_canonical_compact_and_confidence_preserved(
     assert await manager.async_add_zone(_zone2())
 
     summary = manager.diagnostics()["commissioning_summary"]
-    assert summary["store_schema_version"] == 6
+    assert summary["store_schema_version"] == 7
     assert summary["commissioned_zone_count"] == 2
     assert summary["legacy_zone_1_compatible"] is True
     assert summary["zones"][1]["identity"] == {

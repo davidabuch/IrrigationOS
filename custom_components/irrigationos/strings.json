@@ -88,6 +88,35 @@
         "description": "Choose an irrigation area. You will describe it in ordinary language; IrrigationOS will create canonical evidence for review before saving.",
         "data": {"commissioning_target": "Irrigation area"}
       },
+      "manage_zones": {
+        "title": "Manage zones",
+        "description": "Choose the zone you want to set up, update, observe, or review.",
+        "data": {"commissioning_target": "Zone"}
+      },
+      "manage_zone": {
+        "title": "{zone_name}",
+        "description": "Setup status: {status}. Choose what you want to do. A temporary run requires this explicit selection every time and never enables automatic watering.",
+        "data": {"manage_zone_action": "What would you like to do?"}
+      },
+      "manage_zone_photos": {
+        "title": "Add zone photos",
+        "description": "Choose one or more images from Home Assistant media. IrrigationOS stores only private opaque references, not image bytes.",
+        "data": {
+          "zone_photos": "Photos",
+          "zone_photo_note": "Optional note",
+          "zone_photo_running": "Taken while this zone was watering"
+        }
+      },
+      "manage_zone_review": {
+        "title": "What IrrigationOS understands",
+        "description": "{understood}\n\nUseful next questions: {questions}",
+        "data": {}
+      },
+      "manage_zone_plant": {
+        "title": "Which plant group would you like to update?",
+        "description": "Choose by name. Advanced identifiers remain hidden.",
+        "data": {"manage_plant": "Plant group"}
+      },
       "commissioning_simple_input": {
         "title": "Tell us about this zone",
         "description": "Describe what you know. Approximate observations are welcome; unknown values remain unknown and this cannot water the zone.",

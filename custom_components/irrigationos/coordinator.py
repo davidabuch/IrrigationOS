@@ -48,6 +48,7 @@ from .controllers import (
 from .execution_authorization.manager import ExecutionAuthorizationManager
 from .first_live_delivery.acceptance import FirstLiveAcceptanceManager
 from .first_live_delivery.validated_targets import ValidatedTargetRegistry
+from .guided_observation import GuidedObservationManager
 from .health import (
     HEALTH_REEVALUATION_INTERVAL,
     HEALTH_STORE_VERSION,
@@ -193,6 +194,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.first_live_acceptance = FirstLiveAcceptanceManager(hass, entry.entry_id)
         self.validated_targets = ValidatedTargetRegistry(hass, entry.entry_id)
         self.supervised_operation = SupervisedOperationManager()
+        self.guided_observation = GuidedObservationManager()
         self.supervised_operation_acceptance = SupervisedOperationAcceptanceManager(
             hass, entry.entry_id
         )
@@ -339,6 +341,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             raise UpdateFailed(str(err)) from err
 
         self._persist_new_identities()
+        self.guided_observation.reconcile(snapshot)
         overrides = self.entry.options.get(CONF_AREA_PROFILES, {})
         if not isinstance(overrides, dict):
             overrides = {}

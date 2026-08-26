@@ -7,6 +7,7 @@ from collections.abc import Callable
 from aiohttp import ClientSession
 
 from ..controllers import ControllerAdapter, ControllerIdentityRegistry
+from ..first_live_delivery.rachio import RachioFirstLiveTransport
 from .rachio import PROVIDER as RACHIO_PROVIDER
 from .rachio import RachioApiClient, RachioControllerAdapter
 
@@ -49,7 +50,11 @@ def _build_rachio(
     api_key: str,
     identities: ControllerIdentityRegistry,
 ) -> ControllerAdapter:
-    return RachioControllerAdapter(RachioApiClient(session, api_key), identities)
+    return RachioControllerAdapter(
+        RachioApiClient(session, api_key),
+        identities,
+        RachioFirstLiveTransport(session, api_key),
+    )
 
 
 DEFAULT_PROVIDER_FACTORY = ControllerProviderFactory()

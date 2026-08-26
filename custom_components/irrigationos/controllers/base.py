@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from .models import ControllerRegistrySnapshot, RealtimeRegistrationHealth
+from .models import ControllerRegistrySnapshot, RealtimeRegistrationHealth, VendorBinding
 
 
 class ControllerProviderError(Exception):
@@ -40,6 +40,22 @@ class ControllerAdapter(Protocol):
         """Return the latest normalized controller registry snapshot."""
         ...
 
+
+@runtime_checkable
+class GuidedObservationAdapter(Protocol):
+    """Optional provider boundary for one operator-directed observation run."""
+
+    async def async_start_guided_observation(
+        self, *, area_binding: VendorBinding, duration_seconds: int
+    ) -> None:
+        """Start exactly one selected area for a bounded observation."""
+        ...
+
+    async def async_stop_guided_observation(
+        self, *, controller_binding: VendorBinding
+    ) -> None:
+        """Stop the controller used by the current guided observation."""
+        ...
 
 @runtime_checkable
 class RealtimeObservationAdapter(Protocol):
