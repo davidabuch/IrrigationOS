@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -16,6 +16,7 @@ API = load_integration_module("adapters.rachio.api")
 ControllerIdentityRegistry = CONTROLLERS.ControllerIdentityRegistry
 IrrigationAreaState = CONTROLLERS.IrrigationAreaState
 ObservationQuality = CONTROLLERS.ObservationQuality
+VendorBinding = CONTROLLERS.VendorBinding
 RachioControllerAdapter = ADAPTER.RachioControllerAdapter
 RachioApiError = API.RachioApiError
 
@@ -92,6 +93,39 @@ class FakeClient:
             raise self.current_schedule
         assert isinstance(self.current_schedule, dict)
         return self.current_schedule
+
+
+class FakeManualTransport:
+    def __init__(self) -> None:
+        self.starts: list[tuple[str, int]] = []
+        self.stops: list[str] = []
+
+    async def async_start_manual_watering(
+        self, *, zone_id: str, runtime_seconds: int
+    ) -> None:
+        self.starts.append((zone_id, runtime_seconds))
+
+    async def async_emergency_stop(self, *, device_id: str) -> None:
+        self.stops.append(device_id)
+
+
+@pytest.mark.asyncio
+async def test_manual_watering_uses_provider_adapter_boundary() -> None:
+    transport = FakeManualTransport()
+    adapter = RachioControllerAdapter(
+        FakeClient(_payload(), {}),
+        ControllerIdentityRegistry(),
+        cast(Any, transport),
+    )
+    await adapter.async_start_manual_watering(
+        area_binding=VendorBinding("rachio", "zone-native-1"),
+        duration_seconds=900,
+    )
+    await adapter.async_stop_manual_watering(
+        controller_binding=VendorBinding("rachio", "device-1")
+    )
+    assert transport.starts == [("zone-native-1", 900)]
+    assert transport.stops == ["device-1"]
 
 
 @pytest.mark.asyncio

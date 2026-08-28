@@ -114,6 +114,37 @@ class RachioControllerAdapter:
         except FirstLiveTransportError as err:
             raise RachioApiError("Guided observation stop failed") from err
 
+    async def async_start_manual_watering(
+        self, *, area_binding: VendorBinding, duration_seconds: int
+    ) -> None:
+        """Start one provider-bound area for explicit manual watering."""
+        if area_binding.provider != PROVIDER:
+            raise ValueError("manual watering area provider mismatch")
+        if self._guided_transport is None:
+            raise RachioApiError("Manual watering transport is unavailable")
+        try:
+            await self._guided_transport.async_start_manual_watering(
+                zone_id=area_binding.native_id,
+                runtime_seconds=duration_seconds,
+            )
+        except FirstLiveTransportError as err:
+            raise RachioApiError("Manual watering start failed") from err
+
+    async def async_stop_manual_watering(
+        self, *, controller_binding: VendorBinding
+    ) -> None:
+        """Use Rachio's controller-wide stop for explicit manual cancellation."""
+        if controller_binding.provider != PROVIDER:
+            raise ValueError("manual watering controller provider mismatch")
+        if self._guided_transport is None:
+            raise RachioApiError("Manual watering transport is unavailable")
+        try:
+            await self._guided_transport.async_emergency_stop(
+                device_id=controller_binding.native_id
+            )
+        except FirstLiveTransportError as err:
+            raise RachioApiError("Manual watering stop failed") from err
+
     async def _async_snapshot_from_payload(
         self, payload: dict[str, Any]
     ) -> ControllerRegistrySnapshot:

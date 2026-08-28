@@ -216,6 +216,7 @@ def build_acceptance_record(
     preflight_target_observed: bool = True,
     start_acknowledged: bool = True,
     terminal_audit_recorded: bool = True,
+    maximum_runtime_seconds: int = 120,
 ) -> FirstLiveAcceptanceRecord:
     """Build a deterministic PASS/FAIL/INDETERMINATE terminal record."""
 
@@ -237,7 +238,10 @@ def build_acceptance_record(
         _criterion("preflight_target_observed", preflight_target_observed),
         _criterion("start_acknowledged", start_acknowledged),
         _criterion("target_watering_observed", observed_watering_at is not None),
-        _criterion("requested_runtime_within_ceiling", 1 <= requested_runtime_seconds <= 120),
+        _criterion(
+            "requested_runtime_within_ceiling",
+            1 <= requested_runtime_seconds <= maximum_runtime_seconds,
+        ),
         _criterion("target_returned_idle", completion_observed),
         _criterion("no_concurrent_watering_observed", not concurrent_watering_observed),
         _criterion("post_run_reconciliation_passed", completion_observed),

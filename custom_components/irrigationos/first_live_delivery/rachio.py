@@ -7,6 +7,8 @@ from typing import Final
 
 from aiohttp import ClientError, ClientSession, ClientTimeout
 
+from ..const import MANUAL_WATERING_MAX_RUNTIME_SECONDS
+
 RACHIO_PUBLIC_BASE_URL: Final = "https://api.rach.io/1/public"
 FIRST_LIVE_NETWORK_TIMEOUT_SECONDS: Final = 20
 MAX_TRANSPORT_RUNTIME_SECONDS: Final = 120
@@ -52,6 +54,22 @@ class RachioFirstLiveTransport:
         if not target:
             raise ValueError("device_id must not be blank")
         await self._async_put("/device/stop_water", {"id": target})
+
+    async def async_start_manual_watering(
+        self, *, zone_id: str, runtime_seconds: int
+    ) -> None:
+        """Start one zone for a finite explicit manual-watering runtime."""
+        target = zone_id.strip()
+        if not target:
+            raise ValueError("zone_id must not be blank")
+        if not 1 <= runtime_seconds <= MANUAL_WATERING_MAX_RUNTIME_SECONDS:
+            raise ValueError(
+                "runtime_seconds must be between 1 and "
+                f"{MANUAL_WATERING_MAX_RUNTIME_SECONDS}"
+            )
+        await self._async_put(
+            "/zone/start", {"id": target, "duration": runtime_seconds}
+        )
 
     async def async_start_guided_observation(
         self, *, zone_id: str, runtime_seconds: int

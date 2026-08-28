@@ -6,7 +6,8 @@
 # 3. Replace the generated content with this entire file.
 #
 # This dashboard uses only built-in Home Assistant cards. It requires the
-# IrrigationOS v0.4.3 entity contract and remains observation-only.
+# IrrigationOS v1.0.61 entity contract. Manual watering actions remain explicit,
+# finite, observation-driven operator controls; they do not authorize automation.
 
 title: IrrigationOS Control Center
 views:
@@ -129,98 +130,28 @@ views:
                 name: Duplicate events
 
       - type: grid
-        title: Zones 1–8
+        title: Manual Zone Control
         cards:
           - type: heading
-            heading: Zones 1–8
-            icon: mdi:numeric-1-box-multiple-outline
+            heading: Manual Zone Control
+            icon: mdi:valve
           - type: entities
-            title: Zone observations
+            title: Operator-directed watering
             show_header_toggle: false
             entities:
-              - entity: sensor.zone_1_observation
-                name: Zone 1
-                secondary_info: last-changed
-              - entity: sensor.zone_2_observation
-                name: Zone 2
-                secondary_info: last-changed
-              - entity: sensor.zone_3_observation
-                name: Zone 3
-                secondary_info: last-changed
-              - entity: sensor.zone_4_observation
-                name: Zone 4
-                secondary_info: last-changed
-              - entity: sensor.zone_5_observation
-                name: Zone 5
-                secondary_info: last-changed
-              - entity: sensor.zone_6_observation
-                name: Zone 6
-                secondary_info: last-changed
-              - entity: sensor.zone_7_observation
-                name: Zone 7
-                secondary_info: last-changed
-              - entity: sensor.zone_8_observation
-                name: Zone 8
-                secondary_info: last-changed
-          - type: entities
-            title: Enabled state
-            show_header_toggle: false
-            entities:
-              - binary_sensor.zone_1_enabled
-              - binary_sensor.zone_2_enabled
-              - binary_sensor.zone_3_enabled
-              - binary_sensor.zone_4_enabled
-              - binary_sensor.zone_5_enabled
-              - binary_sensor.zone_6_enabled
-              - binary_sensor.zone_7_enabled
-              - binary_sensor.zone_8_enabled
-
-      - type: grid
-        title: Zones 9–16
-        cards:
-          - type: heading
-            heading: Zones 9–16
-            icon: mdi:numeric-9-plus-box-multiple-outline
-          - type: entities
-            title: Zone observations
-            show_header_toggle: false
-            entities:
-              - entity: sensor.zone_9_observation
-                name: Zone 9
-                secondary_info: last-changed
-              - entity: sensor.zone_10_observation
-                name: Zone 10
-                secondary_info: last-changed
-              - entity: sensor.zone_11_observation
-                name: Zone 11
-                secondary_info: last-changed
-              - entity: sensor.zone_12_observation
-                name: Zone 12
-                secondary_info: last-changed
-              - entity: sensor.zone_13_observation
-                name: Zone 13
-                secondary_info: last-changed
-              - entity: sensor.zone_14_observation
-                name: Zone 14
-                secondary_info: last-changed
-              - entity: sensor.zone_15_observation
-                name: Zone 15
-                secondary_info: last-changed
-              - entity: sensor.zone_16_observation
-                name: Zone 16
-                secondary_info: last-changed
-          - type: entities
-            title: Enabled state
-            show_header_toggle: false
-            entities:
-              - binary_sensor.zone_9_enabled
-              - binary_sensor.zone_10_enabled
-              - binary_sensor.zone_11_enabled
-              - binary_sensor.zone_12_enabled
-              - binary_sensor.zone_13_enabled
-              - binary_sensor.zone_14_enabled
-              - binary_sensor.zone_15_enabled
-              - binary_sensor.zone_16_enabled
+              - valve.zone_1_manual_watering
+              - number.zone_1_manual_watering_duration
+              - valve.zone_2_manual_watering
+              - number.zone_2_manual_watering_duration
+              - valve.zone_4_manual_watering
+              - number.zone_4_manual_watering_duration
+              - valve.zone_5_manual_watering
+              - number.zone_5_manual_watering_duration
+          - type: markdown
+            content: >-
+              Opening a valve starts only that selected zone for its chosen finite
+              duration. Closing a valve uses the controller's safe stop-all-watering
+              command. State remains based on observed controller activity.
 
       - type: grid
         title: Diagnostics

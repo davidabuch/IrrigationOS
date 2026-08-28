@@ -63,6 +63,7 @@ from .live_commissioning.engine import supervised_trial_safety_prerequisites_met
 from .live_commissioning.manager import LiveCommissioningManager
 from .live_mode_safety.manager import LiveModeSafetyManager
 from .manual_override_preservation.manager import ManualOverridePreservationManager
+from .manual_watering import ManualWateringDurationManager
 from .observation_history import (
     SessionObservationContext,
     WateringObservationSource,
@@ -195,6 +196,7 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
         self.validated_targets = ValidatedTargetRegistry(hass, entry.entry_id)
         self.supervised_operation = SupervisedOperationManager()
         self.guided_observation = GuidedObservationManager()
+        self.manual_watering_durations = ManualWateringDurationManager()
         self.supervised_operation_acceptance = SupervisedOperationAcceptanceManager(
             hass, entry.entry_id
         )

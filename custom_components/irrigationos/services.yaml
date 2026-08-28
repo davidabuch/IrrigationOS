@@ -3,6 +3,7 @@ run_supervised_operation:
   description: >-
     Manually starts one bounded, previously validated irrigation target after
     fail-closed health, ownership, observation, and watering-conflict checks.
+    Runtime is finite and limited to 10,800 seconds (180 minutes).
   fields:
     config_entry_id:
       name: IrrigationOS instance
@@ -41,7 +42,7 @@ run_supervised_operation:
       selector:
         number:
           min: 1
-          max: 120
+          max: 10800
           step: 1
           unit_of_measurement: seconds
           mode: box

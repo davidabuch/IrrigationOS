@@ -28,6 +28,7 @@ from .migration import build_v040_migration
 from .realtime import RealtimeObservationManager, async_delete_cloudhook
 from .supervised_operation import (
     SERVICE_RUN_SUPERVISED_OPERATION,
+    SUPERVISED_OPERATION_MAX_RUNTIME_SECONDS,
     SupervisedOperationStatus,
     async_run_supervised_operation,
 )
@@ -57,7 +58,8 @@ SUPERVISED_OPERATION_SERVICE_SCHEMA = vol.Schema(
         vol.Required(ATTR_CONTROLLER_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1)),
         vol.Required(ATTR_AREA_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1)),
         vol.Required(ATTR_RUNTIME_SECONDS, default=30): vol.All(
-            vol.Coerce(int), vol.Range(min=1, max=120)
+            vol.Coerce(int),
+            vol.Range(min=1, max=SUPERVISED_OPERATION_MAX_RUNTIME_SECONDS),
         ),
         vol.Required(ATTR_CONFIRMATION): str,
     }

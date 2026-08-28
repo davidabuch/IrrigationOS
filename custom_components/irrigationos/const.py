@@ -25,8 +25,12 @@ MODE_SIMULATION: Final = "simulation"
 MODE_LIVE: Final = "live"
 DEFAULT_OPERATING_MODE: Final = MODE_OBSERVATION
 
-PLATFORMS: Final = ["sensor", "binary_sensor", "button"]
+PLATFORMS: Final = ["sensor", "binary_sensor", "button", "valve", "number"]
 UPDATE_INTERVAL_MINUTES: Final = 5
+
+MANUAL_WATERING_MIN_RUNTIME_SECONDS: Final = 60
+MANUAL_WATERING_MAX_RUNTIME_SECONDS: Final = 10_800
+MANUAL_WATERING_DEFAULT_RUNTIME_SECONDS: Final = 900
 
 EVENT_HEALTH_UNHEALTHY: Final = "irrigationos_health_unhealthy"
 EVENT_HEALTH_RECOVERED: Final = "irrigationos_health_recovered"

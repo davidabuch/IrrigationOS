@@ -13,6 +13,8 @@ class SupervisedOperationStatus(StrEnum):
     AUDIT_FAILED = "audit_failed"
     TRANSPORT_FAILED = "transport_failed"
     START_DISPATCHED = "start_dispatched"
+    STOP_DISPATCHED = "stop_dispatched"
+    STOP_UNCONFIRMED = "stop_unconfirmed"
 
 
 @dataclass(frozen=True, slots=True)

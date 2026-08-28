@@ -7,6 +7,7 @@ from .base import (
     ControllerProviderError,
     ControllerRateLimitError,
     GuidedObservationAdapter,
+    ManualWateringAdapter,
     RealtimeObservationAdapter,
 )
 from .identity import ControllerIdentityRegistry
@@ -40,6 +41,7 @@ __all__ = [
     "IrrigationArea",
     "IrrigationAreaState",
     "IrrigationController",
+    "ManualWateringAdapter",
     "ObservationError",
     "ObservationMetadata",
     "ObservationQuality",

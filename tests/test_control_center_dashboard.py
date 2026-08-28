@@ -1,4 +1,4 @@
-"""Contract tests for the observation-only Control Center dashboard."""
+"""Contract tests for the IrrigationOS Control Center dashboard."""
 
 from __future__ import annotations
 
@@ -37,3 +37,14 @@ def test_control_center_uses_public_entity_and_watering_attribute_contract() -> 
     assert "'friendly_names'" not in dashboard
     assert "'slot_numbers'" not in dashboard
     assert "'vendor_names'" not in dashboard
+
+
+def test_control_center_exposes_only_current_manual_production_zones() -> None:
+    dashboard = DASHBOARD.read_text(encoding="utf-8")
+    for slot in (1, 2, 4, 5):
+        assert f"valve.zone_{slot}_manual_watering" in dashboard
+        assert f"number.zone_{slot}_manual_watering_duration" in dashboard
+    assert "valve.zone_3_manual_watering" not in dashboard
+    assert "number.zone_3_manual_watering_duration" not in dashboard
+    assert "observation-only" not in dashboard
+    assert "stop-all-watering" in dashboard

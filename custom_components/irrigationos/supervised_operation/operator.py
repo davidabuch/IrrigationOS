@@ -6,14 +6,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from ..const import CONF_API_KEY
+from ..const import (
+    MANUAL_WATERING_MAX_RUNTIME_SECONDS as SUPERVISED_OPERATION_MAX_RUNTIME_SECONDS,
+)
 from ..controllers import (
     ControllerAvailability,
+    ControllerProviderError,
     IrrigationAreaState,
+    ManualWateringAdapter,
     ObservationQuality,
 )
 from ..first_live_delivery.acceptance import build_acceptance_record
-from ..first_live_delivery.rachio import FirstLiveTransportError, RachioFirstLiveTransport
 from ..health import IrrigationOSHealthState
 from .acceptance import (
     JsonlSupervisedOperationAcceptanceSink,
@@ -25,7 +28,6 @@ from .models import SupervisedOperationResult, SupervisedOperationStatus
 from .monitor import async_monitor_supervised_operation
 
 SUPERVISED_OPERATION_CONFIRMATION = "RUN SUPERVISED OPERATIONAL WATERING"
-SUPERVISED_OPERATION_MAX_RUNTIME_SECONDS = 120
 SUPERVISED_OPERATION_REVISION = 1
 
 
@@ -38,6 +40,43 @@ async def async_run_supervised_operation(
     confirmation: str,
 ) -> SupervisedOperationResult:
     """Dispatch one manually confirmed operation after strict live-state preflight."""
+
+    return await _async_run_operator_approved_operation(
+        coordinator,
+        controller_slot=controller_slot,
+        area_slot=area_slot,
+        runtime_seconds=runtime_seconds,
+        operator_approved=confirmation.strip() == SUPERVISED_OPERATION_CONFIRMATION,
+    )
+
+
+async def async_run_manual_operation(
+    coordinator: Any,
+    *,
+    controller_slot: int,
+    area_slot: int,
+    runtime_seconds: int,
+) -> SupervisedOperationResult:
+    """Dispatch one valve-requested operation through the shared safety engine."""
+
+    return await _async_run_operator_approved_operation(
+        coordinator,
+        controller_slot=controller_slot,
+        area_slot=area_slot,
+        runtime_seconds=runtime_seconds,
+        operator_approved=True,
+    )
+
+
+async def _async_run_operator_approved_operation(
+    coordinator: Any,
+    *,
+    controller_slot: int,
+    area_slot: int,
+    runtime_seconds: int,
+    operator_approved: bool,
+) -> SupervisedOperationResult:
+    """Run the common audited preflight and dispatch for explicit operator intent."""
 
     manager = coordinator.supervised_operation
     async with manager.dispatch_lock:
@@ -62,12 +101,12 @@ async def async_run_supervised_operation(
                 runtime_seconds=runtime_seconds,
             )
 
-        blockers = evaluate_supervised_operation_blockers(
+        blockers = _evaluate_supervised_operation_blockers(
             coordinator,
             controller_slot=controller_slot,
             area_slot=area_slot,
             runtime_seconds=runtime_seconds,
-            confirmation=confirmation,
+            operator_approved=operator_approved,
         )
         if blockers:
             return SupervisedOperationResult(
@@ -134,20 +173,14 @@ async def async_run_supervised_operation(
                 runtime_seconds=runtime_seconds,
             )
 
+        adapter = coordinator.adapter
+        assert isinstance(adapter, ManualWateringAdapter)
         try:
-            # Home Assistant is required only when this live path executes.
-            # The local import preserves the HA-independent unit-test boundary.
-            from homeassistant.helpers.aiohttp_client import async_get_clientsession
-
-            transport = RachioFirstLiveTransport(
-                async_get_clientsession(coordinator.hass),
-                str(coordinator.entry.data[CONF_API_KEY]),
+            await adapter.async_start_manual_watering(
+                area_binding=area.binding,
+                duration_seconds=runtime_seconds,
             )
-            await transport.async_start_zone(
-                zone_id=area.binding.native_id,
-                runtime_seconds=runtime_seconds,
-            )
-        except (FirstLiveTransportError, ValueError):
+        except (ControllerProviderError, ValueError):
             manager.mark_complete(operation_id)
             terminal_recorded = await audit_sink.async_record(
                 build_audit_event(
@@ -202,7 +235,7 @@ async def async_run_supervised_operation(
                 detail_code="start_http_accepted",
             )
         )
-        coordinator.entry.async_create_background_task(
+        monitor_task = coordinator.entry.async_create_background_task(
             coordinator.hass,
             async_monitor_supervised_operation(
                 coordinator=coordinator,
@@ -219,8 +252,175 @@ async def async_run_supervised_operation(
             ),
             "IrrigationOS supervised operational watering monitor",
         )
+        manager.attach_monitor(operation_id, monitor_task)
         return SupervisedOperationResult(
             status=SupervisedOperationStatus.START_DISPATCHED,
+            blocker_codes=(),
+            operation_id=operation_id,
+            controller_slot=controller_slot,
+            area_slot=area_slot,
+            runtime_seconds=runtime_seconds,
+        )
+
+
+async def async_stop_manual_operation(
+    coordinator: Any,
+    *,
+    controller_slot: int,
+    area_slot: int,
+) -> SupervisedOperationResult:
+    """Stop explicit manual watering through the provider's supported boundary."""
+
+    manager = coordinator.supervised_operation
+    async with manager.dispatch_lock:
+        snapshot = coordinator.data
+        controller = (
+            snapshot.controllers[controller_slot - 1]
+            if 1 <= controller_slot <= len(snapshot.controllers)
+            else None
+        )
+        area = (
+            None
+            if controller is None
+            else next(
+                (item for item in controller.areas if item.slot_number == area_slot),
+                None,
+            )
+        )
+        runtime_seconds = manager.active_runtime_seconds or 0
+        blockers: set[str] = set()
+        if controller is None:
+            blockers.add("controller_slot_not_observed")
+        if area is None:
+            blockers.add("area_slot_not_observed")
+        if manager.in_progress and (
+            manager.active_controller_slot != controller_slot
+            or manager.active_area_slot != area_slot
+        ):
+            blockers.add("manual_stop_target_mismatch")
+        if (
+            area is not None
+            and area.state is not IrrigationAreaState.WATERING
+            and not (
+                manager.in_progress
+                and manager.active_controller_slot == controller_slot
+                and manager.active_area_slot == area_slot
+            )
+        ):
+            blockers.add("manual_watering_not_active")
+        adapter = getattr(coordinator, "adapter", None)
+        if not isinstance(adapter, ManualWateringAdapter):
+            blockers.add("manual_watering_transport_unavailable")
+        if blockers:
+            return SupervisedOperationResult(
+                status=SupervisedOperationStatus.BLOCKED,
+                blocker_codes=tuple(sorted(blockers)),
+                operation_id=manager.active_operation_id,
+                controller_slot=controller_slot,
+                area_slot=area_slot,
+                runtime_seconds=runtime_seconds,
+            )
+
+        assert controller is not None
+        assert area is not None
+        assert isinstance(adapter, ManualWateringAdapter)
+        operation_id = manager.active_operation_id or new_operation_id()
+        audit_sink = JsonlSupervisedOperationAuditSink(
+            Path(
+                coordinator.hass.config.path(
+                    "irrigationos_logs", "supervised_operation_audit.jsonl"
+                )
+            )
+        )
+        stop_intent = build_audit_event(
+            operation_id=operation_id,
+            event_type="stop_intent",
+            recorded_at=datetime.now(UTC),
+            controller_slot=controller_slot,
+            area_slot=area_slot,
+            runtime_seconds=runtime_seconds,
+            detail_code="manual_controller_wide_stop",
+        )
+        try:
+            await adapter.async_stop_manual_watering(
+                controller_binding=controller.binding
+            )
+        except (ControllerProviderError, ValueError):
+            await audit_sink.async_record(stop_intent)
+            await audit_sink.async_record(
+                build_audit_event(
+                    operation_id=operation_id,
+                    event_type="stop_transport_outcome",
+                    recorded_at=datetime.now(UTC),
+                    controller_slot=controller_slot,
+                    area_slot=area_slot,
+                    runtime_seconds=runtime_seconds,
+                    detail_code="stop_transport_failed_no_retry",
+                )
+            )
+            return SupervisedOperationResult(
+                status=SupervisedOperationStatus.TRANSPORT_FAILED,
+                blocker_codes=("stop_transport_failed_no_retry",),
+                operation_id=operation_id,
+                controller_slot=controller_slot,
+                area_slot=area_slot,
+                runtime_seconds=runtime_seconds,
+            )
+
+        await audit_sink.async_record(stop_intent)
+        await audit_sink.async_record(
+            build_audit_event(
+                operation_id=operation_id,
+                event_type="stop_transport_outcome",
+                recorded_at=datetime.now(UTC),
+                controller_slot=controller_slot,
+                area_slot=area_slot,
+                runtime_seconds=runtime_seconds,
+                detail_code="controller_wide_stop_http_accepted",
+            )
+        )
+        try:
+            await coordinator.async_request_refresh()
+        except Exception:
+            return SupervisedOperationResult(
+                status=SupervisedOperationStatus.STOP_UNCONFIRMED,
+                blocker_codes=("stop_outcome_not_observed",),
+                operation_id=operation_id,
+                controller_slot=controller_slot,
+                area_slot=area_slot,
+                runtime_seconds=runtime_seconds,
+            )
+
+        now = datetime.now(UTC)
+        refreshed_controller = (
+            coordinator.data.controllers[controller_slot - 1]
+            if 1 <= controller_slot <= len(coordinator.data.controllers)
+            else None
+        )
+        stop_confirmed = (
+            refreshed_controller is not None
+            and coordinator.data.observation.quality is ObservationQuality.CONFIRMED
+            and coordinator.data.observation.is_fresh(now)
+            and not any(
+                item.state is IrrigationAreaState.WATERING
+                for item in refreshed_controller.areas
+            )
+        )
+        if not stop_confirmed:
+            return SupervisedOperationResult(
+                status=SupervisedOperationStatus.STOP_UNCONFIRMED,
+                blocker_codes=("stop_outcome_not_observed",),
+                operation_id=operation_id,
+                controller_slot=controller_slot,
+                area_slot=area_slot,
+                runtime_seconds=runtime_seconds,
+            )
+        if manager.active_operation_id == operation_id:
+            await manager.async_cancel_monitor(operation_id)
+        coordinator.update_production_readiness()
+        coordinator.async_update_listeners()
+        return SupervisedOperationResult(
+            status=SupervisedOperationStatus.STOP_DISPATCHED,
             blocker_codes=(),
             operation_id=operation_id,
             controller_slot=controller_slot,
@@ -239,8 +439,27 @@ def evaluate_supervised_operation_blockers(
 ) -> tuple[str, ...]:
     """Return deterministic fail-closed blockers without performing actuation."""
 
+    return _evaluate_supervised_operation_blockers(
+        coordinator,
+        controller_slot=controller_slot,
+        area_slot=area_slot,
+        runtime_seconds=runtime_seconds,
+        operator_approved=confirmation.strip() == SUPERVISED_OPERATION_CONFIRMATION,
+    )
+
+
+def _evaluate_supervised_operation_blockers(
+    coordinator: Any,
+    *,
+    controller_slot: int,
+    area_slot: int,
+    runtime_seconds: int,
+    operator_approved: bool,
+) -> tuple[str, ...]:
+    """Evaluate every shared start gate after explicit intent normalization."""
+
     blockers: set[str] = set()
-    if confirmation.strip() != SUPERVISED_OPERATION_CONFIRMATION:
+    if not operator_approved:
         blockers.add("operator_confirmation_mismatch")
     if not 1 <= runtime_seconds <= SUPERVISED_OPERATION_MAX_RUNTIME_SECONDS:
         blockers.add("runtime_out_of_range")
@@ -289,8 +508,8 @@ def evaluate_supervised_operation_blockers(
     else:
         if not controller.enabled or controller.availability is not ControllerAvailability.ONLINE:
             blockers.add("controller_not_available")
-        if controller.binding.provider != "rachio":
-            blockers.add("unsupported_transport_provider")
+        if not isinstance(getattr(coordinator, "adapter", None), ManualWateringAdapter):
+            blockers.add("manual_watering_transport_unavailable")
         area = next(
             (item for item in controller.areas if item.slot_number == area_slot),
             None,
@@ -336,6 +555,7 @@ async def _record_pre_dispatch_failure(
         preflight_target_observed=True,
         start_acknowledged=start_acknowledged,
         terminal_audit_recorded=terminal_audit_recorded,
+        maximum_runtime_seconds=SUPERVISED_OPERATION_MAX_RUNTIME_SECONDS,
     )
     await async_record_terminal_acceptance(
         record,
