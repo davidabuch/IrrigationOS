@@ -7,6 +7,7 @@ from datetime import datetime
 from enum import StrEnum
 
 GUIDED_OBSERVATION_DURATION_SECONDS = 180
+ZONE_IDENTIFICATION_DURATION_SECONDS = 30
 
 
 class GuidedObservationState(StrEnum):
@@ -47,6 +48,7 @@ class GuidedObservationSnapshot:
     state: GuidedObservationState = GuidedObservationState.IDLE
     controller_slot: int | None = None
     area_slot: int | None = None
+    requested_duration_seconds: int = GUIDED_OBSERVATION_DURATION_SECONDS
     requested_at: datetime | None = None
     started_at: datetime | None = None
     expected_stop_at: datetime | None = None

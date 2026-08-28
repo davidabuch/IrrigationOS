@@ -21,9 +21,24 @@ from .models import (
 
 
 async def async_start_guided_observation(
-    coordinator: Any, *, controller_slot: int, area_slot: int
+    coordinator: Any,
+    *,
+    controller_slot: int,
+    area_slot: int,
+    duration_seconds: int = GUIDED_OBSERVATION_DURATION_SECONDS,
 ) -> GuidedObservationResult:
     """Start one selected area after a fresh fail-closed preflight."""
+    if (
+        isinstance(duration_seconds, bool)
+        or not isinstance(duration_seconds, int)
+        or not 1 <= duration_seconds <= GUIDED_OBSERVATION_DURATION_SECONDS
+    ):
+        return _result(
+            GuidedObservationStatus.BLOCKED,
+            controller_slot,
+            area_slot,
+            ("guided_observation_duration_invalid",),
+        )
     async with coordinator.supervised_operation.dispatch_lock:
         try:
             await coordinator.async_request_refresh()
@@ -38,11 +53,13 @@ async def async_start_guided_observation(
         if not isinstance(adapter, GuidedObservationAdapter):
             return _result(GuidedObservationStatus.BLOCKED, controller_slot, area_slot,
                            ("guided_observation_not_supported",))
-        coordinator.guided_observation.mark_starting(controller_slot, area_slot)
+        coordinator.guided_observation.mark_starting(
+            controller_slot, area_slot, duration_seconds
+        )
         try:
             await adapter.async_start_guided_observation(
                 area_binding=area.binding,
-                duration_seconds=GUIDED_OBSERVATION_DURATION_SECONDS,
+                duration_seconds=duration_seconds,
             )
         except (ControllerProviderError, TimeoutError, ValueError):
             coordinator.guided_observation.mark_uncertain(

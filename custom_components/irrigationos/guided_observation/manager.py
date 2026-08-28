@@ -29,14 +29,20 @@ class GuidedObservationManager:
             GuidedObservationState.UNCERTAIN,
         }
 
-    def mark_starting(self, controller_slot: int, area_slot: int) -> None:
+    def mark_starting(
+        self,
+        controller_slot: int,
+        area_slot: int,
+        duration_seconds: int = GUIDED_OBSERVATION_DURATION_SECONDS,
+    ) -> None:
         now = datetime.now(UTC)
         self.snapshot = GuidedObservationSnapshot(
             state=GuidedObservationState.STARTING,
             controller_slot=controller_slot,
             area_slot=area_slot,
+            requested_duration_seconds=duration_seconds,
             requested_at=now,
-            expected_stop_at=now + timedelta(seconds=GUIDED_OBSERVATION_DURATION_SECONDS),
+            expected_stop_at=now + timedelta(seconds=duration_seconds),
         )
 
     def mark_stopping(self) -> None:
@@ -89,7 +95,7 @@ class GuidedObservationManager:
             "state": self.snapshot.state.value,
             "controller_slot": self.snapshot.controller_slot,
             "area_slot": self.snapshot.area_slot,
-            "requested_duration_seconds": GUIDED_OBSERVATION_DURATION_SECONDS,
+            "requested_duration_seconds": self.snapshot.requested_duration_seconds,
             "failure_reason": self.snapshot.failure_reason,
             "operator_initiated": True,
             "persists_across_restart": False,
