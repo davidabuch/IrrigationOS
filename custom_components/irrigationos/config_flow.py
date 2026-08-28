@@ -364,6 +364,7 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
         self._simple_proposal: ConversationalCommissioningProposal | None = None
         self._manage_controller_slot: int | None = None
         self._manage_area_slot: int | None = None
+        self._manage_native_area_name: str | None = None
         self._manage_plant_group_id: str | None = None
 
     async def async_step_init(
@@ -407,6 +408,7 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
     ) -> config_entries.ConfigFlowResult:
         """Show every configured zone through one permanent simple entry point."""
         choices: dict[str, str] = {}
+        native_names: dict[str, str] = {}
         manager = self.config_entry.runtime_data.landscape_intelligence
         for controller_slot, controller in enumerate(
             self.config_entry.runtime_data.data.controllers, start=1
@@ -416,19 +418,31 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                     continue
                 profile = manager.get_zone_by_slots(controller_slot, area.slot_number)
                 status = _plain_zone_status(profile)
-                choices[f"{controller_slot}|{area.slot_number}"] = (
-                    f"{area.vendor_name or area.name} — {status}"
+                native_name = area.vendor_name or area.name or f"Zone {area.slot_number}"
+                display_name = (
+                    profile.display_name if profile is not None else native_name
                 )
+                key = f"{controller_slot}|{area.slot_number}"
+                native_names[key] = native_name
+                choices[key] = f"{display_name} — {status}"
         if not choices:
             return self.async_abort(reason="no_areas")
         if user_input is not None:
-            controller, area = str(user_input[CONF_COMMISSIONING_TARGET]).split("|", 1)
+            selected = str(user_input[CONF_COMMISSIONING_TARGET])
+            controller, area = selected.split("|", 1)
             self._manage_controller_slot = int(controller)
             self._manage_area_slot = int(area)
             self._commissioning_controller_slot = int(controller)
             self._commissioning_area_slot = int(area)
-            selected_label = choices[str(user_input[CONF_COMMISSIONING_TARGET])]
-            self._commissioning_area_name = selected_label.split(" — ", 1)[0]
+            self._manage_native_area_name = native_names[selected]
+            profile = manager.get_zone_by_slots(
+                self._manage_controller_slot, self._manage_area_slot
+            )
+            self._commissioning_area_name = (
+                profile.display_name
+                if profile is not None
+                else self._manage_native_area_name
+            )
             return await self.async_step_manage_zone()
         return self.async_show_form(
             step_id="manage_zones",
@@ -459,32 +473,43 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 GuidedObservationState.UNCERTAIN,
             }
         )
-        actions = {
-            "tell": (
-                "Tell IrrigationOS about this zone"
-                if profile is None
-                else "Update plants and irrigation"
-            ),
-            "photos": "Take or add photos",
-            "stop" if active_here else "run": (
-                f"Stop watering {self._commissioning_area_name}"
-                if active_here
-                else f"Identify {self._commissioning_area_name} — water for 30 seconds"
-            ),
-            "review": "Review what IrrigationOS understands",
-            "advanced": "Advanced",
-            "done": "Done",
-        }
+        actions: dict[str, str] = (
+            {"setup": "Name / Set up this zone"}
+            if profile is None
+            else {"rename": "Rename zone", "edit": "Edit setup"}
+        )
+        if profile is not None and profile.landscape_profile.plant_groups:
+            actions["add_plant"] = "Add another plant"
+        actions.update(
+            {
+                "stop" if active_here else "run": (
+                    f"Stop watering {self._commissioning_area_name}"
+                    if active_here
+                    else (
+                        f"Identify {self._commissioning_area_name} — water for 30 seconds"
+                    )
+                ),
+                "photos": "Add photos",
+                "review": "Review what IrrigationOS knows",
+                "advanced": "Advanced",
+                "done": "Done",
+            }
+        )
         errors: dict[str, str] = {}
         if user_input is not None:
             action = str(user_input[CONF_MANAGE_ZONE_ACTION])
-            if action == "tell":
+            if action in {"setup", "rename"}:
+                return await self.async_step_manage_zone_name()
+            if action == "edit":
                 if profile is not None and len(profile.landscape_profile.plant_groups) > 1:
                     return await self.async_step_manage_zone_plant()
                 if profile is not None and profile.landscape_profile.plant_groups:
                     self._manage_plant_group_id = (
                         profile.landscape_profile.plant_groups[0].plant_group_id
                     )
+                return await self.async_step_commissioning_simple_input()
+            if action == "add_plant":
+                self._manage_plant_group_id = "__add_new__"
                 return await self.async_step_commissioning_simple_input()
             if action == "photos":
                 return await self.async_step_manage_zone_photos()
@@ -525,6 +550,51 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
             description_placeholders={
                 "zone_name": self._commissioning_area_name or "Zone",
                 "status": _plain_zone_status(profile),
+            },
+        )
+
+    async def async_step_manage_zone_name(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Name one physical zone without changing its canonical identity."""
+        if self._manage_controller_slot is None or self._manage_area_slot is None:
+            return await self.async_step_manage_zones()
+        manager = self.config_entry.runtime_data.landscape_intelligence
+        profile = manager.get_zone_by_slots(
+            self._manage_controller_slot, self._manage_area_slot
+        )
+        default_name = (
+            profile.display_name
+            if profile is not None
+            else self._manage_native_area_name
+            or f"Zone {self._manage_area_slot}"
+        )
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            name = str(user_input[CONF_COMMISSIONING_ZONE_NAME]).strip()
+            if not name:
+                errors[CONF_COMMISSIONING_ZONE_NAME] = "invalid_zone_name"
+            elif profile is None:
+                self._commissioning_area_name = name
+                return await self.async_step_commissioning_simple_input()
+            else:
+                candidate = replace(profile, display_name=name)
+                if await manager.async_update_zone(candidate):
+                    self._commissioning_area_name = name
+                    return await self.async_step_manage_zone()
+                errors["base"] = "commissioning_persistence_failed"
+        return self.async_show_form(
+            step_id="manage_zone_name",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_COMMISSIONING_ZONE_NAME, default=default_name
+                    ): str
+                }
+            ),
+            errors=errors,
+            description_placeholders={
+                "native_name": self._manage_native_area_name or default_name
             },
         )
 
