@@ -22,6 +22,7 @@ from custom_components.irrigationos.controllers import (
 )
 from custom_components.irrigationos.guided_observation import (
     GUIDED_OBSERVATION_DURATION_SECONDS,
+    ZONE_IDENTIFICATION_DURATION_SECONDS,
     GuidedObservationManager,
     GuidedObservationState,
     async_start_guided_observation,
@@ -119,6 +120,16 @@ async def test_guided_observation_is_explicit_bounded_repeatable_and_stoppable()
         ("private-zone", GUIDED_OBSERVATION_DURATION_SECONDS)
     ]
     assert coordinator.guided_observation.snapshot.state is GuidedObservationState.RUNNING
+    assert (
+        coordinator.guided_observation.snapshot.requested_duration_seconds
+        == GUIDED_OBSERVATION_DURATION_SECONDS
+    )
+    assert coordinator.guided_observation.snapshot.expected_stop_at is not None
+    assert coordinator.guided_observation.snapshot.requested_at is not None
+    assert (
+        coordinator.guided_observation.snapshot.expected_stop_at
+        - coordinator.guided_observation.snapshot.requested_at
+    ) == timedelta(seconds=GUIDED_OBSERVATION_DURATION_SECONDS)
     assert not coordinator.guided_observation.snapshot.execution_authorized
     assert not coordinator.guided_observation.snapshot.live_control_authorized
 
@@ -129,6 +140,49 @@ async def test_guided_observation_is_explicit_bounded_repeatable_and_stoppable()
     )
     assert result.status.value == "accepted"
     assert coordinator.adapter.stops == ["private-controller"]
+
+
+@pytest.mark.asyncio
+async def test_zone_identification_dispatches_and_records_exactly_30_seconds() -> None:
+    coordinator = _coordinator(
+        [IrrigationAreaState.IDLE, IrrigationAreaState.IDLE, IrrigationAreaState.WATERING]
+    )
+    result = await async_start_guided_observation(
+        coordinator,
+        controller_slot=1,
+        area_slot=1,
+        duration_seconds=ZONE_IDENTIFICATION_DURATION_SECONDS,
+    )
+
+    assert result.status.value == "accepted"
+    assert coordinator.adapter.starts == [
+        ("private-zone", ZONE_IDENTIFICATION_DURATION_SECONDS)
+    ]
+    snapshot = coordinator.guided_observation.snapshot
+    assert snapshot.requested_duration_seconds == ZONE_IDENTIFICATION_DURATION_SECONDS
+    assert snapshot.requested_at is not None
+    assert snapshot.expected_stop_at is not None
+    assert snapshot.expected_stop_at - snapshot.requested_at == timedelta(seconds=30)
+    assert coordinator.guided_observation.diagnostics()[
+        "requested_duration_seconds"
+    ] == ZONE_IDENTIFICATION_DURATION_SECONDS
+
+
+@pytest.mark.asyncio
+async def test_invalid_guided_observation_duration_blocks_before_dispatch() -> None:
+    coordinator = _coordinator([IrrigationAreaState.IDLE])
+
+    blocked = await async_start_guided_observation(
+        coordinator,
+        controller_slot=1,
+        area_slot=1,
+        duration_seconds=GUIDED_OBSERVATION_DURATION_SECONDS + 1,
+    )
+
+    assert blocked.status.value == "blocked"
+    assert blocked.blocker_codes == ("guided_observation_duration_invalid",)
+    assert coordinator.adapter.starts == []
+    assert coordinator.guided_observation.snapshot.state is GuidedObservationState.IDLE
 
 
 @pytest.mark.asyncio

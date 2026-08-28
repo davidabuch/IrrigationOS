@@ -41,6 +41,7 @@ from .first_live_delivery.operator import (
     async_run_supervised_first_live_trial,
 )
 from .guided_observation import (
+    ZONE_IDENTIFICATION_DURATION_SECONDS,
     GuidedObservationState,
     async_start_guided_observation,
     async_stop_guided_observation,
@@ -466,8 +467,9 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
             ),
             "photos": "Take or add photos",
             "stop" if active_here else "run": (
-                f"Stop {self._commissioning_area_name}" if active_here
-                else f"Run {self._commissioning_area_name} for 3 minutes"
+                f"Stop watering {self._commissioning_area_name}"
+                if active_here
+                else f"Identify {self._commissioning_area_name} — water for 30 seconds"
             ),
             "review": "Review what IrrigationOS understands",
             "advanced": "Advanced",
@@ -507,6 +509,7 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                     coordinator,
                     controller_slot=self._manage_controller_slot,
                     area_slot=self._manage_area_slot,
+                    duration_seconds=ZONE_IDENTIFICATION_DURATION_SECONDS,
                 )
             )
             if result.blocker_codes:

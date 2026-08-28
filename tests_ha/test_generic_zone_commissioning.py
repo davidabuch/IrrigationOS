@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
@@ -11,6 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.irrigationos import config_flow as config_flow_module
 from custom_components.irrigationos.config_flow import (
     CONF_COMMISSIONING_BASELINE_ACTION,
     CONF_COMMISSIONING_BASELINE_MINUTES,
@@ -49,6 +51,7 @@ from custom_components.irrigationos.config_flow import (
     CONF_COMMISSIONING_REVIEW_TARGET,
     CONF_COMMISSIONING_TARGET,
     CONF_COMMISSIONING_ZONE_NAME,
+    CONF_MANAGE_ZONE_ACTION,
     CONF_OPTIONS_ACTION,
     CONF_SIMPLE_CONFIRM,
     CONF_SIMPLE_CONTAINER_GALLONS,
@@ -74,7 +77,13 @@ from custom_components.irrigationos.config_flow import (
     _simple_commissioning_schema,
 )
 from custom_components.irrigationos.const import DOMAIN
-from custom_components.irrigationos.guided_observation import GuidedObservationManager
+from custom_components.irrigationos.guided_observation import (
+    ZONE_IDENTIFICATION_DURATION_SECONDS,
+    GuidedObservationManager,
+    GuidedObservationResult,
+    GuidedObservationState,
+    GuidedObservationStatus,
+)
 from custom_components.irrigationos.landscape_intelligence import (
     CanonicalZoneIdentity,
     Confidence,
@@ -109,6 +118,14 @@ from custom_components.irrigationos.weather import (
     WeatherSourceType,
     WeatherVerificationStatus,
 )
+
+
+def _manage_zone_actions(result: dict[str, Any]) -> dict[str, str]:
+    """Return the manage-zone choices from the rendered form schema."""
+    for marker, validator in result["data_schema"].schema.items():
+        if marker.schema == CONF_MANAGE_ZONE_ACTION:
+            return dict(validator.container)
+    raise AssertionError("manage-zone action schema is missing")
 
 NOW = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
 
@@ -290,6 +307,84 @@ async def test_all_zone_management_forms_cross_ha_serialization_boundary(
         assert voluptuous_serialize.convert(
             result["data_schema"], custom_serializer=cv.custom_serializer
         ) is not None
+
+
+@pytest.mark.asyncio
+async def test_manage_zone_identification_runs_30_seconds_stops_and_repeats(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "identify-zone-flow")
+    manager._store = _Store(None)  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    guided = GuidedObservationManager()
+    runtime = SimpleNamespace(
+        landscape_intelligence=manager,
+        guided_observation=guided,
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = runtime
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+    flow._manage_controller_slot = 1
+    flow._manage_area_slot = 1
+    flow._commissioning_area_name = "Zone 1"
+    starts: list[int] = []
+    stops: list[tuple[int, int]] = []
+
+    async def start(
+        coordinator: Any,
+        *,
+        controller_slot: int,
+        area_slot: int,
+        duration_seconds: int,
+    ) -> GuidedObservationResult:
+        assert coordinator is runtime
+        starts.append(duration_seconds)
+        guided.mark_starting(controller_slot, area_slot, duration_seconds)
+        return GuidedObservationResult(
+            GuidedObservationStatus.ACCEPTED, controller_slot, area_slot
+        )
+
+    async def stop(
+        coordinator: Any, *, controller_slot: int, area_slot: int
+    ) -> GuidedObservationResult:
+        assert coordinator is runtime
+        stops.append((controller_slot, area_slot))
+        guided.snapshot = replace(
+            guided.snapshot, state=GuidedObservationState.COMPLETED
+        )
+        return GuidedObservationResult(
+            GuidedObservationStatus.ACCEPTED, controller_slot, area_slot
+        )
+
+    monkeypatch.setattr(
+        config_flow_module, "async_start_guided_observation", start
+    )
+    monkeypatch.setattr(
+        config_flow_module, "async_stop_guided_observation", stop
+    )
+
+    inactive = await flow.async_step_manage_zone()
+    inactive_actions = _manage_zone_actions(inactive)
+    assert inactive_actions["run"] == "Identify Zone 1 — water for 30 seconds"
+
+    active = await flow.async_step_manage_zone(
+        {CONF_MANAGE_ZONE_ACTION: "run"}
+    )
+    assert starts == [ZONE_IDENTIFICATION_DURATION_SECONDS]
+    assert guided.snapshot.requested_duration_seconds == 30
+    assert _manage_zone_actions(active)["stop"] == "Stop watering Zone 1"
+
+    completed = await flow.async_step_manage_zone(
+        {CONF_MANAGE_ZONE_ACTION: "stop"}
+    )
+    assert stops == [(1, 1)]
+    assert _manage_zone_actions(completed)["run"] == (
+        "Identify Zone 1 — water for 30 seconds"
+    )
 
 
 @pytest.mark.asyncio
