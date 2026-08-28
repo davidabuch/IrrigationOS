@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import voluptuous as vol
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import CONF_NAME, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
@@ -22,7 +23,10 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util.aiohttp import MockRequest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.irrigationos import async_migrate_entry
+from custom_components.irrigationos import (
+    SUPERVISED_OPERATION_SERVICE_SCHEMA,
+    async_migrate_entry,
+)
 from custom_components.irrigationos import realtime as realtime_module
 from custom_components.irrigationos.adapters.factory import DEFAULT_PROVIDER_FACTORY
 from custom_components.irrigationos.const import (
@@ -71,6 +75,10 @@ from custom_components.irrigationos.quantitative_water_balance import (
 from custom_components.irrigationos.quantitative_water_balance.manager import (
     WATER_BALANCE_LEDGER_STORE_VERSION,
     WaterBalanceLedgerManager,
+)
+from custom_components.irrigationos.supervised_operation import (
+    SupervisedOperationResult,
+    SupervisedOperationStatus,
 )
 from custom_components.irrigationos.unattended_canary import (
     UNATTENDED_CANARY_CONFIRMATION,
@@ -294,6 +302,22 @@ def _entry_data() -> dict[str, Any]:
             "controllers": {"rachio:native-controller-1": "controller_test"}
         },
     }
+
+
+def test_supervised_service_accepts_three_hours_but_not_more() -> None:
+    common = {
+        "config_entry_id": "entry",
+        "controller_slot": 1,
+        "area_slot": 1,
+        "confirmation": "RUN SUPERVISED OPERATIONAL WATERING",
+    }
+    assert SUPERVISED_OPERATION_SERVICE_SCHEMA(
+        {**common, "runtime_seconds": 10_800}
+    )["runtime_seconds"] == 10_800
+    with pytest.raises(vol.Invalid):
+        SUPERVISED_OPERATION_SERVICE_SCHEMA(
+            {**common, "runtime_seconds": 10_801}
+        )
 
 
 def _signed_event(
@@ -724,6 +748,226 @@ async def test_production_readiness_entities_use_only_configured_targets_and_res
     assert hass.states.get("binary_sensor.irrigationos_production_ready").state == "off"
     assert entry.runtime_data.supervised_operation.in_progress is False
 
+
+@pytest.mark.asyncio
+async def test_manual_zone_platforms_use_non_contiguous_stable_targets(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    snapshot = _production_snapshot()
+    controller = snapshot.controllers[0]
+    snapshot = replace(
+        snapshot,
+        controllers=(
+            replace(
+                controller,
+                areas=tuple(
+                    replace(area, vendor_name=None)
+                    if area.slot_number == 4
+                    else area
+                    for area in controller.areas
+                ),
+            ),
+        ),
+    )
+    adapter = MutableAdapter(snapshot)
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    entries = {
+        item.unique_id: item
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+    for slot in (1, 2, 4, 5):
+        area_id = f"controller_test:slot:{slot}"
+        valve = hass.states.get(f"valve.zone_{slot}_manual_watering")
+        duration = hass.states.get(f"number.zone_{slot}_manual_watering_duration")
+        assert valve is not None
+        assert valve.state == "closed"
+        assert duration is not None
+        assert duration.state == "15.0"
+        assert duration.attributes["min"] == 1
+        assert duration.attributes["max"] == 180
+        assert duration.attributes["step"] == 1
+        assert entries[f"{area_id}_manual_watering_valve"].entity_id == valve.entity_id
+        assert entries[f"{area_id}_manual_watering_duration"].entity_id == duration.entity_id
+    assert hass.states.get("valve.zone_3_manual_watering") is None
+    assert hass.states.get("number.zone_3_manual_watering_duration") is None
+    assert hass.states.get("valve.zone_1_manual_watering").attributes[
+        "friendly_name"
+    ] == "Zone 1 manual watering"
+    assert hass.states.get("valve.zone_2_manual_watering").attributes[
+        "friendly_name"
+    ] == "Orchard manual watering"
+    assert hass.states.get("valve.zone_4_manual_watering").attributes[
+        "friendly_name"
+    ] == "Zone 4 manual watering"
+
+    current = adapter.snapshot.controllers[0]
+    adapter.snapshot = replace(
+        adapter.snapshot,
+        controllers=(
+            replace(
+                current,
+                areas=tuple(
+                    replace(area, state=IrrigationAreaState.WATERING)
+                    if area.slot_number == 1
+                    else area
+                    for area in current.areas
+                ),
+            ),
+        ),
+    )
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("valve.zone_1_manual_watering").state == "open"
+
+    stale_at = datetime.now(UTC) - timedelta(hours=1)
+    adapter.snapshot = replace(
+        adapter.snapshot,
+        observation=replace(
+            adapter.snapshot.observation,
+            observed_at=stale_at,
+            fresh_until=stale_at + timedelta(minutes=10),
+        ),
+    )
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get("valve.zone_1_manual_watering").state == STATE_UNAVAILABLE
+
+    valve_entry = entries["controller_test:slot:1_manual_watering_valve"]
+    original_unique_id = valve_entry.unique_id
+    profile = entry.runtime_data.landscape_intelligence.get_zone_by_slots(1, 1)
+    assert profile is not None
+    assert await entry.runtime_data.landscape_intelligence.async_update_zone(
+        replace(profile, display_name="Front Entry Planters")
+    )
+    entry.runtime_data.async_update_listeners()
+    await hass.async_block_till_done()
+    renamed = hass.states.get("valve.zone_1_manual_watering")
+    assert renamed is not None
+    assert renamed.attributes["friendly_name"] == "Front Entry Planters manual watering"
+    renamed_duration = hass.states.get("number.zone_1_manual_watering_duration")
+    assert renamed_duration is not None
+    assert renamed_duration.attributes["friendly_name"] == (
+        "Front Entry Planters manual watering duration"
+    )
+    assert entries["controller_test:slot:1_manual_watering_valve"].unique_id == original_unique_id
+
+
+@pytest.mark.asyncio
+async def test_manual_duration_drives_valve_runtime_and_restores(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = MutableAdapter(_production_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    await hass.services.async_call(
+        "number",
+        "set_value",
+        {
+            "entity_id": "number.zone_1_manual_watering_duration",
+            "value": 15,
+        },
+        blocking=True,
+    )
+    calls: list[int] = []
+
+    async def _start(
+        coordinator: object,
+        *,
+        controller_slot: int,
+        area_slot: int,
+        runtime_seconds: int,
+    ) -> SupervisedOperationResult:
+        del coordinator
+        assert (controller_slot, area_slot) == (1, 1)
+        calls.append(runtime_seconds)
+        return SupervisedOperationResult(
+            status=SupervisedOperationStatus.START_DISPATCHED,
+            blocker_codes=(),
+            operation_id="manual-test",
+            controller_slot=controller_slot,
+            area_slot=area_slot,
+            runtime_seconds=runtime_seconds,
+        )
+
+    monkeypatch.setattr(
+        "custom_components.irrigationos.valve.async_run_manual_operation", _start
+    )
+    await hass.services.async_call(
+        "valve",
+        "open_valve",
+        {"entity_id": "valve.zone_1_manual_watering"},
+        blocking=True,
+    )
+    assert calls == [900]
+    aggregate = hass.states.get("sensor.irrigationos_quantitative_water_balances")
+    assert aggregate is not None
+    assert aggregate.attributes["execution_authorized"] is False
+    assert entry.runtime_data.execution_authorization.summary.live_control_authorized is False
+
+    stop_calls: list[tuple[int, int]] = []
+
+    async def _stop(
+        coordinator: object, *, controller_slot: int, area_slot: int
+    ) -> SupervisedOperationResult:
+        del coordinator
+        stop_calls.append((controller_slot, area_slot))
+        return SupervisedOperationResult(
+            status=SupervisedOperationStatus.STOP_DISPATCHED,
+            blocker_codes=(),
+            operation_id="manual-test",
+            controller_slot=controller_slot,
+            area_slot=area_slot,
+            runtime_seconds=900,
+        )
+
+    monkeypatch.setattr(
+        "custom_components.irrigationos.valve.async_stop_manual_operation", _stop
+    )
+    await hass.services.async_call(
+        "valve",
+        "close_valve",
+        {"entity_id": "valve.zone_1_manual_watering"},
+        blocking=True,
+    )
+    assert stop_calls == [(1, 1)]
+
+    await hass.services.async_call(
+        "number",
+        "set_value",
+        {
+            "entity_id": "number.zone_1_manual_watering_duration",
+            "value": 37,
+        },
+        blocking=True,
+    )
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    restored = hass.states.get("number.zone_1_manual_watering_duration")
+    assert restored is not None
+    assert restored.state == "37.0"
 
 @pytest.mark.asyncio
 async def test_water_balance_ledger_persists_and_corruption_fails_closed(

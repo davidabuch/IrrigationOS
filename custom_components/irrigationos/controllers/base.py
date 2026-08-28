@@ -57,6 +57,24 @@ class GuidedObservationAdapter(Protocol):
         """Stop the controller used by the current guided observation."""
         ...
 
+
+@runtime_checkable
+class ManualWateringAdapter(Protocol):
+    """Optional provider boundary for explicit operator-directed watering."""
+
+    async def async_start_manual_watering(
+        self, *, area_binding: VendorBinding, duration_seconds: int
+    ) -> None:
+        """Start exactly one selected area for a finite manual runtime."""
+        ...
+
+    async def async_stop_manual_watering(
+        self, *, controller_binding: VendorBinding
+    ) -> None:
+        """Stop watering using the provider's supported controller boundary."""
+        ...
+
+
 @runtime_checkable
 class RealtimeObservationAdapter(Protocol):
     """Optional provider contract for read-only realtime observations."""

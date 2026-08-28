@@ -28,6 +28,7 @@ from .migration import build_v040_migration
 from .realtime import RealtimeObservationManager, async_delete_cloudhook
 from .supervised_operation import (
     SERVICE_RUN_SUPERVISED_OPERATION,
+    SUPERVISED_OPERATION_MAX_RUNTIME_SECONDS,
     SupervisedOperationStatus,
     async_run_supervised_operation,
 )
@@ -57,7 +58,8 @@ SUPERVISED_OPERATION_SERVICE_SCHEMA = vol.Schema(
         vol.Required(ATTR_CONTROLLER_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1)),
         vol.Required(ATTR_AREA_SLOT): vol.All(vol.Coerce(int), vol.Range(min=1)),
         vol.Required(ATTR_RUNTIME_SECONDS, default=30): vol.All(
-            vol.Coerce(int), vol.Range(min=1, max=120)
+            vol.Coerce(int),
+            vol.Range(min=1, max=SUPERVISED_OPERATION_MAX_RUNTIME_SECONDS),
         ),
         vol.Required(ATTR_CONFIRMATION): str,
     }
@@ -139,6 +141,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry)
     await coordinator.async_initialize_ownership_commissioning()
     await coordinator.async_initialize_observation_history()
     await coordinator.async_config_entry_first_refresh()
+    _async_register_controller_devices(hass, entry, coordinator)
     coordinator.realtime = RealtimeObservationManager(hass, entry, coordinator)
     await coordinator.realtime.async_setup()
     await coordinator.async_start_health_monitoring()
@@ -149,6 +152,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry)
     return True
 
 
+
+
+def _async_register_controller_devices(
+    hass: HomeAssistant,
+    entry: IrrigationOSConfigEntry,
+    coordinator: IrrigationOSCoordinator,
+) -> None:
+    """Register controller devices before child area platforms are forwarded."""
+    device_registry = dr.async_get(hass)
+    for controller in coordinator.data.controllers:
+        device_registry.async_get_or_create(
+            config_entry_id=entry.entry_id,
+            identifiers={(DOMAIN, controller.controller_id)},
+            manufacturer=controller.provider.title(),
+            model=controller.model,
+            name=controller.name,
+            serial_number=controller.serial_number,
+        )
 async def async_unload_entry(hass: HomeAssistant, entry: IrrigationOSConfigEntry) -> bool:
     """Unload an IrrigationOS config entry."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

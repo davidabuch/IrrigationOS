@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
@@ -36,6 +37,20 @@ new_operation_id = audit.new_operation_id
 SUPERVISED_OPERATION_CONFIRMATION = operator.SUPERVISED_OPERATION_CONFIRMATION
 evaluate_supervised_operation_blockers = operator.evaluate_supervised_operation_blockers
 SupervisedOperationStatus = operator.SupervisedOperationStatus
+
+
+class _ManualAdapter:
+    def __init__(self) -> None:
+        self.start_calls: list[tuple[object, int]] = []
+        self.stop_calls: list[object] = []
+
+    async def async_start_manual_watering(
+        self, *, area_binding: object, duration_seconds: int
+    ) -> None:
+        self.start_calls.append((area_binding, duration_seconds))
+
+    async def async_stop_manual_watering(self, *, controller_binding: object) -> None:
+        self.stop_calls.append(controller_binding)
 
 
 class _LatestAcceptance:
@@ -199,6 +214,7 @@ def _coordinator(*, accepted_slot: int = 2, active_sessions: tuple[object, ...] 
             last_persistence_error=None,
         ),
         supervised_operation=SupervisedOperationManager(),
+        adapter=_ManualAdapter(),
         validated_targets=_ValidatedTargets(),
     )
 
@@ -307,6 +323,25 @@ def test_new_supervised_operation_manager_never_restores_in_progress() -> None:
     assert restarted.in_progress is False
 
 
+async def test_confirmed_manual_stop_cancels_owned_monitor_task() -> None:
+    manager = SupervisedOperationManager()
+    manager.mark_dispatched(
+        "manual-stop-task",
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=900,
+    )
+
+    async def _monitor() -> None:
+        await asyncio.Event().wait()
+
+    task = asyncio.create_task(_monitor())
+    manager.attach_monitor("manual-stop-task", task)
+    await manager.async_cancel_monitor("manual-stop-task")
+    assert task.done()
+    assert manager.in_progress is False
+
+
 async def test_supervised_operation_audit_is_privacy_safe(tmp_path: Path) -> None:
     path = tmp_path / "supervised_operation_audit.jsonl"
     operation_id = new_operation_id()
@@ -332,15 +367,6 @@ async def test_successful_dispatch_sets_coordinator_owned_in_progress_state(
 ) -> None:
     coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
 
-    class _Transport:
-        def __init__(self, _session: object, _api_key: str) -> None:
-            return None
-
-        async def async_start_zone(self, *, zone_id: str, runtime_seconds: int) -> None:
-            assert zone_id == "native-zone-secret"
-            assert runtime_seconds == 30
-
-    monkeypatch.setattr(operator, "RachioFirstLiveTransport", _Transport)
     result = await operator.async_run_supervised_operation(
         coordinator,
         controller_slot=1,
@@ -355,6 +381,7 @@ async def test_successful_dispatch_sets_coordinator_owned_in_progress_state(
     assert coordinator.supervised_operation.active_area_slot == 2
     assert coordinator.supervised_operation.active_runtime_seconds == 30
     assert coordinator.listener_updates == 1
+    assert coordinator.adapter.start_calls[0][1] == 30
     assert len(coordinator.hass.created_tasks) == 1
     coordinator.hass.created_tasks[0].close()
 
@@ -364,14 +391,10 @@ async def test_transport_failure_records_fail_and_clears_in_progress(
 ) -> None:
     coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
 
-    class _FailingTransport:
-        def __init__(self, _session: object, _api_key: str) -> None:
-            return None
+    async def _fail_start(*, area_binding: object, duration_seconds: int) -> None:
+        raise operator.ControllerProviderError("ambiguous transport failure")
 
-        async def async_start_zone(self, *, zone_id: str, runtime_seconds: int) -> None:
-            raise operator.FirstLiveTransportError("ambiguous transport failure")
-
-    monkeypatch.setattr(operator, "RachioFirstLiveTransport", _FailingTransport)
+    coordinator.adapter.async_start_manual_watering = _fail_start
     result = await operator.async_run_supervised_operation(
         coordinator,
         controller_slot=1,
@@ -389,6 +412,108 @@ async def test_transport_failure_records_fail_and_clears_in_progress(
         is FirstLiveAcceptanceStatus.FAIL
     )
     assert coordinator.hass.created_tasks == []
+
+
+def test_manual_runtime_ceiling_accepts_three_hours_and_rejects_more() -> None:
+    coordinator = _coordinator()
+    assert _blockers(coordinator, runtime_seconds=10_800) == ()
+    assert "runtime_out_of_range" in _blockers(
+        coordinator, runtime_seconds=10_801
+    )
+
+
+async def test_valve_operator_intent_does_not_require_text_confirmation(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+    result = await operator.async_run_manual_operation(
+        coordinator,
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=900,
+    )
+    assert result.status is SupervisedOperationStatus.START_DISPATCHED
+    assert coordinator.adapter.start_calls[0][1] == 900
+    coordinator.hass.created_tasks[0].close()
+
+
+async def test_manual_runtime_above_three_hours_never_dispatches(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+    result = await operator.async_run_manual_operation(
+        coordinator,
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=10_801,
+    )
+    assert result.status is SupervisedOperationStatus.BLOCKED
+    assert result.blocker_codes == ("runtime_out_of_range",)
+    assert coordinator.adapter.start_calls == []
+
+
+async def test_manual_stop_uses_controller_wide_adapter_and_clears_transient_state(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+    coordinator.supervised_operation.mark_dispatched(
+        "manual-stop-test",
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=900,
+    )
+    result = await operator.async_stop_manual_operation(
+        coordinator, controller_slot=1, area_slot=2
+    )
+    assert result.status is SupervisedOperationStatus.STOP_DISPATCHED
+    assert len(coordinator.adapter.stop_calls) == 1
+    assert coordinator.supervised_operation.in_progress is False
+
+
+async def test_manual_stop_wrong_zone_fails_closed_without_transport(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+    coordinator.supervised_operation.mark_dispatched(
+        "manual-stop-test",
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=900,
+    )
+    result = await operator.async_stop_manual_operation(
+        coordinator, controller_slot=1, area_slot=1
+    )
+    assert result.status is SupervisedOperationStatus.BLOCKED
+    assert "manual_stop_target_mismatch" in result.blocker_codes
+    assert coordinator.adapter.stop_calls == []
+
+
+async def test_manual_stop_transport_uncertainty_has_no_retry(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+    coordinator.supervised_operation.mark_dispatched(
+        "manual-stop-test",
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=900,
+    )
+    calls = 0
+
+    async def _fail_stop(*, controller_binding: object) -> None:
+        nonlocal calls
+        del controller_binding
+        calls += 1
+        raise operator.ControllerProviderError("ambiguous stop failure")
+
+    coordinator.adapter.async_stop_manual_watering = _fail_stop
+    result = await operator.async_stop_manual_operation(
+        coordinator, controller_slot=1, area_slot=2
+    )
+    assert result.status is SupervisedOperationStatus.TRANSPORT_FAILED
+    assert result.blocker_codes == ("stop_transport_failed_no_retry",)
+    assert calls == 1
+    assert coordinator.supervised_operation.in_progress is True
 
 
 async def test_audit_failure_persists_fail_without_setting_in_progress(

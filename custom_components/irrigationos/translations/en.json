@@ -98,6 +98,11 @@
         "description": "Setup status: {status}. Choose what you want to do. A temporary run requires this explicit selection every time and never enables automatic watering.",
         "data": {"manage_zone_action": "What would you like to do?"}
       },
+      "manage_zone_name": {
+        "title": "Name this zone",
+        "description": "Choose the name IrrigationOS will show for this physical zone. Its controller name remains {native_name} and will not be changed.",
+        "data": {"commissioning_zone_name": "Zone name"}
+      },
       "manage_zone_photos": {
         "title": "Add zone photos",
         "description": "Choose one or more images from Home Assistant media. IrrigationOS stores only private opaque references, not image bytes.",
@@ -307,6 +312,7 @@
     },
     "error": {
       "invalid_profile": "One or more landscape profile values are outside the allowed range.",
+      "invalid_zone_name": "Enter a zone name that is not blank.",
       "invalid_commissioning_input": "The commissioning evidence is incomplete, inconsistent, or invalid.",
       "commissioning_persistence_failed": "The commissioning evidence could not be saved. No new zone knowledge was activated.",
       "invalid_commissioning_edit": "The requested commissioning edit is incomplete or inconsistent. Existing evidence was not changed.",

@@ -122,6 +122,32 @@ async def test_transport_rejects_runtime_above_first_live_limit_before_network()
     assert session.calls == []
 
 
+async def test_manual_transport_accepts_three_hours_without_expanding_first_live() -> None:
+    session = _Session()
+    transport = delivery.RachioFirstLiveTransport(cast(Any, session), "secret")
+    await transport.async_start_manual_watering(
+        zone_id="zone-native", runtime_seconds=10_800
+    )
+    assert session.calls[0]["json"] == {
+        "id": "zone-native",
+        "duration": 10_800,
+    }
+
+
+async def test_manual_transport_rejects_above_three_hours_before_network() -> None:
+    session = _Session()
+    transport = delivery.RachioFirstLiveTransport(cast(Any, session), "secret")
+    try:
+        await transport.async_start_manual_watering(
+            zone_id="zone-native", runtime_seconds=10_801
+        )
+    except ValueError as err:
+        assert "between 1 and 10800" in str(err)
+    else:
+        raise AssertionError("expected ValueError")
+    assert session.calls == []
+
+
 async def test_transport_raises_on_non_success_response() -> None:
     session = _Session(status=500)
     transport = delivery.RachioFirstLiveTransport(cast(Any, session), "secret")

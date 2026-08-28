@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 
 class SupervisedOperationManager:
@@ -14,6 +15,7 @@ class SupervisedOperationManager:
         self.active_controller_slot: int | None = None
         self.active_area_slot: int | None = None
         self.active_runtime_seconds: int | None = None
+        self._monitor_task: asyncio.Task[Any] | None = None
 
     @property
     def in_progress(self) -> bool:
@@ -44,6 +46,28 @@ class SupervisedOperationManager:
             self.active_controller_slot = None
             self.active_area_slot = None
             self.active_runtime_seconds = None
+            self._monitor_task = None
+
+    def attach_monitor(
+        self, operation_id: str, task: asyncio.Task[Any] | None
+    ) -> None:
+        """Own the ConfigEntry task for the matching transient operation."""
+
+        if self.active_operation_id == operation_id:
+            self._monitor_task = task
+
+    async def async_cancel_monitor(self, operation_id: str) -> None:
+        """Cancel and await the matching monitor after confirmed manual stop."""
+
+        if self.active_operation_id != operation_id:
+            return
+        task = self._monitor_task
+        if task is None or task is asyncio.current_task():
+            self.mark_complete(operation_id)
+            return
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        self.mark_complete(operation_id)
 
     def diagnostics(self) -> dict[str, object]:
         """Return privacy-safe transient operation state."""

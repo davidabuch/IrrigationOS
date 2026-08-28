@@ -6,6 +6,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from ..const import MANUAL_WATERING_MAX_RUNTIME_SECONDS
 from ..controllers.models import (
     ControllerRegistrySnapshot,
     IrrigationAreaState,
@@ -213,6 +214,7 @@ async def _record_terminal(
         concurrent_watering_observed=concurrent_watering_observed,
         terminal_detail_code=detail_code,
         terminal_audit_recorded=terminal_audit_recorded,
+        maximum_runtime_seconds=MANUAL_WATERING_MAX_RUNTIME_SECONDS,
     )
     await async_record_terminal_acceptance(
         record,

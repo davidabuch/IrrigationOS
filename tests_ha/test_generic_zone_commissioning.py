@@ -120,12 +120,17 @@ from custom_components.irrigationos.weather import (
 )
 
 
+def _form_choices(result: dict[str, Any], field: str) -> dict[str, str]:
+    """Return one set of choices from a rendered form schema."""
+    for marker, validator in result["data_schema"].schema.items():
+        if marker.schema == field:
+            return dict(validator.container)
+    raise AssertionError(f"{field} schema is missing")
+
+
 def _manage_zone_actions(result: dict[str, Any]) -> dict[str, str]:
     """Return the manage-zone choices from the rendered form schema."""
-    for marker, validator in result["data_schema"].schema.items():
-        if marker.schema == CONF_MANAGE_ZONE_ACTION:
-            return dict(validator.container)
-    raise AssertionError("manage-zone action schema is missing")
+    return _form_choices(result, CONF_MANAGE_ZONE_ACTION)
 
 NOW = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
 
@@ -302,11 +307,262 @@ async def test_all_zone_management_forms_cross_ha_serialization_boundary(
     zone = await flow.async_step_manage_zones(
         {CONF_COMMISSIONING_TARGET: "1|1"}
     )
+    name = await flow.async_step_manage_zone_name()
     review = await flow.async_step_manage_zone_review()
-    for result in (zones, zone, review):
+    for result in (zones, zone, name, review):
         assert voluptuous_serialize.convert(
             result["data_schema"], custom_serializer=cv.custom_serializer
         ) is not None
+
+
+@pytest.mark.asyncio
+async def test_manage_zones_prefers_friendly_name_and_keeps_uncommissioned_target(
+    hass: HomeAssistant,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "zone-home-list")
+    manager._store = _Store(None)  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    zone1 = manager.get_zone("property.primary", "zone.1")
+    assert zone1 is not None
+    assert await manager.async_update_zone(
+        replace(zone1, display_name="Front Entry Planters")
+    )
+    areas = (
+        SimpleNamespace(
+            configured=True,
+            enabled=True,
+            binding=object(),
+            slot_number=1,
+            vendor_name="Native Front",
+            name="Zone 1",
+        ),
+        SimpleNamespace(
+            configured=True,
+            enabled=True,
+            binding=object(),
+            slot_number=2,
+            vendor_name="Back Lawn",
+            name="Zone 2",
+        ),
+    )
+    runtime = SimpleNamespace(
+        landscape_intelligence=manager,
+        data=SimpleNamespace(controllers=(SimpleNamespace(areas=areas),)),
+        guided_observation=GuidedObservationManager(),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = runtime
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+
+    zones = await flow.async_step_manage_zones()
+    choices = _form_choices(zones, CONF_COMMISSIONING_TARGET)
+    assert choices["1|1"].startswith("Front Entry Planters — ")
+    assert choices["1|2"] == "Back Lawn — Not set up"
+
+    commissioned = await flow.async_step_manage_zones(
+        {CONF_COMMISSIONING_TARGET: "1|1"}
+    )
+    commissioned_actions = _manage_zone_actions(commissioned)
+    assert commissioned_actions["rename"] == "Rename zone"
+    assert commissioned_actions["edit"] == "Edit setup"
+    assert commissioned_actions["add_plant"] == "Add another plant"
+
+    uncommissioned = await flow.async_step_manage_zones(
+        {CONF_COMMISSIONING_TARGET: "1|2"}
+    )
+    uncommissioned_actions = _manage_zone_actions(uncommissioned)
+    assert uncommissioned_actions["setup"] == "Name / Set up this zone"
+    assert "rename" not in uncommissioned_actions
+    assert "add_plant" not in uncommissioned_actions
+    name_form = await flow.async_step_manage_zone(
+        {CONF_MANAGE_ZONE_ACTION: "setup"}
+    )
+    assert name_form["step_id"] == "manage_zone_name"
+    assert name_form["data_schema"]({})[CONF_COMMISSIONING_ZONE_NAME] == "Back Lawn"
+    setup = await flow.async_step_manage_zone_name(
+        {CONF_COMMISSIONING_ZONE_NAME: "  East Lawn  "}
+    )
+    assert setup["step_id"] == "commissioning_simple_input"
+    assert flow._commissioning_area_name == "East Lawn"
+
+
+@pytest.mark.asyncio
+async def test_zone_rename_is_durable_and_preserves_identity_and_evidence(
+    hass: HomeAssistant,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "zone-rename")
+    store = _Store(None)
+    manager._store = store  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    original = manager.get_zone("property.primary", "zone.1")
+    assert original is not None
+    delivery = calibrate_delivery_component(
+        DeliveryComponentCalibrationRequest(
+            "zone1.delivery.microjet",
+            "zone.1",
+            "zone1.component.fig",
+            "Fig microjet",
+            WaterDeliveryType.MICROJET,
+            1,
+            DeliveryEvidenceLevel.UNKNOWN,
+            NOW,
+        )
+    )
+    assert await manager.async_update_zone_and_delivery_profile(original, delivery)
+    binding = object()
+    area = SimpleNamespace(
+        configured=True,
+        enabled=True,
+        binding=binding,
+        slot_number=1,
+        vendor_name="Native Zone 1",
+        name="Zone 1",
+    )
+    runtime = SimpleNamespace(
+        landscape_intelligence=manager,
+        data=SimpleNamespace(controllers=(SimpleNamespace(areas=(area,)),)),
+        guided_observation=GuidedObservationManager(),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = runtime
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+    await flow.async_step_manage_zones({CONF_COMMISSIONING_TARGET: "1|1"})
+    await flow.async_step_manage_zone_photos(
+        {
+            CONF_ZONE_PHOTOS: {
+                "media_content_id": "media-source://media_source/local/zone1.jpg"
+            },
+            CONF_ZONE_PHOTO_NOTE: "Before rename",
+            CONF_ZONE_PHOTO_RUNNING: False,
+        }
+    )
+    before = manager.get_zone("property.primary", "zone.1")
+    assert before is not None
+    before_delivery = manager.delivery_profiles
+    before_photos = manager.photos_for_zone("property.primary", "zone.1")
+
+    name_form = await flow.async_step_manage_zone(
+        {CONF_MANAGE_ZONE_ACTION: "rename"}
+    )
+    assert name_form["step_id"] == "manage_zone_name"
+    assert name_form["data_schema"]({})[CONF_COMMISSIONING_ZONE_NAME] == "Zone 1"
+    blank = await flow.async_step_manage_zone_name(
+        {CONF_COMMISSIONING_ZONE_NAME: "   "}
+    )
+    assert blank["errors"] == {
+        CONF_COMMISSIONING_ZONE_NAME: "invalid_zone_name"
+    }
+    renamed_home = await flow.async_step_manage_zone_name(
+        {CONF_COMMISSIONING_ZONE_NAME: "  Front Entry Planters  "}
+    )
+    assert renamed_home["step_id"] == "manage_zone"
+    assert renamed_home["description_placeholders"]["zone_name"] == (
+        "Front Entry Planters"
+    )
+
+    renamed = manager.get_zone("property.primary", "zone.1")
+    assert renamed == replace(before, display_name="Front Entry Planters")
+    assert renamed.identity == original.identity
+    assert renamed.landscape_profile == original.landscape_profile
+    assert renamed.plant_details == original.plant_details
+    assert renamed.delivery_links == original.delivery_links
+    assert manager.delivery_profiles == before_delivery
+    assert manager.photos_for_zone("property.primary", "zone.1") == before_photos
+    assert area.binding is binding
+    assert area.vendor_name == "Native Zone 1"
+
+    store.fail_save = True
+    failed = await flow.async_step_manage_zone_name(
+        {CONF_COMMISSIONING_ZONE_NAME: "Unsaved name"}
+    )
+    assert failed["errors"] == {"base": "commissioning_persistence_failed"}
+    assert manager.get_zone("property.primary", "zone.1") == renamed
+    store.fail_save = False
+
+    choices = _form_choices(
+        await flow.async_step_manage_zones(), CONF_COMMISSIONING_TARGET
+    )
+    assert choices["1|1"].startswith("Front Entry Planters — ")
+    restored = LandscapeIntelligenceManager(hass, "zone-rename-restored")
+    restored._store = store  # type: ignore[assignment]
+    await restored.async_initialize(initial_observed_at=NOW + timedelta(minutes=1))
+    restored_zone = restored.get_zone("property.primary", "zone.1")
+    assert restored_zone is not None
+    assert restored_zone.display_name == "Front Entry Planters"
+    assert restored_zone.identity == original.identity
+    assert restored.delivery_profiles == before_delivery
+    assert restored.photos_for_zone("property.primary", "zone.1") == before_photos
+
+
+@pytest.mark.asyncio
+async def test_zone_home_add_plant_reuses_simple_canonical_merge(
+    hass: HomeAssistant,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "zone-home-add-plant")
+    manager._store = _Store(None)  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    assert await manager.async_add_zone(_zone2())
+    area = SimpleNamespace(
+        configured=True,
+        enabled=True,
+        binding=object(),
+        slot_number=2,
+        vendor_name="Native Zone 2",
+        name="Zone 2",
+    )
+    runtime = SimpleNamespace(
+        landscape_intelligence=manager,
+        data=SimpleNamespace(controllers=(SimpleNamespace(areas=(area,)),)),
+        guided_observation=GuidedObservationManager(),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = runtime
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+    home = await flow.async_step_manage_zones(
+        {CONF_COMMISSIONING_TARGET: "1|2"}
+    )
+    assert _manage_zone_actions(home)["add_plant"] == "Add another plant"
+    add_form = await flow.async_step_manage_zone(
+        {CONF_MANAGE_ZONE_ACTION: "add_plant"}
+    )
+    assert add_form["step_id"] == "commissioning_simple_input"
+    review = await flow.async_step_commissioning_simple_input(
+        {
+            CONF_SIMPLE_DESCRIPTION: "A newly planted Hass avocado",
+            CONF_SIMPLE_PLANT_NAME: "Hass avocado",
+            CONF_SIMPLE_PLANTED_DATE: "2026-08-17",
+            CONF_SIMPLE_CONTAINER_GALLONS: 5,
+            CONF_SIMPLE_HEIGHT_FEET: 4,
+            CONF_SIMPLE_DELIVERY_TYPE: "unknown",
+            CONF_SIMPLE_EMITTER_CLASS: "",
+            CONF_SIMPLE_THROW_FEET: "",
+            CONF_SIMPLE_SPRAY_PATTERN: "unknown",
+            CONF_SIMPLE_SHARING: "unknown",
+            CONF_SIMPLE_PLANTS_PER_EMITTER: "",
+        }
+    )
+    assert review["step_id"] == "commissioning_simple_review"
+    saved = await flow.async_step_commissioning_simple_review(
+        {CONF_SIMPLE_CONFIRM: True}
+    )
+    assert saved["type"] == "create_entry"
+    updated = manager.get_zone("property.primary", "zone.2")
+    assert updated is not None
+    assert tuple(
+        plant.common_name for plant in updated.landscape_profile.plant_groups
+    ) == ("Podocarpus", "Hass avocado")
+    assert updated.landscape_events[-1].plant_snapshot.plant_group.common_name == (
+        "Hass avocado"
+    )
 
 
 @pytest.mark.asyncio
