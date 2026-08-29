@@ -1386,7 +1386,6 @@ async def test_delivery_calibration_save_failure_publishes_neither_zone_nor_prof
 
 
 @pytest.mark.asyncio
-@pytest.mark.asyncio
 async def test_options_home_exposes_only_zone_management_and_advanced_tools(
     hass: HomeAssistant,
 ) -> None:
