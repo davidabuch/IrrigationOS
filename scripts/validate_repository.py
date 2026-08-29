@@ -205,8 +205,8 @@ def main() -> int:
         raise SystemExit("manifest.json domain must be irrigationos")
     if manifest.get("config_flow") is not True:
         raise SystemExit("manifest.json must enable config_flow")
-    if manifest.get("version") != "1.0.63":
-        raise SystemExit("manifest.json version must be 1.0.63")
+    if manifest.get("version") != "1.0.64":
+        raise SystemExit("manifest.json version must be 1.0.64")
 
     pyproject = load_pyproject()
     project = pyproject.get("project")

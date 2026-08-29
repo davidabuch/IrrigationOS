@@ -1,3 +1,15 @@
+## [1.0.64] - 2026-08-29
+
+### Changed
+
+- Simplified the Home Assistant options landing page to the two homeowner-facing choices that match the current product model: **Manage zones** and **Advanced tools**.
+- Moved the still-active legacy Landscape Digital Twin editor and supervised first-live watering trial behind **Advanced tools**.
+- Removed redundant top-level entry points for generic commissioning, simple guided setup, and commissioned-zone review while retaining their underlying flows for reuse from Zone Home.
+
+### Safety
+
+- Navigation only. No irrigation execution, controller communication, persistence schema, scheduling, recommendation, guided-observation, or manual-watering behavior changed.
+
 ## [1.0.63] - 2026-08-29
 
 ### Added

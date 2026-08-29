@@ -43,10 +43,17 @@
   "options": {
     "step": {
       "init": {
-        "title": "IrrigationOS options",
-        "description": "Choose a supervised operator workflow. The first-live trial path is interactive and single-use; it does not create a Home Assistant service or button.",
+        "title": "IrrigationOS",
+        "description": "Manage your irrigation zones, or open Advanced tools for specialized setup and supervised commissioning functions.",
         "data": {
           "action": "Action"
+        }
+      },
+      "advanced_tools": {
+        "title": "Advanced tools",
+        "description": "These tools are not needed for normal zone setup or editing. The Landscape Digital Twin editor manages advanced runtime landscape overrides. The supervised first-live trial can physically run a selected irrigation zone and requires explicit confirmation.",
+        "data": {
+          "action": "Advanced action"
         }
       },
       "area": {

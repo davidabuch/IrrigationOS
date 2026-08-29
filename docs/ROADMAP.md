@@ -1,5 +1,14 @@
 # IrrigationOS Roadmap
 
+## v1.0.64 — Zone-Centric Navigation Cleanup
+
+- Makes **Manage zones** the primary homeowner-facing IrrigationOS workflow.
+- Reduces the top-level Home Assistant Options menu to **Manage zones** and **Advanced tools**.
+- Moves the still-active Landscape Digital Twin editor and supervised first-live watering trial behind **Advanced tools**.
+- Removes redundant top-level commissioning, simple-setup, and commissioned-zone-review entry points while retaining their underlying flows for reuse from Zone Home.
+- Makes no persistence-schema, controller, watering, recommendation, scheduling, guided-observation, or execution-authority changes.
+- Keeps the existing `area_profiles` Landscape Digital Twin runtime path intact until a future explicit architecture milestone reconciles it with canonical Landscape Intelligence.
+
 ## v1.0.63 — Zone Recommissioning / Start Over
 
 - Adds an explicit confirmed Zone Home lifecycle action that clears only the current replaceable landscape/setup interpretation.
@@ -123,7 +132,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.63
+- **Installable Home Assistant release:** v1.0.64
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
