@@ -1,6 +1,6 @@
 # IrrigationOS Roadmap
 
-## v1.0.60 — Zone-Centric Simple Management & Guided Observation
+## v1.0.61 — Zone Setup UX & Native Manual Zone Controls
 
 - Makes **Manage zones** the permanent homeowner entry point for initial setup, later updates, photos, review, and Advanced tools.
 - Adds private opaque multi-photo references without raw-image persistence or startup analysis.
@@ -110,7 +110,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.60
+- **Installable Home Assistant release:** v1.0.61
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
