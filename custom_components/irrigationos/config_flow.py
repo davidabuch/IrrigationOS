@@ -372,21 +372,13 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Choose the interactive options workflow."""
+        """Choose the primary homeowner workflow or advanced tools."""
 
         if user_input is not None:
             action = str(user_input[CONF_OPTIONS_ACTION])
             if action == "manage_zones":
                 return await self.async_step_manage_zones()
-            if action == "landscape":
-                return await self.async_step_landscape()
-            if action == "commissioning":
-                return await self.async_step_commissioning()
-            if action == "commissioning_simple":
-                return await self.async_step_commissioning_simple()
-            if action == "commissioning_review":
-                return await self.async_step_commissioning_review_select()
-            return await self.async_step_first_live_trial()
+            return await self.async_step_advanced_tools()
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -394,10 +386,30 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                     vol.Required(CONF_OPTIONS_ACTION): vol.In(
                         {
                             "manage_zones": "Manage zones",
+                            "advanced_tools": "Advanced tools",
+                        }
+                    )
+                }
+            ),
+        )
+
+    async def async_step_advanced_tools(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Expose specialized tools without duplicating normal zone workflows."""
+
+        if user_input is not None:
+            action = str(user_input[CONF_OPTIONS_ACTION])
+            if action == "landscape":
+                return await self.async_step_landscape()
+            return await self.async_step_first_live_trial()
+        return self.async_show_form(
+            step_id="advanced_tools",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_OPTIONS_ACTION): vol.In(
+                        {
                             "landscape": "Edit Landscape Digital Twin",
-                            "commissioning": "Commission generic zone knowledge",
-                            "commissioning_simple": "Simple guided zone setup",
-                            "commissioning_review": "Review or edit commissioned zones",
                             "first_live_trial": "Run supervised first-live watering trial",
                         }
                     )

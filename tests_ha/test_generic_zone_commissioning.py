@@ -1386,6 +1386,52 @@ async def test_delivery_calibration_save_failure_publishes_neither_zone_nor_prof
 
 
 @pytest.mark.asyncio
+async def test_options_home_exposes_only_zone_management_and_advanced_tools(
+    hass: HomeAssistant,
+) -> None:
+    """Keep normal navigation zone-centric while preserving advanced tools."""
+
+    manager = LandscapeIntelligenceManager(hass, "zone-centric-options")
+    manager._store = _Store(None)  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = SimpleNamespace(landscape_intelligence=manager)
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["step_id"] == "init"
+    schema = result["data_schema"]
+    action_key = next(iter(schema.schema))
+    choices = schema.schema[action_key].container
+
+    assert choices == {
+        "manage_zones": "Manage zones",
+        "advanced_tools": "Advanced tools",
+    }
+
+    advanced = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_OPTIONS_ACTION: "advanced_tools"},
+    )
+
+    assert advanced["step_id"] == "advanced_tools"
+    advanced_key = next(iter(advanced["data_schema"].schema))
+    advanced_choices = advanced["data_schema"].schema[advanced_key].container
+
+    assert advanced_choices == {
+        "landscape": "Edit Landscape Digital Twin",
+        "first_live_trial": "Run supervised first-live watering trial",
+    }
+
+    assert "commissioning" not in choices
+    assert "commissioning_simple" not in choices
+    assert "commissioning_review" not in choices
+    assert "first_live_trial" not in choices
+    assert "landscape" not in choices
+
+
 @pytest.mark.parametrize(
     ("review_action", "expected_step"),
     [
@@ -1403,18 +1449,45 @@ async def test_framework_options_flow_accepts_zone1_plant_selection(
     manager._store = _Store(None)  # type: ignore[assignment]
     await manager.async_initialize(initial_observed_at=NOW)
     entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
-    entry.runtime_data = SimpleNamespace(landscape_intelligence=manager)
+    entry.runtime_data = SimpleNamespace(
+        landscape_intelligence=manager,
+        data=SimpleNamespace(
+            controllers=(
+                SimpleNamespace(
+                    areas=(
+                        SimpleNamespace(
+                            configured=True,
+                            enabled=True,
+                            binding=object(),
+                            slot_number=1,
+                            vendor_name="Native Zone 1",
+                            name="Zone 1",
+                        ),
+                    ),
+                ),
+            ),
+        ),
+        guided_observation=GuidedObservationManager(),
+    )
     entry.add_to_hass(hass)
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["step_id"] == "init"
+
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {CONF_OPTIONS_ACTION: "commissioning_review"}
+        result["flow_id"], {CONF_OPTIONS_ACTION: "manage_zones"}
     )
-    assert result["step_id"] == "commissioning_review_select"
+    assert result["step_id"] == "manage_zones"
+
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        {CONF_COMMISSIONING_REVIEW_TARGET: "property.primary|zone.1"},
+        {CONF_COMMISSIONING_TARGET: "1|1"},
+    )
+    assert result["step_id"] == "manage_zone"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {CONF_MANAGE_ZONE_ACTION: "advanced"},
     )
     assert result["step_id"] == "commissioning_review"
     result = await hass.config_entries.options.async_configure(
