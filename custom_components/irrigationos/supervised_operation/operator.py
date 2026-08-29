@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,8 @@ from .monitor import async_monitor_supervised_operation
 
 SUPERVISED_OPERATION_CONFIRMATION = "RUN SUPERVISED OPERATIONAL WATERING"
 SUPERVISED_OPERATION_REVISION = 1
+MANUAL_STOP_CONFIRMATION_TIMEOUT_SECONDS = 10
+MANUAL_STOP_CONFIRMATION_INTERVAL_SECONDS = 1
 
 
 async def async_run_supervised_operation(
@@ -379,34 +382,10 @@ async def async_stop_manual_operation(
                 detail_code="controller_wide_stop_http_accepted",
             )
         )
-        try:
-            await coordinator.async_request_refresh()
-        except Exception:
-            return SupervisedOperationResult(
-                status=SupervisedOperationStatus.STOP_UNCONFIRMED,
-                blocker_codes=("stop_outcome_not_observed",),
-                operation_id=operation_id,
-                controller_slot=controller_slot,
-                area_slot=area_slot,
-                runtime_seconds=runtime_seconds,
-            )
-
-        now = datetime.now(UTC)
-        refreshed_controller = (
-            coordinator.data.controllers[controller_slot - 1]
-            if 1 <= controller_slot <= len(coordinator.data.controllers)
-            else None
-        )
-        stop_confirmed = (
-            refreshed_controller is not None
-            and coordinator.data.observation.quality is ObservationQuality.CONFIRMED
-            and coordinator.data.observation.is_fresh(now)
-            and not any(
-                item.state is IrrigationAreaState.WATERING
-                for item in refreshed_controller.areas
-            )
-        )
-        if not stop_confirmed:
+        if not await _async_confirm_manual_stop(
+            coordinator,
+            controller_id=controller.controller_id,
+        ):
             return SupervisedOperationResult(
                 status=SupervisedOperationStatus.STOP_UNCONFIRMED,
                 blocker_codes=("stop_outcome_not_observed",),
@@ -427,6 +406,53 @@ async def async_stop_manual_operation(
             area_slot=area_slot,
             runtime_seconds=runtime_seconds,
         )
+
+
+async def _async_confirm_manual_stop(
+    coordinator: Any,
+    *,
+    controller_id: str,
+) -> bool:
+    """Re-observe a single accepted stop without retrying its transport."""
+
+    for elapsed_seconds in range(
+        0,
+        MANUAL_STOP_CONFIRMATION_TIMEOUT_SECONDS + 1,
+        MANUAL_STOP_CONFIRMATION_INTERVAL_SECONDS,
+    ):
+        try:
+            await coordinator.async_request_refresh()
+        except Exception:
+            pass
+        else:
+            refreshed_controller = next(
+                (
+                    item
+                    for item in coordinator.data.controllers
+                    if item.controller_id == controller_id
+                ),
+                None,
+            )
+            now = datetime.now(UTC)
+            if (
+                coordinator.last_update_success
+                and refreshed_controller is not None
+                and refreshed_controller.watering_observation_quality
+                is ObservationQuality.CONFIRMED
+                and coordinator.data.observation.quality
+                is ObservationQuality.CONFIRMED
+                and coordinator.data.observation.is_fresh(now)
+                and not any(
+                    item.state is IrrigationAreaState.WATERING
+                    for item in refreshed_controller.areas
+                )
+            ):
+                return True
+
+        if elapsed_seconds < MANUAL_STOP_CONFIRMATION_TIMEOUT_SECONDS:
+            await asyncio.sleep(MANUAL_STOP_CONFIRMATION_INTERVAL_SECONDS)
+
+    return False
 
 
 def evaluate_supervised_operation_blockers(
