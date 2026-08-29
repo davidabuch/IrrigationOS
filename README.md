@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.60 — Zone-Centric Simple Management & Guided Observation**
+**v1.0.61 — Zone Setup UX & Native Manual Zone Controls**
 
 The current release:
 
@@ -29,8 +29,8 @@ The current release:
 - implements all six pre-Live safeguards: command attribution/receipts, acknowledgement/timeouts, restart-safe reconciliation, safety preemption, sunrise hard stop, and manual override preservation;
 - validates those safeguards together through the integrated Live safety review;
 - retains the manual commissioning protocol and structured acceptance record for supervised first-live validation;
-- adds one explicit Home Assistant supervised operational command service after a successful first-live acceptance;
-- limits each supervised operational command to an exact canonical target with its own durable first-live PASS and to at most 120 seconds;
+- adds the explicit Home Assistant supervised operational command service plus native per-zone valve and manual-duration entities;
+- limits manual and supervised watering to at most 180 minutes while preserving the separate first-live trial boundary at 120 seconds;
 - requires the exact typed confirmation phrase, healthy fresh confirmed observations, current integrated supervised-safety prerequisites, commissioned ownership and boundary review, an idle target, and zero active watering;
 - requires the requested target to remain present in the durable validated-target registry before operational dispatch is eligible;
 - requires a durable privacy-safe dispatch-intent audit record before any operational command is sent;
