@@ -1,5 +1,12 @@
 # IrrigationOS Roadmap
 
+## v1.0.63 — Zone Recommissioning / Start Over
+
+- Adds an explicit confirmed Zone Home lifecycle action that clears only the current replaceable landscape/setup interpretation.
+- Preserves permanent physical-zone identity, display name, photos, reusable delivery profiles, unrelated zones, and an immutable complete snapshot of the retired setup.
+- Reuses normal simple setup from a deterministic unresolved active state and publishes only after one successful Store transition.
+- Adds no watering command, task, retry, scheduling behavior, scientific credit, or execution authority.
+
 ## v1.0.62 — Manual Stop Confirmation Hotfix
 
 - Allows a strictly bounded ten-second observation window for cloud/controller state to confirm an accepted operator stop.
@@ -116,7 +123,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.62
+- **Installable Home Assistant release:** v1.0.63
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority

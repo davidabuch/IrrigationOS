@@ -349,7 +349,7 @@ def test_derived_assessment_remains_recomputed_after_calibration_schema_change()
         item for item in restored.zones if item.identity.zone_id == "zone.synthetic"
     )
 
-    assert P.COMMISSIONING_STORE_SCHEMA_VERSION == 7
+    assert P.COMMISSIONING_STORE_SCHEMA_VERSION == 8
     assert A.assess_commissioning(restored_profile) == before
     assert "commissioning_assessment" not in P.build_store_payload(
         (profile, zone1),

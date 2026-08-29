@@ -19,6 +19,7 @@ from .commissioning import (
     LandscapeChangeEvent,
     LandscapeEventType,
     LandscapePlantSnapshot,
+    LandscapeSetupSnapshot,
     PlantCommissioningDetails,
     SerializableCommissioningModel,
     UserCalibratedBaseline,
@@ -162,6 +163,7 @@ def _rebuild_plant_profile(
                         LandscapeEventType.PLANT_GROUP_REMOVED: 0,
                         LandscapeEventType.PLANT_GROUP_ADDED: 1,
                         LandscapeEventType.PLANT_GROUP_UPDATED: 2,
+                        LandscapeEventType.ZONE_RECOMMISSIONED: 3,
                     }[event.event_type],
                     event.event_id,
                 ),
@@ -370,6 +372,85 @@ def remove_calibrated_baseline(
     return replace(
         profile,
         demand_sources=sources,
+        execution_authorized=False,
+        live_control_authorized=False,
+    )
+
+
+def zone_setup_is_unresolved(profile: CommissionedZoneProfile) -> bool:
+    """Return whether a physical zone has no current replaceable setup evidence."""
+
+    return bool(
+        not profile.landscape_profile.plant_groups
+        and not profile.plant_details
+        and len(profile.demand_sources) == 1
+        and profile.demand_sources[0].mode is ZoneDemandSourceMode.UNRESOLVED
+        and not profile.delivery_links
+        and not profile.conflicts
+        and not profile.conflict_resolutions
+    )
+
+
+def recommission_zone(
+    profile: CommissionedZoneProfile,
+    *,
+    event_id: str,
+    effective_at: datetime,
+) -> CommissionedZoneProfile:
+    """Retire the active setup while preserving physical identity and full evidence."""
+
+    if zone_setup_is_unresolved(profile):
+        raise ValueError("zone setup is already unresolved")
+    retired_setup = LandscapeSetupSnapshot(
+        landscape_profile=profile.landscape_profile,
+        plant_details=profile.plant_details,
+        demand_sources=profile.demand_sources,
+        delivery_links=profile.delivery_links,
+        conflicts=profile.conflicts,
+        conflict_resolutions=profile.conflict_resolutions,
+    )
+    event = LandscapeChangeEvent(
+        event_id=event_id,
+        event_type=LandscapeEventType.ZONE_RECOMMISSIONED,
+        effective_at=effective_at,
+        setup_snapshot=retired_setup,
+    )
+    landscape = profile.landscape_profile
+    reset_landscape = LandscapeIntelligenceProfile(
+        schema_version=landscape.schema_version,
+        area_slot=landscape.area_slot,
+        profile_status="not_set_up",
+        hydrozone_type=HydrozoneType.UNRESOLVED,
+        hydrozone_quality=HydrozoneQuality.UNRESOLVED,
+        irrigation_method="unresolved",
+        emitter_family="unresolved",
+        predominant_radius_ft=None,
+        predominant_emitter_color=None,
+        application_rate_status="unresolved",
+        plant_groups=(),
+        health_observations=(),
+        plant_factor_status="unresolved",
+        landscape_factor_status="unresolved",
+    )
+    return replace(
+        profile,
+        landscape_profile=reset_landscape,
+        plant_details=(),
+        demand_sources=(
+            ZoneDemandSource(
+                source_id=f"{profile.identity.zone_id}.source.unresolved",
+                mode=ZoneDemandSourceMode.UNRESOLVED,
+            ),
+        ),
+        delivery_links=(),
+        landscape_events=tuple(
+            sorted(
+                (*profile.landscape_events, event),
+                key=lambda item: (item.effective_at, item.event_id),
+            )
+        ),
+        conflicts=(),
+        conflict_resolutions=(),
         execution_authorized=False,
         live_control_authorized=False,
     )

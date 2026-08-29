@@ -22,7 +22,7 @@ from .models import (
     PlantGroup,
 )
 
-ZONE_COMMISSIONING_SCHEMA_VERSION = 6
+ZONE_COMMISSIONING_SCHEMA_VERSION = 7
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 
 
@@ -68,6 +68,7 @@ class LandscapeEventType(StrEnum):
     PLANT_GROUP_ADDED = "plant_group_added"
     PLANT_GROUP_UPDATED = "plant_group_updated"
     PLANT_GROUP_REMOVED = "plant_group_removed"
+    ZONE_RECOMMISSIONED = "zone_recommissioned"
 
 
 class DeliveryCompatibilityState(StrEnum):
@@ -414,17 +415,81 @@ class LandscapePlantSnapshot(SerializableCommissioningModel):
 
 
 @dataclass(frozen=True, slots=True)
+class LandscapeSetupSnapshot(SerializableCommissioningModel):
+    """Non-recursive evidence snapshot of one retired active zone setup."""
+
+    landscape_profile: LandscapeIntelligenceProfile
+    plant_details: tuple[PlantCommissioningDetails, ...]
+    demand_sources: tuple[ZoneDemandSource, ...]
+    delivery_links: tuple[IrrigationDeliveryLink, ...]
+    conflicts: tuple[CommissioningEvidenceConflict, ...]
+    conflict_resolutions: tuple[CommissioningConflictResolution, ...]
+
+    def __post_init__(self) -> None:
+        current_ids = {
+            item.plant_group_id for item in self.landscape_profile.plant_groups
+        }
+        detail_ids = tuple(item.plant_group_id for item in self.plant_details)
+        if len(detail_ids) != len(set(detail_ids)) or set(detail_ids) != current_ids:
+            raise ValueError("setup snapshot details must cover current plant groups")
+        for name, values in (
+            (
+                "setup snapshot demand source IDs",
+                tuple(item.source_id for item in self.demand_sources),
+            ),
+            (
+                "setup snapshot delivery link IDs",
+                tuple(item.link_id for item in self.delivery_links),
+            ),
+            (
+                "setup snapshot conflict IDs",
+                tuple(item.conflict_id for item in self.conflicts),
+            ),
+            (
+                "setup snapshot conflict resolution IDs",
+                tuple(item.resolution_id for item in self.conflict_resolutions),
+            ),
+        ):
+            if len(values) != len(set(values)):
+                raise ValueError(f"{name} must be unique")
+        if not self.demand_sources:
+            raise ValueError("setup snapshot requires at least one demand source")
+        if any(
+            group_id not in current_ids
+            for source in self.demand_sources
+            for group_id in source.plant_group_ids
+        ):
+            raise ValueError("setup snapshot demand source references an unknown plant")
+        if any(link.plant_group_id not in current_ids for link in self.delivery_links):
+            raise ValueError("setup snapshot delivery link references an unknown plant")
+        if any(conflict.plant_group_id not in current_ids for conflict in self.conflicts):
+            raise ValueError("setup snapshot conflict references an unknown plant")
+        conflict_ids = {item.conflict_id for item in self.conflicts}
+        resolved_ids = tuple(item.conflict_id for item in self.conflict_resolutions)
+        if any(conflict_id not in conflict_ids for conflict_id in resolved_ids):
+            raise ValueError("setup snapshot resolution references an unknown conflict")
+        if len(resolved_ids) != len(set(resolved_ids)):
+            raise ValueError("setup snapshot conflict may be resolved only once")
+
+
+@dataclass(frozen=True, slots=True)
 class LandscapeChangeEvent(SerializableCommissioningModel):
-    """Immutable add/remove history; current state is derived explicitly by the profile."""
+    """Immutable plant or zone-setup history separate from current active state."""
 
     event_id: str
     event_type: LandscapeEventType
     effective_at: datetime
-    plant_snapshot: LandscapePlantSnapshot
+    plant_snapshot: LandscapePlantSnapshot | None = None
+    setup_snapshot: LandscapeSetupSnapshot | None = None
 
     def __post_init__(self) -> None:
         _identifier("event_id", self.event_id)
         _timestamp("effective_at", self.effective_at)
+        if self.event_type is LandscapeEventType.ZONE_RECOMMISSIONED:
+            if self.setup_snapshot is None or self.plant_snapshot is not None:
+                raise ValueError("zone recommissioning requires only a setup snapshot")
+        elif self.plant_snapshot is None or self.setup_snapshot is not None:
+            raise ValueError("plant landscape events require only a plant snapshot")
 
 
 @dataclass(frozen=True, slots=True)

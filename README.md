@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.62 — Manual Stop Confirmation Hotfix**
+**v1.0.63 — Zone Recommissioning / Start Over**
 
 The current release:
 
@@ -71,10 +71,12 @@ The current release:
 - calibrates canonical irrigation components as unknown, manufacturer-rated, user-estimated, or measured while preserving raw volume-over-time measurements;
 - represents shared and dedicated plant-to-component delivery separately without inferring hydraulics, application depth, runtime, or execution authority;
 - preserves immutable landscape add/remove history and links plant groups to separate canonical water-delivery evidence;
+- lets a homeowner recommission a physical zone while preserving its canonical identity, display name, photos, reusable delivery profiles, and a complete immutable snapshot of the retired setup;
+- clears only the active replaceable plant, baseline, delivery-link, and conflict evidence, then reuses the existing simple setup path from an explicit unresolved state;
 - retains Zone 1 as a backward-compatible regression fixture rather than a per-property product architecture;
 - keeps scheduler/coordinator-loop actuation, general Live mode, autonomous scheduling, and `live_control_authorized` hard-coded `false`.
 
-See [`docs/V1_0_57_GUIDED_BASELINE_DELIVERY_CALIBRATION.md`](docs/V1_0_57_GUIDED_BASELINE_DELIVERY_CALIBRATION.md), [`docs/V1_0_56_ADVISORY_ENVIRONMENTAL_SCALING.md`](docs/V1_0_56_ADVISORY_ENVIRONMENTAL_SCALING.md), [`docs/V1_0_55_COMMISSIONING_COMPLETENESS_EVIDENCE_ADMISSION.md`](docs/V1_0_55_COMMISSIONING_COMPLETENESS_EVIDENCE_ADMISSION.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
+See [`docs/V1_0_63_ZONE_RECOMMISSIONING.md`](docs/V1_0_63_ZONE_RECOMMISSIONING.md), [`docs/V1_0_57_GUIDED_BASELINE_DELIVERY_CALIBRATION.md`](docs/V1_0_57_GUIDED_BASELINE_DELIVERY_CALIBRATION.md), [`docs/ROADMAP.md`](docs/ROADMAP.md), and [`PRODUCT_PRINCIPLES.md`](PRODUCT_PRINCIPLES.md) for the current release boundary and product rules.
 
 Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can reach. Home Assistant Cloud is optional. If no suitable URL is configured, IrrigationOS reports a repair warning and continues observing through polling.
 
@@ -88,6 +90,7 @@ The repository is currently private, so HACS publication and validation are defe
 
 Key documents:
 
+- [`docs/V1_0_63_ZONE_RECOMMISSIONING.md`](docs/V1_0_63_ZONE_RECOMMISSIONING.md)
 - [`docs/V1_0_57_GUIDED_BASELINE_DELIVERY_CALIBRATION.md`](docs/V1_0_57_GUIDED_BASELINE_DELIVERY_CALIBRATION.md)
 - [`docs/V1_0_56_ADVISORY_ENVIRONMENTAL_SCALING.md`](docs/V1_0_56_ADVISORY_ENVIRONMENTAL_SCALING.md)
 - [`docs/V1_0_55_COMMISSIONING_COMPLETENESS_EVIDENCE_ADMISSION.md`](docs/V1_0_55_COMMISSIONING_COMPLETENESS_EVIDENCE_ADMISSION.md)
@@ -130,7 +133,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation remains the default commissioned operating mode in v1.0.62. Zone management, photo references, water balances, production recommendations, commissioning profiles, completeness assessments, baseline scaling, calibration evidence, and delivery advisories never authorize autonomous execution. Guided observation is a separate explicit operator action bounded to three minutes, with no retry or restart restoration. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
+Observation remains the default commissioned operating mode in v1.0.63. Zone management, photo references, water balances, production recommendations, commissioning profiles, completeness assessments, baseline scaling, calibration evidence, and delivery advisories never authorize autonomous execution. Guided observation is a separate explicit operator action bounded to three minutes, with no retry or restart restoration. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
 
 Before dispatch, v1.0.41 retains the v1.0.40 requirement for aggregate health `HEALTHY`, a fresh confirmed canonical observation, current integrated supervised-safety prerequisites, commissioned controller ownership, acknowledged execution-boundary review, zero active watering, an online Rachio controller, an idle configured target, and durable privacy-safe audit intent. A second IrrigationOS-supervised operation cannot overlap an operation that is still awaiting terminal observation. Transport failures are never retried automatically. Accepted starts are observed asynchronously for `WATERING` then `IDLE`, written to separate supervised-operation audit and structured acceptance JSONL files, and exposed through restart-safe latest-result state.
 

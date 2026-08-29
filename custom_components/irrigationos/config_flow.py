@@ -91,6 +91,7 @@ from .landscape_intelligence import (
     resolve_identity_conflict,
     set_calibrated_baseline,
     update_delivery_link,
+    zone_setup_is_unresolved,
 )
 from .landscape_intelligence import (
     EstablishmentState as CommissioningEstablishmentState,
@@ -211,6 +212,7 @@ CONF_SIMPLE_SHARING = "simple_sharing"
 CONF_SIMPLE_PLANTS_PER_EMITTER = "simple_plants_per_emitter"
 CONF_SIMPLE_CONFIRM = "simple_confirm"
 CONF_MANAGE_ZONE_ACTION = "manage_zone_action"
+CONF_RECOMMISSION_CONFIRM = "recommission_confirm"
 CONF_MANAGE_PLANT = "manage_plant"
 CONF_ZONE_PHOTOS = "zone_photos"
 CONF_ZONE_PHOTO_NOTE = "zone_photo_note"
@@ -462,6 +464,7 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
         profile = manager.get_zone_by_slots(
             self._manage_controller_slot, self._manage_area_slot
         )
+        setup_unresolved = profile is not None and zone_setup_is_unresolved(profile)
         run = coordinator.guided_observation.snapshot
         active_here = (
             run.controller_slot == self._manage_controller_slot
@@ -476,10 +479,14 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
         actions: dict[str, str] = (
             {"setup": "Name / Set up this zone"}
             if profile is None
+            else {"setup": "Set up this zone"}
+            if setup_unresolved
             else {"rename": "Rename zone", "edit": "Edit setup"}
         )
         if profile is not None and profile.landscape_profile.plant_groups:
             actions["add_plant"] = "Add another plant"
+        if profile is not None and not setup_unresolved:
+            actions["recommission"] = "Start over / Recommission"
         actions.update(
             {
                 "stop" if active_here else "run": (
@@ -498,6 +505,9 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
         errors: dict[str, str] = {}
         if user_input is not None:
             action = str(user_input[CONF_MANAGE_ZONE_ACTION])
+            if action == "setup" and setup_unresolved:
+                self._manage_plant_group_id = "__add_new__"
+                return await self.async_step_commissioning_simple_input()
             if action in {"setup", "rename"}:
                 return await self.async_step_manage_zone_name()
             if action == "edit":
@@ -515,6 +525,8 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 return await self.async_step_manage_zone_photos()
             if action == "review":
                 return await self.async_step_manage_zone_review()
+            if action == "recommission":
+                return await self.async_step_manage_zone_recommission()
             if action == "advanced":
                 if profile is None:
                     return await self.async_step_commissioning()
@@ -551,6 +563,41 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 "zone_name": self._commissioning_area_name or "Zone",
                 "status": _plain_zone_status(profile),
             },
+        )
+
+    async def async_step_manage_zone_recommission(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Confirm replacement of current setup without changing physical identity."""
+
+        if self._manage_controller_slot is None or self._manage_area_slot is None:
+            return await self.async_step_manage_zones()
+        manager = self.config_entry.runtime_data.landscape_intelligence
+        profile = manager.get_zone_by_slots(
+            self._manage_controller_slot, self._manage_area_slot
+        )
+        if profile is None or zone_setup_is_unresolved(profile):
+            return await self.async_step_manage_zone()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if not bool(user_input[CONF_RECOMMISSION_CONFIRM]):
+                return await self.async_step_manage_zone()
+            saved = await manager.async_recommission_zone(
+                profile.identity.property_id,
+                profile.identity.zone_id,
+                event_id=f"event.{uuid4().hex}",
+                effective_at=datetime.now(UTC),
+            )
+            if saved:
+                return await self.async_step_manage_zone()
+            errors["base"] = "commissioning_persistence_failed"
+        return self.async_show_form(
+            step_id="manage_zone_recommission",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_RECOMMISSION_CONFIRM, default=False): bool}
+            ),
+            errors=errors,
+            description_placeholders={"zone_name": profile.display_name},
         )
 
     async def async_step_manage_zone_name(
@@ -2193,7 +2240,7 @@ def _merge_simple_update(
 
 def _plain_zone_status(profile: CommissionedZoneProfile | None) -> str:
     """Return a homeowner-facing setup status from canonical evidence."""
-    if profile is None:
+    if profile is None or zone_setup_is_unresolved(profile):
         return "Not set up"
     assessment = assess_commissioning(profile)
     resolved = {item.conflict_id for item in profile.conflict_resolutions}

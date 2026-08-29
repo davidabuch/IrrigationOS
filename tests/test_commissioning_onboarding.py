@@ -9,10 +9,14 @@ import pytest
 from tests.helpers import load_integration_module
 
 C = load_integration_module("landscape_intelligence.commissioning")
+E = load_integration_module("landscape_intelligence.editing")
 M = load_integration_module("landscape_intelligence.models")
 ONBOARDING = load_integration_module("landscape_intelligence.onboarding")
 P = load_integration_module("landscape_intelligence.persistence")
 Z = load_integration_module("landscape_intelligence.zone1")
+DELIVERY = load_integration_module("water_delivery.models")
+DELIVERY_CALIBRATION = load_integration_module("water_delivery.calibration")
+VISUAL = load_integration_module("visual_assessment.models")
 
 NOW = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
 
@@ -245,7 +249,7 @@ def test_schema_two_round_trip_and_deterministic_multi_property_order() -> None:
     )
     restored = P.restore_store_payload(payload, fallback_zone1=zone1)
 
-    assert payload["commissioning_store_schema_version"] == 7
+    assert payload["commissioning_store_schema_version"] == 8
     assert tuple(
         (zone.identity.property_id, zone.identity.zone_id) for zone in restored.zones
     ) == (
@@ -359,3 +363,176 @@ def test_legacy_and_v1052_payloads_migrate_without_zone1_evidence_loss() -> None
     assert next(
         zone for zone in v1056.zones if zone.identity.zone_id == "zone.2"
     ).schema_version == C.ZONE_COMMISSIONING_SCHEMA_VERSION
+
+    v1057_zone = deepcopy(_manual_zone().to_dict())
+    v1057_zone["schema_version"] = 5
+    v1057 = P.restore_store_payload(
+        {
+            "schema_version": 1,
+            "commissioning_store_schema_version": 6,
+            "zone_1": legacy_profile,
+            "commissioned_zones": [v1057_zone],
+            "deactivated_zones": [],
+            "water_delivery_profiles": [],
+        },
+        fallback_zone1=zone1,
+    )
+    assert v1057.migration_required is True
+    assert next(
+        zone for zone in v1057.zones if zone.identity.zone_id == "zone.2"
+    ).schema_version == C.ZONE_COMMISSIONING_SCHEMA_VERSION
+
+    v1062_zone = deepcopy(_manual_zone().to_dict())
+    v1062_zone["schema_version"] = 6
+    v1062 = P.restore_store_payload(
+        {
+            "schema_version": 1,
+            "commissioning_store_schema_version": 7,
+            "zone_1": legacy_profile,
+            "commissioned_zones": [v1062_zone],
+            "deactivated_zones": [],
+            "water_delivery_profiles": [],
+            "photo_evidence": [],
+        },
+        fallback_zone1=zone1,
+    )
+    assert v1062.migration_required is True
+    migrated_v1062 = next(
+        zone for zone in v1062.zones if zone.identity.zone_id == "zone.2"
+    )
+    assert migrated_v1062.schema_version == C.ZONE_COMMISSIONING_SCHEMA_VERSION
+    assert all(
+        event.event_type is not C.LandscapeEventType.ZONE_RECOMMISSIONED
+        for event in migrated_v1062.landscape_events
+    )
+
+
+def test_v1062_store_schema7_migrates_nonempty_evidence_losslessly() -> None:
+    zone1 = Z.build_zone_1_commissioning_profile(NOW)
+    zone = ONBOARDING.map_landscape_changes(
+        _manual_zone(),
+        additions=(
+            ONBOARDING.PlantAdditionInput(
+                "event.zone2.avocado.add",
+                _manual(
+                    "hass_avocado",
+                    "Hass avocado",
+                    "Persea americana Hass",
+                    M.EstablishmentState.NEWLY_PLANTED,
+                ),
+                NOW + timedelta(minutes=1),
+            ),
+        ),
+    )
+    zone = E.set_calibrated_baseline(
+        zone,
+        C.UserCalibratedBaseline(
+            720,
+            23.8888888889,
+            0,
+            "representative dry day",
+            NOW,
+            M.Confidence.HIGH,
+        ),
+    )
+    delivery = DELIVERY_CALIBRATION.calibrate_delivery_component(
+        DELIVERY_CALIBRATION.DeliveryComponentCalibrationRequest(
+            "delivery.zone.2",
+            "zone.2",
+            "component.zone2.microjet.shared",
+            "Shared microjet",
+            DELIVERY.WaterDeliveryType.MICROJET,
+            1,
+            DELIVERY.DeliveryEvidenceLevel.MEASURED,
+            NOW + timedelta(minutes=2),
+            collected_volume=1,
+            collected_volume_unit=DELIVERY.MeasurementUnit.US_GALLONS,
+            collection_duration_seconds=300,
+            radius_meters=0.9144,
+        )
+    )
+    zone = E.update_delivery_link(
+        zone,
+        C.IrrigationDeliveryLink(
+            "podocarpus.delivery",
+            "podocarpus",
+            C.DeliveryLinkStatus.DOCUMENTED,
+            delivery.profile_id,
+            (delivery.components[0].component_id,),
+            False,
+        ),
+    )
+    photo = VISUAL.PhotoEvidence(
+        evidence_id="evidence.zone2.overview",
+        area_id="zone.2",
+        evidence_type=VISUAL.PhotoEvidenceType.AREA_OVERVIEW,
+        captured_at=NOW + timedelta(minutes=3),
+        source=VISUAL.PhotoSource.USER_CAPTURE,
+        privacy_classification=VISUAL.PrivacyClassification.PRIVATE,
+        retention_policy=VISUAL.RetentionPolicy.UNTIL_DELETED,
+        content_reference="media-source://media_source/local/zone2-overview.jpg",
+        user_note="Zone 2 before v1.0.63 migration",
+        property_id="property.primary",
+    )
+    current_payload = P.build_store_payload(
+        (zone1, zone),
+        (),
+        legacy_zone1=zone1.to_landscape_intelligence_profile().to_dict(),
+        delivery_profiles=(delivery,),
+        photo_evidence=(photo,),
+    )
+    v1062_payload = deepcopy(current_payload)
+    v1062_payload["commissioning_store_schema_version"] = 7
+    for item in v1062_payload["commissioned_zones"]:
+        item["schema_version"] = 6
+        for event in item["landscape_events"]:
+            event.pop("setup_snapshot", None)
+    assert v1062_payload["photo_evidence"]
+    assert v1062_payload["water_delivery_profiles"]
+    assert v1062_payload["commissioned_zones"][1]["landscape_events"]
+    assert "setup_snapshot" not in repr(v1062_payload)
+    assert "zone_recommissioned" not in repr(v1062_payload)
+
+    migrated = P.restore_store_payload(v1062_payload, fallback_zone1=zone1)
+    migrated_zone = next(
+        item for item in migrated.zones if item.identity.zone_id == "zone.2"
+    )
+
+    assert migrated.migration_required is True
+    assert migrated_zone == zone
+    assert migrated_zone.identity == zone.identity
+    assert migrated_zone.display_name == zone.display_name
+    assert migrated_zone.landscape_profile == zone.landscape_profile
+    assert migrated_zone.plant_details == zone.plant_details
+    assert migrated_zone.demand_sources == zone.demand_sources
+    assert migrated_zone.delivery_links == zone.delivery_links
+    assert migrated_zone.landscape_events == zone.landscape_events
+    assert migrated.delivery_profiles == (delivery,)
+    assert migrated.delivery_profiles[0].components[0].calibration_ids
+    assert migrated.delivery_profiles[0].calibrations
+    assert migrated.photo_evidence == (photo,)
+    assert migrated.photo_evidence[0].content_reference == (
+        "media-source://media_source/local/zone2-overview.jpg"
+    )
+    assert all(
+        event.event_type is not C.LandscapeEventType.ZONE_RECOMMISSIONED
+        for event in migrated_zone.landscape_events
+    )
+    assert E.zone_setup_is_unresolved(migrated_zone) is False
+    assert migrated_zone.execution_authorized is False
+    assert migrated_zone.live_control_authorized is False
+
+    schema8_payload = P.build_store_payload(
+        migrated.zones,
+        migrated.deactivated_zones,
+        legacy_zone1=migrated.legacy_zone1,
+        delivery_profiles=migrated.delivery_profiles,
+        photo_evidence=migrated.photo_evidence,
+    )
+    round_trip = P.restore_store_payload(schema8_payload, fallback_zone1=zone1)
+    assert round_trip.migration_required is False
+    assert round_trip.zones == migrated.zones
+    assert round_trip.deactivated_zones == migrated.deactivated_zones
+    assert round_trip.delivery_profiles == migrated.delivery_profiles
+    assert round_trip.photo_evidence == migrated.photo_evidence
+    assert round_trip.legacy_zone1 == migrated.legacy_zone1

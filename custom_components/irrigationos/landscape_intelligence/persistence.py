@@ -31,6 +31,7 @@ from .commissioning import (
     LandscapeChangeEvent,
     LandscapeEventType,
     LandscapePlantSnapshot,
+    LandscapeSetupSnapshot,
     PlantCommissioningDetails,
     UserCalibratedBaseline,
     ZoneDemandSource,
@@ -49,7 +50,7 @@ from .models import (
     PlantHealthObservation,
 )
 
-COMMISSIONING_STORE_SCHEMA_VERSION = 7
+COMMISSIONING_STORE_SCHEMA_VERSION = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,16 +323,6 @@ def _plant_snapshot(value: object) -> LandscapePlantSnapshot:
     )
 
 
-def _landscape_event(value: object) -> LandscapeChangeEvent:
-    item = _mapping("landscape change event", value)
-    return LandscapeChangeEvent(
-        event_id=str(item["event_id"]),
-        event_type=LandscapeEventType(str(item["event_type"])),
-        effective_at=_datetime(item["effective_at"]),
-        plant_snapshot=_plant_snapshot(item["plant_snapshot"]),
-    )
-
-
 def _conflict_candidate(value: object) -> CommissioningConflictCandidate:
     item = _mapping("commissioning conflict candidate", value)
     return CommissioningConflictCandidate(
@@ -370,11 +361,58 @@ def _conflict_resolution(value: object) -> CommissioningConflictResolution:
     )
 
 
+def _setup_snapshot(value: object) -> LandscapeSetupSnapshot:
+    item = _mapping("landscape setup snapshot", value)
+    return LandscapeSetupSnapshot(
+        landscape_profile=_landscape_profile(item["landscape_profile"]),
+        plant_details=tuple(
+            _plant_details(details)
+            for details in _sequence("setup snapshot plant_details", item["plant_details"])
+        ),
+        demand_sources=tuple(
+            _demand_source(source)
+            for source in _sequence("setup snapshot demand_sources", item["demand_sources"])
+        ),
+        delivery_links=tuple(
+            _delivery_link(link)
+            for link in _sequence("setup snapshot delivery_links", item["delivery_links"])
+        ),
+        conflicts=tuple(
+            _conflict(conflict)
+            for conflict in _sequence("setup snapshot conflicts", item["conflicts"])
+        ),
+        conflict_resolutions=tuple(
+            _conflict_resolution(resolution)
+            for resolution in _sequence(
+                "setup snapshot conflict_resolutions",
+                item["conflict_resolutions"],
+            )
+        ),
+    )
+
+
+def _landscape_event(value: object) -> LandscapeChangeEvent:
+    item = _mapping("landscape change event", value)
+    plant_snapshot = item.get("plant_snapshot")
+    setup_snapshot = item.get("setup_snapshot")
+    return LandscapeChangeEvent(
+        event_id=str(item["event_id"]),
+        event_type=LandscapeEventType(str(item["event_type"])),
+        effective_at=_datetime(item["effective_at"]),
+        plant_snapshot=(
+            None if plant_snapshot is None else _plant_snapshot(plant_snapshot)
+        ),
+        setup_snapshot=(
+            None if setup_snapshot is None else _setup_snapshot(setup_snapshot)
+        ),
+    )
+
+
 def commissioned_zone_from_dict(value: object) -> CommissionedZoneProfile:
     """Restore supported commissioned-zone data through additive migration."""
     item = _mapping("commissioned zone", value)
     source_schema = int(item["schema_version"])
-    if source_schema not in {1, 2, 3, 4, ZONE_COMMISSIONING_SCHEMA_VERSION}:
+    if source_schema not in {1, 2, 3, 4, 5, 6, ZONE_COMMISSIONING_SCHEMA_VERSION}:
         raise ValueError("commissioned zone schema is unsupported")
     identity = _mapping("canonical zone identity", item["identity"])
     return CommissionedZoneProfile(
@@ -465,7 +503,16 @@ def restore_store_payload(
     if int(item.get("schema_version", 1)) != 1:
         raise ValueError("legacy landscape intelligence schema is unsupported")
     payload_schema = int(item.get("commissioning_store_schema_version", 1))
-    if payload_schema not in {1, 2, 3, 4, 5, 6, COMMISSIONING_STORE_SCHEMA_VERSION}:
+    if payload_schema not in {
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        COMMISSIONING_STORE_SCHEMA_VERSION,
+    }:
         raise ValueError("commissioning Store schema is unsupported")
     if (
         payload_schema == COMMISSIONING_STORE_SCHEMA_VERSION
