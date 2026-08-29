@@ -17,6 +17,7 @@ from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import CONF_NAME, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
@@ -952,6 +953,31 @@ async def test_manual_duration_drives_valve_runtime_and_restores(
         blocking=True,
     )
     assert stop_calls == [(1, 1)]
+
+    async def _unconfirmed_stop(
+        coordinator: object, *, controller_slot: int, area_slot: int
+    ) -> SupervisedOperationResult:
+        del coordinator
+        return SupervisedOperationResult(
+            status=SupervisedOperationStatus.STOP_UNCONFIRMED,
+            blocker_codes=("stop_outcome_not_observed",),
+            operation_id="manual-test",
+            controller_slot=controller_slot,
+            area_slot=area_slot,
+            runtime_seconds=900,
+        )
+
+    monkeypatch.setattr(
+        "custom_components.irrigationos.valve.async_stop_manual_operation",
+        _unconfirmed_stop,
+    )
+    with pytest.raises(HomeAssistantError, match="stop_outcome_not_observed"):
+        await hass.services.async_call(
+            "valve",
+            "close_valve",
+            {"entity_id": "valve.zone_1_manual_watering"},
+            blocking=True,
+        )
 
     await hass.services.async_call(
         "number",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -120,6 +121,34 @@ def _dispatch_coordinator(tmp_path: Path, monkeypatch: Any) -> Any:
         sys.modules, "homeassistant.helpers.aiohttp_client", aiohttp_client
     )
     return coordinator
+
+
+def _with_area_state(
+    snapshot: Any,
+    *,
+    area_slot: int,
+    state: Any,
+) -> Any:
+    controller = snapshot.controllers[0]
+    areas = tuple(
+        replace(area, state=state) if area.slot_number == area_slot else area
+        for area in controller.areas
+    )
+    now = datetime.now(UTC)
+    return replace(
+        snapshot,
+        controllers=(replace(controller, areas=areas),),
+        observation=replace(
+            snapshot.observation,
+            observed_at=now,
+            fresh_until=now + timedelta(minutes=5),
+            quality=ObservationQuality.CONFIRMED,
+        ),
+    )
+
+
+async def _no_sleep(_seconds: float) -> None:
+    return None
 
 
 def test_operator_module_import_does_not_require_home_assistant() -> None:
@@ -468,6 +497,160 @@ async def test_manual_stop_uses_controller_wide_adapter_and_clears_transient_sta
     assert result.status is SupervisedOperationStatus.STOP_DISPATCHED
     assert len(coordinator.adapter.stop_calls) == 1
     assert coordinator.supervised_operation.in_progress is False
+
+
+async def test_manual_stop_waits_for_delayed_confirmed_idle_without_transport_retry(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+    coordinator.data = _with_area_state(
+        coordinator.data,
+        area_slot=2,
+        state=IrrigationAreaState.WATERING,
+    )
+    coordinator.supervised_operation.mark_dispatched(
+        "manual-stop-delayed",
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=180,
+    )
+    refresh_count = 0
+
+    async def _refresh() -> None:
+        nonlocal refresh_count
+        refresh_count += 1
+        state = (
+            IrrigationAreaState.WATERING
+            if refresh_count < 3
+            else IrrigationAreaState.IDLE
+        )
+        coordinator.data = _with_area_state(
+            coordinator.data,
+            area_slot=2,
+            state=state,
+        )
+
+    coordinator.async_request_refresh = _refresh
+    monkeypatch.setattr(operator.asyncio, "sleep", _no_sleep)
+
+    result = await operator.async_stop_manual_operation(
+        coordinator, controller_slot=1, area_slot=2
+    )
+
+    assert result.status is SupervisedOperationStatus.STOP_DISPATCHED
+    assert refresh_count == 3
+    assert len(coordinator.adapter.stop_calls) == 1
+    assert coordinator.supervised_operation.in_progress is False
+    audit_path = tmp_path / "irrigationos_logs" / "supervised_operation_audit.jsonl"
+    audit_content = audit_path.read_text(encoding="utf-8")
+    assert audit_content.count('"event_type":"stop_intent"') == 1
+    assert audit_content.count('"event_type":"stop_transport_outcome"') == 1
+
+
+async def test_manual_stop_timeout_preserves_active_monitor_without_transport_retry(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+    coordinator.data = _with_area_state(
+        coordinator.data,
+        area_slot=2,
+        state=IrrigationAreaState.WATERING,
+    )
+    coordinator.supervised_operation.mark_dispatched(
+        "manual-stop-unconfirmed",
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=180,
+    )
+
+    async def _monitor() -> None:
+        await asyncio.Event().wait()
+
+    monitor_task = asyncio.create_task(_monitor())
+    coordinator.supervised_operation.attach_monitor(
+        "manual-stop-unconfirmed", monitor_task
+    )
+    refresh_count = 0
+
+    async def _refresh() -> None:
+        nonlocal refresh_count
+        refresh_count += 1
+        coordinator.data = _with_area_state(
+            coordinator.data,
+            area_slot=2,
+            state=IrrigationAreaState.WATERING,
+        )
+
+    coordinator.async_request_refresh = _refresh
+    monkeypatch.setattr(operator.asyncio, "sleep", _no_sleep)
+
+    result = await operator.async_stop_manual_operation(
+        coordinator, controller_slot=1, area_slot=2
+    )
+
+    assert result.status is SupervisedOperationStatus.STOP_UNCONFIRMED
+    assert result.blocker_codes == ("stop_outcome_not_observed",)
+    assert refresh_count == 11
+    assert len(coordinator.adapter.stop_calls) == 1
+    assert coordinator.supervised_operation.in_progress is True
+    assert monitor_task.done() is False
+    await coordinator.supervised_operation.async_cancel_monitor(
+        "manual-stop-unconfirmed"
+    )
+
+
+async def test_manual_stop_tolerates_refresh_failure_before_confirmed_idle(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+    coordinator.data = _with_area_state(
+        coordinator.data,
+        area_slot=2,
+        state=IrrigationAreaState.WATERING,
+    )
+    coordinator.supervised_operation.mark_dispatched(
+        "manual-stop-refresh-failure",
+        controller_slot=1,
+        area_slot=2,
+        runtime_seconds=180,
+    )
+    refresh_count = 0
+
+    async def _refresh() -> None:
+        nonlocal refresh_count
+        refresh_count += 1
+        if refresh_count == 1:
+            raise RuntimeError("temporary refresh failure")
+        coordinator.data = _with_area_state(
+            coordinator.data,
+            area_slot=2,
+            state=IrrigationAreaState.IDLE,
+        )
+
+    coordinator.async_request_refresh = _refresh
+    monkeypatch.setattr(operator.asyncio, "sleep", _no_sleep)
+
+    result = await operator.async_stop_manual_operation(
+        coordinator, controller_slot=1, area_slot=2
+    )
+
+    assert result.status is SupervisedOperationStatus.STOP_DISPATCHED
+    assert refresh_count == 2
+    assert len(coordinator.adapter.stop_calls) == 1
+
+
+async def test_manual_stop_already_inactive_never_dispatches_transport(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    coordinator = _dispatch_coordinator(tmp_path, monkeypatch)
+
+    result = await operator.async_stop_manual_operation(
+        coordinator, controller_slot=1, area_slot=2
+    )
+
+    assert result.status is SupervisedOperationStatus.BLOCKED
+    assert result.blocker_codes == ("manual_watering_not_active",)
+    assert coordinator.adapter.stop_calls == []
 
 
 async def test_manual_stop_wrong_zone_fails_closed_without_transport(

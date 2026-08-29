@@ -1,5 +1,11 @@
 # IrrigationOS Roadmap
 
+## v1.0.62 — Manual Stop Confirmation Hotfix
+
+- Allows a strictly bounded ten-second observation window for cloud/controller state to confirm an accepted operator stop.
+- Repeats canonical observation only; the controller-wide stop transport remains a single no-retry attempt.
+- Preserves fail-closed unconfirmed-stop behavior, active monitor ownership, and all manual-watering authority boundaries.
+
 ## v1.0.61 — Zone Setup UX & Native Manual Zone Controls
 
 - Makes **Manage zones** the permanent homeowner entry point for initial setup, later updates, photos, review, and Advanced tools.
@@ -110,7 +116,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.61
+- **Installable Home Assistant release:** v1.0.62
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
