@@ -437,7 +437,11 @@ def map_landscape_changes(
     updated_landscape = LandscapeIntelligenceProfile(
         landscape.schema_version,
         landscape.area_slot,
-        landscape.profile_status,
+        (
+            "onboarded"
+            if ordered_groups and landscape.profile_status == "not_set_up"
+            else landscape.profile_status
+        ),
         (
             HydrozoneType.UNRESOLVED
             if not ordered_groups
@@ -479,9 +483,12 @@ def map_landscape_changes(
                 events,
                 key=lambda event: (
                     event.effective_at,
-                    0
-                    if event.event_type is LandscapeEventType.PLANT_GROUP_REMOVED
-                    else 1,
+                    {
+                        LandscapeEventType.PLANT_GROUP_REMOVED: 0,
+                        LandscapeEventType.PLANT_GROUP_ADDED: 1,
+                        LandscapeEventType.PLANT_GROUP_UPDATED: 2,
+                        LandscapeEventType.ZONE_RECOMMISSIONED: 3,
+                    }[event.event_type],
                     event.event_id,
                 ),
             )

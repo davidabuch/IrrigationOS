@@ -53,6 +53,7 @@ from custom_components.irrigationos.config_flow import (
     CONF_COMMISSIONING_ZONE_NAME,
     CONF_MANAGE_ZONE_ACTION,
     CONF_OPTIONS_ACTION,
+    CONF_RECOMMISSION_CONFIRM,
     CONF_SIMPLE_CONFIRM,
     CONF_SIMPLE_CONTAINER_GALLONS,
     CONF_SIMPLE_DELIVERY_TYPE,
@@ -88,10 +89,12 @@ from custom_components.irrigationos.landscape_intelligence import (
     CanonicalZoneIdentity,
     Confidence,
     EstablishmentState,
+    LandscapeEventType,
     PlantAdditionInput,
     UserCalibratedBaseline,
     ZoneDemandSourceMode,
     add_plant_group,
+    zone_setup_is_unresolved,
 )
 from custom_components.irrigationos.landscape_intelligence.manager import (
     LandscapeIntelligenceManager,
@@ -566,6 +569,187 @@ async def test_zone_home_add_plant_reuses_simple_canonical_merge(
 
 
 @pytest.mark.asyncio
+async def test_zone_home_recommission_is_confirmed_atomic_and_reuses_setup(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = LandscapeIntelligenceManager(hass, "zone-recommission")
+    store = _Store(None)
+    manager._store = store  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    original = manager.get_zone("property.primary", "zone.1")
+    assert original is not None
+    original = replace(original, display_name="Front Planters")
+    delivery = calibrate_delivery_component(
+        DeliveryComponentCalibrationRequest(
+            "zone1.delivery.microjet",
+            "zone.1",
+            "zone1.component.fig",
+            "Fig microjet",
+            WaterDeliveryType.MICROJET,
+            1,
+            DeliveryEvidenceLevel.UNKNOWN,
+            NOW,
+        )
+    )
+    assert await manager.async_update_zone_and_delivery_profile(original, delivery)
+    assert await manager.async_add_zone(_zone2())
+    area_binding = object()
+    areas = (
+        SimpleNamespace(
+            configured=True,
+            enabled=True,
+            binding=area_binding,
+            slot_number=1,
+            vendor_name="Native Zone 1",
+            name="Zone 1",
+        ),
+        SimpleNamespace(
+            configured=True,
+            enabled=True,
+            binding=object(),
+            slot_number=2,
+            vendor_name="Native Zone 2",
+            name="Zone 2",
+        ),
+    )
+    runtime = SimpleNamespace(
+        landscape_intelligence=manager,
+        data=SimpleNamespace(controllers=(SimpleNamespace(areas=areas),)),
+        guided_observation=GuidedObservationManager(),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = runtime
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+    await flow.async_step_manage_zones({CONF_COMMISSIONING_TARGET: "1|1"})
+    await flow.async_step_manage_zone_photos(
+        {
+            CONF_ZONE_PHOTOS: {
+                "media_content_id": "media-source://media_source/local/zone1-before.jpg"
+            },
+            CONF_ZONE_PHOTO_NOTE: "Before recommissioning",
+            CONF_ZONE_PHOTO_RUNNING: False,
+        }
+    )
+    before = manager.get_zone("property.primary", "zone.1")
+    zone2_before = manager.get_zone("property.primary", "zone.2")
+    photos_before = manager.photos_for_zone("property.primary", "zone.1")
+    profiles_before = manager.delivery_profiles
+    assert before is not None
+    assert zone2_before is not None
+    saves_before = len(store.saved)
+
+    async def unexpected_command(*args: Any, **kwargs: Any) -> Any:
+        raise AssertionError("recommissioning must not issue watering commands")
+
+    monkeypatch.setattr(
+        config_flow_module, "async_start_guided_observation", unexpected_command
+    )
+    monkeypatch.setattr(
+        config_flow_module, "async_stop_guided_observation", unexpected_command
+    )
+
+    home = await flow.async_step_manage_zone()
+    assert _manage_zone_actions(home)["recommission"] == "Start over / Recommission"
+    confirm = await flow.async_step_manage_zone(
+        {CONF_MANAGE_ZONE_ACTION: "recommission"}
+    )
+    assert confirm["step_id"] == "manage_zone_recommission"
+    assert voluptuous_serialize.convert(
+        confirm["data_schema"], custom_serializer=cv.custom_serializer
+    )
+    assert manager.get_zone("property.primary", "zone.1") == before
+    assert len(store.saved) == saves_before
+
+    cancelled = await flow.async_step_manage_zone_recommission(
+        {CONF_RECOMMISSION_CONFIRM: False}
+    )
+    assert cancelled["step_id"] == "manage_zone"
+    assert manager.get_zone("property.primary", "zone.1") == before
+    assert len(store.saved) == saves_before
+
+    store.fail_save = True
+    failed = await flow.async_step_manage_zone_recommission(
+        {CONF_RECOMMISSION_CONFIRM: True}
+    )
+    assert failed["errors"] == {"base": "commissioning_persistence_failed"}
+    assert manager.get_zone("property.primary", "zone.1") == before
+    assert store.value == store.saved[-1]
+    assert len(store.saved) == saves_before
+
+    store.fail_save = False
+    completed = await flow.async_step_manage_zone_recommission(
+        {CONF_RECOMMISSION_CONFIRM: True}
+    )
+    assert completed["step_id"] == "manage_zone"
+    assert len(store.saved) == saves_before + 1
+    reset = manager.get_zone("property.primary", "zone.1")
+    assert reset is not None
+    assert reset.identity == before.identity
+    assert reset.display_name == "Front Planters"
+    assert reset.landscape_profile.plant_groups == ()
+    assert reset.plant_details == ()
+    assert reset.delivery_links == ()
+    assert zone_setup_is_unresolved(reset)
+    assert reset.landscape_events[-1].event_type is LandscapeEventType.ZONE_RECOMMISSIONED
+    assert reset.landscape_events[-1].setup_snapshot is not None
+    assert manager.get_zone("property.primary", "zone.2") == zone2_before
+    assert manager.delivery_profiles == profiles_before
+    assert manager.photos_for_zone("property.primary", "zone.1") == photos_before
+    assert areas[0].binding is area_binding
+    assert reset.execution_authorized is False
+    assert reset.live_control_authorized is False
+
+    reset_actions = _manage_zone_actions(completed)
+    assert reset_actions["setup"] == "Set up this zone"
+    assert "recommission" not in reset_actions
+    assert "add_plant" not in reset_actions
+    choices = _form_choices(
+        await flow.async_step_manage_zones(), CONF_COMMISSIONING_TARGET
+    )
+    assert choices["1|1"] == "Front Planters — Not set up"
+
+    await flow.async_step_manage_zones({CONF_COMMISSIONING_TARGET: "1|1"})
+    setup = await flow.async_step_manage_zone({CONF_MANAGE_ZONE_ACTION: "setup"})
+    assert setup["step_id"] == "commissioning_simple_input"
+    review = await flow.async_step_commissioning_simple_input(
+        {
+            CONF_SIMPLE_DESCRIPTION: "A newly planted Hass avocado",
+            CONF_SIMPLE_PLANT_NAME: "Hass avocado",
+            CONF_SIMPLE_PLANTED_DATE: "2026-08-17",
+            CONF_SIMPLE_CONTAINER_GALLONS: 5,
+            CONF_SIMPLE_HEIGHT_FEET: 4,
+            CONF_SIMPLE_DELIVERY_TYPE: "unknown",
+            CONF_SIMPLE_EMITTER_CLASS: "",
+            CONF_SIMPLE_THROW_FEET: "",
+            CONF_SIMPLE_SPRAY_PATTERN: "unknown",
+            CONF_SIMPLE_SHARING: "unknown",
+            CONF_SIMPLE_PLANTS_PER_EMITTER: "",
+        }
+    )
+    assert review["step_id"] == "commissioning_simple_review"
+    saved = await flow.async_step_commissioning_simple_review(
+        {CONF_SIMPLE_CONFIRM: True}
+    )
+    assert saved["type"] == "create_entry"
+    recommissioned = manager.get_zone("property.primary", "zone.1")
+    assert recommissioned is not None
+    assert recommissioned.identity == before.identity
+    assert recommissioned.display_name == "Front Planters"
+    assert recommissioned.landscape_profile.profile_status == "onboarded"
+    assert tuple(
+        plant.common_name for plant in recommissioned.landscape_profile.plant_groups
+    ) == ("Hass avocado",)
+    assert any(
+        event.event_type is LandscapeEventType.ZONE_RECOMMISSIONED
+        for event in recommissioned.landscape_events
+    )
+
+
+@pytest.mark.asyncio
 async def test_manage_zone_identification_runs_30_seconds_stops_and_repeats(
     hass: HomeAssistant,
     monkeypatch: pytest.MonkeyPatch,
@@ -818,7 +1002,7 @@ async def test_legacy_schema_one_zone1_store_migrates_additively(
 
     assert len(store.saved) == 1
     assert store.value is not None
-    assert store.value["commissioning_store_schema_version"] == 7
+    assert store.value["commissioning_store_schema_version"] == 8
     assert store.value["zone_1"] == old_zone1
     assert manager.zone1.area_slot == 1
     assert tuple(zone.identity.area_slot for zone in manager.commissioned_zones) == (1,)
@@ -918,7 +1102,7 @@ async def test_diagnostics_are_canonical_compact_and_confidence_preserved(
     assert await manager.async_add_zone(_zone2())
 
     summary = manager.diagnostics()["commissioning_summary"]
-    assert summary["store_schema_version"] == 7
+    assert summary["store_schema_version"] == 8
     assert summary["commissioned_zone_count"] == 2
     assert summary["legacy_zone_1_compatible"] is True
     assert summary["zones"][1]["identity"] == {

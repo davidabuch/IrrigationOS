@@ -1,3 +1,19 @@
+## [1.0.63] - 2026-08-29
+
+### Added
+
+- A confirmed **Start over / Recommission** action on the existing Zone Home.
+- An immutable zone-setup retirement event that preserves the complete prior active setup while leaving the physical zone active.
+
+### Changed
+
+- Commissioning model schema advances from 6 to 7 and Store schema from 7 to 8 through additive migration.
+- A recommissioned zone returns to an explicit unresolved state and reuses the existing simple setup workflow.
+
+### Safety
+
+- Recommissioning changes evidence only. It preserves zone identity, photos, reusable delivery profiles, and all command/no-retry boundaries, and cannot start or stop watering.
+
 ## [1.0.60] - 2026-08-25
 
 ### Added

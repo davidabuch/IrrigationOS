@@ -21,7 +21,12 @@ from .commissioning import (
     DeactivatedCommissionedZone,
     assess_delivery_compatibility,
 )
-from .editing import CommissionedZoneReview, build_commissioning_review
+from .editing import (
+    CommissionedZoneReview,
+    build_commissioning_review,
+    recommission_zone,
+    zone_setup_is_unresolved,
+)
 from .factor_resolution import ZoneFactorResolution, resolve_zone_factor
 from .models import HealthState, LandscapeIntelligenceProfile, summarize_health
 from .persistence import (
@@ -222,6 +227,28 @@ class LandscapeIntelligenceManager:
         if self.get_zone(profile.identity.property_id, profile.identity.zone_id) is None:
             return await self.async_add_zone(profile)
         return await self.async_update_zone(profile)
+
+    async def async_recommission_zone(
+        self,
+        property_id: str,
+        zone_id: str,
+        *,
+        event_id: str,
+        effective_at: datetime,
+    ) -> bool:
+        """Atomically retire one active setup while preserving its physical zone."""
+
+        profile = self.get_zone(property_id, zone_id)
+        if profile is None or zone_setup_is_unresolved(profile):
+            return False
+        candidate = recommission_zone(
+            profile,
+            event_id=event_id,
+            effective_at=effective_at,
+        )
+        key = _key(profile)
+        zones = tuple(candidate if _key(item) == key else item for item in self._zones)
+        return await self._async_save(zones, self._deactivated_zones)
 
     async def async_update_zone_and_delivery_profile(
         self,

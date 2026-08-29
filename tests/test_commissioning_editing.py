@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
+
+import pytest
 
 from tests.helpers import load_integration_module
 
@@ -13,6 +16,16 @@ P = load_integration_module("landscape_intelligence.persistence")
 Z = load_integration_module("landscape_intelligence.zone1")
 
 NOW = datetime(2026, 8, 24, 18, 0, tzinfo=UTC)
+
+
+def _contains_mapping_key(value: object, key: str) -> bool:
+    if isinstance(value, dict):
+        return key in value or any(
+            _contains_mapping_key(item, key) for item in value.values()
+        )
+    if isinstance(value, list):
+        return any(_contains_mapping_key(item, key) for item in value)
+    return False
 
 
 def _manual(
@@ -279,6 +292,297 @@ def test_removing_only_baseline_leaves_explicit_unresolved_demand() -> None:
     assert removed.execution_authorized is False
 
 
+def test_recommission_retires_full_setup_and_preserves_physical_identity() -> None:
+    profile = _zone()
+    profile = E.update_delivery_link(
+        profile,
+        C.IrrigationDeliveryLink(
+            "zone.front.plant.1.delivery",
+            "zone.front.plant.1",
+            C.DeliveryLinkStatus.DOCUMENTED,
+            "delivery.front.shared",
+            ("component.front.shared",),
+            False,
+        ),
+    )
+    profile = E.set_calibrated_baseline(
+        profile,
+        C.UserCalibratedBaseline(
+            720,
+            23.8888888889,
+            0,
+            "dry reference",
+            NOW,
+            M.Confidence.HIGH,
+        ),
+    )
+    conflict = C.CommissioningEvidenceConflict(
+        "zone.front.conflict.identity",
+        "zone.front.plant.1",
+        "plant.identity",
+        (
+            C.CommissioningConflictCandidate(
+                C.CommissioningEvidenceSource.USER_CONFIRMED,
+                "Podocarpus",
+                M.Confidence.HIGH,
+            ),
+            C.CommissioningConflictCandidate(
+                C.CommissioningEvidenceSource.AI_INFERRED,
+                "Yew",
+                M.Confidence.MODERATE,
+                ("evidence.photo.1",),
+            ),
+        ),
+        "User and visual identities disagree.",
+    )
+    resolution = C.CommissioningConflictResolution(
+        "zone.front.resolution.identity",
+        conflict.conflict_id,
+        "Podocarpus",
+        NOW + timedelta(minutes=1),
+        C.CommissioningEvidenceSource.USER_CONFIRMED,
+        M.Confidence.HIGH,
+    )
+    profile = replace(
+        profile,
+        display_name="Front Planters",
+        conflicts=(conflict,),
+        conflict_resolutions=(resolution,),
+    )
+
+    reset = E.recommission_zone(
+        profile,
+        event_id="event.front.recommission",
+        effective_at=NOW + timedelta(days=1),
+    )
+
+    assert reset.identity == profile.identity
+    assert reset.display_name == "Front Planters"
+    assert reset.landscape_profile.area_slot == profile.landscape_profile.area_slot
+    assert reset.landscape_profile.profile_status == "not_set_up"
+    assert reset.landscape_profile.plant_groups == ()
+    assert reset.landscape_profile.health_observations == ()
+    assert reset.plant_details == ()
+    assert reset.delivery_links == ()
+    assert reset.conflicts == ()
+    assert reset.conflict_resolutions == ()
+    assert len(reset.demand_sources) == 1
+    assert reset.demand_sources[0].mode is C.ZoneDemandSourceMode.UNRESOLVED
+    assert reset.execution_authorized is False
+    assert reset.live_control_authorized is False
+    event = reset.landscape_events[-1]
+    assert event.event_type is C.LandscapeEventType.ZONE_RECOMMISSIONED
+    assert event.plant_snapshot is None
+    assert event.setup_snapshot is not None
+    assert event.setup_snapshot.landscape_profile == profile.landscape_profile
+    assert event.setup_snapshot.plant_details == profile.plant_details
+    assert event.setup_snapshot.demand_sources == profile.demand_sources
+    assert event.setup_snapshot.delivery_links == profile.delivery_links
+    assert event.setup_snapshot.conflicts == profile.conflicts
+    assert event.setup_snapshot.conflict_resolutions == profile.conflict_resolutions
+    assert E.zone_setup_is_unresolved(reset)
+
+
+def test_recommission_round_trip_retains_history_and_rejects_repeat() -> None:
+    zone1 = Z.build_zone_1_commissioning_profile(NOW)
+    original = _add(
+        _zone(),
+        _manual("zone.front.plant.2", "Companion shrub"),
+        "event.front.companion.add",
+        NOW + timedelta(minutes=1),
+    )
+    reset = E.recommission_zone(
+        original,
+        event_id="event.front.recommission",
+        effective_at=NOW + timedelta(days=1),
+    )
+    payload = P.build_store_payload(
+        (reset, zone1),
+        (),
+        legacy_zone1=zone1.landscape_profile.to_dict(),
+    )
+    restored = P.restore_store_payload(payload, fallback_zone1=zone1)
+    restored_reset = next(
+        zone for zone in restored.zones if zone.identity.zone_id == "zone.front"
+    )
+
+    assert payload["commissioning_store_schema_version"] == 8
+    assert restored_reset == reset
+    assert restored_reset.landscape_events[0] == original.landscape_events[0]
+    retired = restored_reset.landscape_events[-1].setup_snapshot
+    assert retired is not None
+    assert tuple(
+        plant.common_name for plant in retired.landscape_profile.plant_groups
+    ) == ("Podocarpus", "Companion shrub")
+    with pytest.raises(ValueError, match="already unresolved"):
+        E.recommission_zone(
+            restored_reset,
+            event_id="event.front.recommission.again",
+            effective_at=NOW + timedelta(days=2),
+        )
+
+
+def test_recommission_generations_preserve_independent_setup_history() -> None:
+    identity = C.CanonicalZoneIdentity("property.example", "zone.front", 1, 2)
+    setup_a = E.set_calibrated_baseline(
+        E.update_delivery_link(
+            _zone(),
+            C.IrrigationDeliveryLink(
+                "zone.front.plant.1.delivery",
+                "zone.front.plant.1",
+                C.DeliveryLinkStatus.DOCUMENTED,
+                "delivery.front.podocarpus",
+                ("component.front.podocarpus",),
+                True,
+            ),
+        ),
+        C.UserCalibratedBaseline(
+            720,
+            23.8888888889,
+            0,
+            "setup A dry reference",
+            NOW,
+            M.Confidence.HIGH,
+        ),
+    )
+    first_reset = E.recommission_zone(
+        setup_a,
+        event_id="event.front.recommission.a",
+        effective_at=NOW + timedelta(days=1),
+    )
+    first_snapshot = first_reset.landscape_events[-1].setup_snapshot
+    assert first_snapshot is not None
+    with pytest.raises(ValueError, match="already unresolved"):
+        E.recommission_zone(
+            first_reset,
+            event_id="event.front.recommission.empty",
+            effective_at=NOW + timedelta(days=2),
+        )
+
+    setup_b = E.add_plant_group(
+        first_reset,
+        ONBOARDING.PlantAdditionInput(
+            "event.front.avocado.add",
+            _manual(
+                "zone.front.plant.avocado",
+                "Hass avocado",
+                botanical_name="Persea americana Hass",
+                state=M.EstablishmentState.NEWLY_PLANTED,
+                observed_at=NOW + timedelta(days=2),
+                planted_at=NOW + timedelta(days=2),
+                container=5,
+                height=1.2192,
+            ),
+            NOW + timedelta(days=2),
+            C.IrrigationDeliveryLink(
+                "zone.front.plant.avocado.delivery",
+                "zone.front.plant.avocado",
+                C.DeliveryLinkStatus.DOCUMENTED,
+                "delivery.front.avocado",
+                ("component.front.avocado",),
+                False,
+            ),
+        ),
+    )
+    setup_b = E.set_calibrated_baseline(
+        setup_b,
+        C.UserCalibratedBaseline(
+            420,
+            21.1111111111,
+            0,
+            "setup B dry reference",
+            NOW + timedelta(days=2),
+            M.Confidence.MODERATE,
+        ),
+    )
+    second_reset = E.recommission_zone(
+        setup_b,
+        event_id="event.front.recommission.b",
+        effective_at=NOW + timedelta(days=3),
+    )
+    zone1 = Z.build_zone_1_commissioning_profile(NOW)
+    payload = P.build_store_payload(
+        (second_reset, zone1),
+        (),
+        legacy_zone1=zone1.to_landscape_intelligence_profile().to_dict(),
+    )
+    restored = P.restore_store_payload(payload, fallback_zone1=zone1)
+    restored_zone = next(
+        zone for zone in restored.zones if zone.identity.zone_id == "zone.front"
+    )
+
+    for generation in (setup_a, first_reset, setup_b, second_reset, restored_zone):
+        assert generation.identity == identity
+        assert generation.display_name == "Front planter"
+    recommission_events = tuple(
+        event
+        for event in restored_zone.landscape_events
+        if event.event_type is C.LandscapeEventType.ZONE_RECOMMISSIONED
+    )
+    assert len(recommission_events) == 2
+    assert tuple(event.event_id for event in recommission_events) == (
+        "event.front.recommission.a",
+        "event.front.recommission.b",
+    )
+    assert tuple(event.effective_at for event in restored_zone.landscape_events) == tuple(
+        sorted(event.effective_at for event in restored_zone.landscape_events)
+    )
+    restored_first = recommission_events[0].setup_snapshot
+    restored_second = recommission_events[1].setup_snapshot
+    assert restored_first == first_snapshot
+    assert restored_first is not None
+    assert restored_second is not None
+    assert tuple(
+        plant.common_name for plant in restored_first.landscape_profile.plant_groups
+    ) == ("Podocarpus",)
+    assert restored_first.demand_sources == setup_a.demand_sources
+    assert restored_first.delivery_links == setup_a.delivery_links
+    assert tuple(
+        plant.common_name for plant in restored_second.landscape_profile.plant_groups
+    ) == ("Hass avocado",)
+    assert restored_second.demand_sources == setup_b.demand_sources
+    assert restored_second.delivery_links == setup_b.delivery_links
+
+    serialized_zone = next(
+        item
+        for item in payload["commissioned_zones"]
+        if item["identity"]["zone_id"] == "zone.front"
+    )
+    serialized_recommissions = tuple(
+        event
+        for event in serialized_zone["landscape_events"]
+        if event["event_type"] == "zone_recommissioned"
+    )
+    serialized_setups = tuple(event["setup_snapshot"] for event in serialized_recommissions)
+    assert tuple(
+        tuple(plant["common_name"] for plant in setup["landscape_profile"]["plant_groups"])
+        for setup in serialized_setups
+    ) == (("Podocarpus",), ("Hass avocado",))
+    assert all(
+        not _contains_mapping_key(setup, "landscape_events")
+        for setup in serialized_setups
+    )
+    assert all(
+        not _contains_mapping_key(setup, "setup_snapshot")
+        for setup in serialized_setups
+    )
+    assert "event.front.recommission.a" not in repr(serialized_setups[1])
+    assert "Podocarpus" not in repr(serialized_setups[1])
+
+    assert restored_zone.landscape_profile.profile_status == "not_set_up"
+    assert restored_zone.landscape_profile.plant_groups == ()
+    assert restored_zone.plant_details == ()
+    assert restored_zone.delivery_links == ()
+    assert restored_zone.conflicts == ()
+    assert restored_zone.conflict_resolutions == ()
+    assert len(restored_zone.demand_sources) == 1
+    assert restored_zone.demand_sources[0].mode is C.ZoneDemandSourceMode.UNRESOLVED
+    assert restored_zone.demand_sources[0].calibrated_baseline is None
+    assert E.zone_setup_is_unresolved(restored_zone)
+    assert restored_zone.execution_authorized is False
+    assert restored_zone.live_control_authorized is False
+
+
 def test_conflict_review_and_explicit_resolution_preserve_original_evidence() -> None:
     manual = _manual("plant.primary", "Citrus", botanical_name="Citrus spp.")
     visual = ONBOARDING.ApprovedVisualPlantFinding(
@@ -356,7 +660,7 @@ def test_schema_three_round_trip_after_edits_and_zone_one_compatibility() -> Non
     )
     restored = P.restore_store_payload(payload, fallback_zone1=zone1)
 
-    assert payload["commissioning_store_schema_version"] == 7
+    assert payload["commissioning_store_schema_version"] == 8
     assert restored.zones[0] == edited
     assert restored.zones[0].identity.zone_id == "zone.front"
     assert restored.zones[1].identity.zone_id == "zone.1"
