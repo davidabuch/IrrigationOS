@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.64 — Zone-Centric Navigation Cleanup**
+**v1.0.65 — Baseline Water Budget & Cadence Foundation**
 
 The current release:
 
@@ -51,6 +51,10 @@ The current release:
 - records recommendation snapshots in schema-2 shadow history while treating persisted history as audit evidence only;
 - deduplicates shadow history by scientific meaning rather than derived evaluation times and bounds commissioning memory use;
 - separates actual ET/precipitation/irrigation accounting from provisional forecast cover and preserves forecast deferrals as immutable, non-authorizing ledger evidence;
+- carries ordinary deficits through immutable exact-boundary checkpoints without overlap, gaps, or restart loss;
+- resolves curated plant factors first and otherwise uses explicit lower-confidence generic landscape-class ranges;
+- derives root-zone available water, depletion triggers, and bounded replenishment depth while withholding runtime;
+- treats a fresh installation's opening deficit as unknown rather than silently assuming field capacity;
 - preserves source weather timestamps so a new pipeline evaluation cannot make unchanged weather appear fresh;
 - upgrades Zone 1 factor evidence to direct UC residential landscape PF guidance for fig, citrus, passion fruit, and Peruvian lilies;
 - keeps citrus establishment management separate from its baseline plant factor and keeps the unresolved mixed ornamental group fail-closed;
@@ -90,6 +94,7 @@ The repository is currently private, so HACS publication and validation are defe
 
 Key documents:
 
+- [`docs/V1_0_65_BASELINE_WATER_BUDGET_CADENCE.md`](docs/V1_0_65_BASELINE_WATER_BUDGET_CADENCE.md)
 - [`docs/V1_0_63_ZONE_RECOMMISSIONING.md`](docs/V1_0_63_ZONE_RECOMMISSIONING.md)
 - [`docs/V1_0_57_GUIDED_BASELINE_DELIVERY_CALIBRATION.md`](docs/V1_0_57_GUIDED_BASELINE_DELIVERY_CALIBRATION.md)
 - [`docs/V1_0_56_ADVISORY_ENVIRONMENTAL_SCALING.md`](docs/V1_0_56_ADVISORY_ENVIRONMENTAL_SCALING.md)
@@ -133,7 +138,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation remains the default commissioned operating mode in v1.0.64. Zone management, photo references, water balances, production recommendations, commissioning profiles, completeness assessments, baseline scaling, calibration evidence, and delivery advisories never authorize autonomous execution. Guided observation is a separate explicit operator action bounded to three minutes, with no retry or restart restoration. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
+Observation remains the default commissioned operating mode in v1.0.65. Zone management, photo references, water balances, production recommendations, commissioning profiles, completeness assessments, baseline scaling, calibration evidence, and delivery advisories never authorize autonomous execution. Guided observation is a separate explicit operator action bounded to three minutes, with no retry or restart restoration. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
 
 Before dispatch, v1.0.41 retains the v1.0.40 requirement for aggregate health `HEALTHY`, a fresh confirmed canonical observation, current integrated supervised-safety prerequisites, commissioned controller ownership, acknowledged execution-boundary review, zero active watering, an online Rachio controller, an idle configured target, and durable privacy-safe audit intent. A second IrrigationOS-supervised operation cannot overlap an operation that is still awaiting terminal observation. Transport failures are never retried automatically. Accepted starts are observed asynchronously for `WATERING` then `IDLE`, written to separate supervised-operation audit and structured acceptance JSONL files, and exposed through restart-safe latest-result state.
 

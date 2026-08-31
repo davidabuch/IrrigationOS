@@ -6,7 +6,11 @@ import hashlib
 from datetime import timedelta
 
 from .models import (
+    AccountingIntervalState,
+    DemandFactorSource,
     ForecastReconciliationState,
+    IrrigationTriggerState,
+    OpeningBalanceState,
     ProductionAreaWaterBalance,
     ProductionAreaWaterBalanceRequest,
     RatioQuantity,
@@ -15,6 +19,7 @@ from .models import (
     WaterBalanceState,
     WaterQuantity,
 )
+from .policy import BASELINE_WATER_BUDGET_POLICY_VERSION
 from .precipitation import apply_effective_precipitation_policy
 
 BALANCE_VALIDITY = timedelta(minutes=15)
@@ -26,28 +31,41 @@ def calculate_production_area_water_balance(
     """Calculate actual loss/receipt separately from provisional forecast cover."""
 
     blockers: set[str] = set()
+    accounting_blockers: set[str] = set()
     reasons: set[str] = set()
-    if request.reference_et_mm is None:
-        blockers.add("reference_et_unavailable")
-    elif request.calculated_at - request.window_end > timedelta(hours=6):
-        blockers.add("reference_et_stale")
+    complete_interval = request.accounting_interval_state is AccountingIntervalState.COMPLETE
+    if request.accounting_interval_state is AccountingIntervalState.GAP:
+        accounting_blockers.add("accounting_evidence_gap")
+    elif request.accounting_interval_state is AccountingIntervalState.OVERLAP:
+        accounting_blockers.add("accounting_evidence_overlap")
+    elif request.accounting_interval_state is AccountingIntervalState.REPLAY:
+        accounting_blockers.add("accounting_evidence_replay")
+    if complete_interval and request.reference_et_mm is None:
+        accounting_blockers.add("reference_et_unavailable")
+    elif complete_interval and request.calculated_at - request.window_end > timedelta(hours=6):
+        accounting_blockers.add("reference_et_stale")
     if request.plant_factor is None:
-        blockers.add("plant_factor_unresolved")
-    if request.observed_precipitation_mm is None:
-        blockers.add("observed_precipitation_unavailable")
+        accounting_blockers.add("plant_factor_unresolved")
+    if complete_interval and request.observed_precipitation_mm is None:
+        accounting_blockers.add("observed_precipitation_unavailable")
     if (
         request.observed_precipitation_mm is not None
         and _upper(request.observed_precipitation_mm) > 0
         and request.effective_precipitation_policy is None
     ):
-        blockers.add("effective_precipitation_policy_unavailable")
+        accounting_blockers.add("effective_precipitation_policy_unavailable")
     if request.unquantified_irrigation_session_ids:
-        blockers.add("unquantified_irrigation_observed")
+        accounting_blockers.add("unquantified_irrigation_observed")
     if (
         request.unquantified_irrigation_session_ids
         and request.quantified_irrigation_credit_mm is None
     ):
-        blockers.add("quantified_irrigation_credit_unavailable")
+        accounting_blockers.add("quantified_irrigation_credit_unavailable")
+    opening = request.opening_deficit_mm
+    opening_state = request.opening_balance_state
+    if not request.ledger_healthy:
+        accounting_blockers.add("water_balance_ledger_unhealthy")
+    blockers.update(accounting_blockers)
 
     irrigation_credit = request.quantified_irrigation_credit_mm
     if irrigation_credit is None and not request.unquantified_irrigation_session_ids:
@@ -61,15 +79,58 @@ def calculate_production_area_water_balance(
         request.observed_precipitation_mm, request.effective_precipitation_policy
     )
     prior = _unresolved_deferral(request)
-    opening_deferred = _opening_carry_forward(request)
-    actual = _actual_deficit(
-        opening_deferred,
-        demand,
-        effective_observed,
-        irrigation_credit,
+    actual = (
+        opening
+        if request.accounting_interval_state is AccountingIntervalState.NO_NEW_EVIDENCE
+        else _actual_deficit(opening, demand, effective_observed, irrigation_credit)
     )
-    if blockers:
+    if (
+        complete_interval
+        and opening is None
+        and not request.unquantified_irrigation_session_ids
+        and _saturation_proves_zero(
+            effective_observed, irrigation_credit, request.root_zone_available_water_mm, demand
+        )
+    ):
+        actual = WaterQuantity.millimeters(0)
+        opening_state = OpeningBalanceState.RECONSTRUCTED
+        reasons.add("opening_balance_reconstructed_by_observed_saturation")
+    elif opening is None:
+        accounting_blockers.add("opening_balance_unknown")
+    if request.unquantified_irrigation_session_ids:
+        accounting_blockers.add("water_balance_invalidated_by_unquantified_irrigation")
+    if accounting_blockers:
         actual = None
+    blockers.update(accounting_blockers)
+
+    trigger = _multiply(request.root_zone_available_water_mm, request.allowable_depletion_fraction)
+    if request.root_zone_available_water_mm is None:
+        blockers.add("root_zone_reservoir_unavailable")
+    if request.allowable_depletion_fraction is None:
+        blockers.add("allowable_depletion_unavailable")
+    trigger_state = _trigger_state(actual, trigger)
+    irrigation_indicated = (
+        True
+        if trigger_state is IrrigationTriggerState.AT_OR_ABOVE_TRIGGER
+        else False
+        if trigger_state is IrrigationTriggerState.BELOW_TRIGGER
+        else None
+    )
+    target_depth = (
+        _minimum(actual, request.root_zone_available_water_mm)
+        if irrigation_indicated is True
+        else None
+    )
+    if trigger_state is IrrigationTriggerState.UNCERTAIN_RANGE:
+        blockers.add("irrigation_trigger_range_uncertain")
+    if irrigation_indicated is True:
+        reasons.add("allowable_depletion_trigger_reached")
+    elif irrigation_indicated is False:
+        reasons.add("deficit_below_allowable_depletion_trigger")
+    if request.demand_factor_source is DemandFactorSource.GENERIC_LANDSCAPE_CLASS:
+        reasons.add("generic_landscape_demand_factor_applied")
+    elif request.demand_factor_source is DemandFactorSource.CURATED_PLANT_KNOWLEDGE:
+        reasons.add("curated_plant_demand_factor_applied")
 
     forecast_effective = apply_effective_precipitation_policy(
         None if request.forecast is None else request.forecast.precipitation_mm,
@@ -79,11 +140,10 @@ def calculate_production_area_water_balance(
         request.forecast_window_observed_precipitation_mm,
         request.effective_precipitation_policy,
     )
-    reconciliation = _reconciliation_state(
-        request, prior, effective_reconciliation_observed
-    )
+    reconciliation = _reconciliation_state(request, prior, effective_reconciliation_observed)
     if (
         prior is not None
+        and prior.forecast_window_end is not None
         and request.calculated_at > prior.forecast_window_end
         and effective_reconciliation_observed is None
     ):
@@ -127,18 +187,32 @@ def calculate_production_area_water_balance(
         reasons.add("actual_water_balance_calculated")
     else:
         reasons.add("water_balance_withheld_insufficient_evidence")
-    required = 5
+    required = 8
     known = sum(
         value is not None
         for value in (
+            opening,
             request.reference_et_mm,
             request.plant_factor,
             request.observed_precipitation_mm,
             effective_observed,
             irrigation_credit,
+            request.root_zone_available_water_mm,
+            request.allowable_depletion_fraction,
         )
     )
     confidences = [item.confidence for item in request.evidence]
+    confidences.extend(
+        value
+        for value in (
+            request.demand_factor_confidence,
+            request.root_zone_confidence,
+            None
+            if request.effective_precipitation_policy is None
+            else request.effective_precipitation_policy.confidence,
+        )
+        if value is not None
+    )
     return ProductionAreaWaterBalance(
         target=request.target,
         state=state,
@@ -161,17 +235,23 @@ def calculate_production_area_water_balance(
         forecast_window_observed_precipitation_mm=(
             request.forecast_window_observed_precipitation_mm
         ),
-        effective_forecast_window_observed_precipitation_mm=(
-            effective_reconciliation_observed
-        ),
-        forecast_window_start=(
-            None if request.forecast is None else request.forecast.window_start
-        ),
+        effective_forecast_window_observed_precipitation_mm=(effective_reconciliation_observed),
+        forecast_window_start=(None if request.forecast is None else request.forecast.window_start),
         forecast_window_end=(None if request.forecast is None else request.forecast.window_end),
         forecast_covered_deficit_mm=covered,
         residual_uncovered_deficit_mm=residual,
         deferred_deficit_mm=deferred,
         forecast_reconciliation_state=reconciliation,
+        accounting_interval_state=request.accounting_interval_state,
+        opening_balance_state=opening_state,
+        demand_factor_source=request.demand_factor_source,
+        root_zone_available_water_mm=request.root_zone_available_water_mm,
+        allowable_depletion_fraction=request.allowable_depletion_fraction,
+        irrigation_trigger_deficit_mm=trigger,
+        trigger_state=trigger_state,
+        irrigation_indicated=irrigation_indicated,
+        target_replenishment_depth_mm=target_depth,
+        baseline_water_budget_policy_version=BASELINE_WATER_BUDGET_POLICY_VERSION,
         confidence=0.0 if not confidences else min(confidences),
         completeness=known / required,
         evidence=request.evidence,
@@ -191,6 +271,7 @@ def deferral_event_for_balance(
         or balance.deferred_deficit_mm is None
         or balance.forecast_window_start is None
         or balance.forecast_window_end is None
+        or balance.actual_net_deficit_mm is None
     ):
         return None
     event_id = _event_id("deferral", balance.target, forecast_id, balance.calculated_at)
@@ -198,14 +279,44 @@ def deferral_event_for_balance(
         event_id=event_id,
         kind=WaterBalanceLedgerEventKind.FORECAST_DEFERRAL,
         target=balance.target,
-        forecast_id=forecast_id,
         recorded_at=balance.calculated_at,
+        window_start=(balance.window_start if balance.window_end > balance.window_start else None),
         accounted_through=balance.window_end,
+        carry_forward_deficit_mm=balance.actual_net_deficit_mm,
+        forecast_id=forecast_id,
         forecast_window_start=balance.forecast_window_start,
         forecast_window_end=balance.forecast_window_end,
         deferred_deficit_mm=balance.deferred_deficit_mm,
-        carry_forward_deficit_mm=balance.actual_net_deficit_mm,
     )
+
+
+def ledger_event_for_balance(
+    balance: ProductionAreaWaterBalance,
+    prior_events: tuple[WaterBalanceLedgerEvent, ...],
+) -> WaterBalanceLedgerEvent | None:
+    """Select the single semantic ledger event for a completed balance window."""
+
+    prior = _unresolved_deferral_events(balance.target, prior_events)
+    if (
+        prior is None
+        and balance.forecast_reconciliation_state
+        is ForecastReconciliationState.DEFERRED_FOR_FORECAST
+    ):
+        forecast_id = next(
+            (
+                item.evidence_id.removeprefix("weather.forecast.")
+                for item in balance.evidence
+                if item.kind.value == "forecast_precipitation"
+            ),
+            None,
+        )
+        if forecast_id is not None:
+            return deferral_event_for_balance(balance, forecast_id)
+    if prior is not None:
+        reconciliation = reconciliation_event_for_balance(balance, prior)
+        if reconciliation is not None:
+            return reconciliation
+    return None
 
 
 def reconciliation_event_for_balance(
@@ -217,6 +328,10 @@ def reconciliation_event_for_balance(
     if (
         prior_deferral.kind is not WaterBalanceLedgerEventKind.FORECAST_DEFERRAL
         or prior_deferral.target != balance.target
+        or prior_deferral.forecast_id is None
+        or prior_deferral.forecast_window_start is None
+        or prior_deferral.forecast_window_end is None
+        or prior_deferral.deferred_deficit_mm is None
     ):
         return None
     if balance.forecast_reconciliation_state not in {
@@ -237,17 +352,16 @@ def reconciliation_event_for_balance(
         event_id=event_id,
         kind=WaterBalanceLedgerEventKind.FORECAST_RECONCILIATION,
         target=balance.target,
-        forecast_id=prior_deferral.forecast_id,
         recorded_at=balance.calculated_at,
+        window_start=(balance.window_start if balance.window_end > balance.window_start else None),
         accounted_through=balance.window_end,
+        carry_forward_deficit_mm=(balance.actual_net_deficit_mm or WaterQuantity.millimeters(0)),
+        forecast_id=prior_deferral.forecast_id,
         forecast_window_start=prior_deferral.forecast_window_start,
         forecast_window_end=prior_deferral.forecast_window_end,
         deferred_deficit_mm=prior_deferral.deferred_deficit_mm,
         realized_effective_precipitation_mm=(
             balance.effective_forecast_window_observed_precipitation_mm
-        ),
-        carry_forward_deficit_mm=(
-            balance.actual_net_deficit_mm or WaterQuantity.millimeters(0)
         ),
     )
 
@@ -255,15 +369,21 @@ def reconciliation_event_for_balance(
 def _unresolved_deferral(
     request: ProductionAreaWaterBalanceRequest,
 ) -> WaterBalanceLedgerEvent | None:
+    return _unresolved_deferral_events(request.target, request.ledger_events)
+
+
+def _unresolved_deferral_events(
+    target: object, events: tuple[WaterBalanceLedgerEvent, ...]
+) -> WaterBalanceLedgerEvent | None:
     reconciled = {
         event.forecast_id
-        for event in request.ledger_events
+        for event in events
         if event.kind is WaterBalanceLedgerEventKind.FORECAST_RECONCILIATION
     }
     candidates = [
         event
-        for event in request.ledger_events
-        if event.target == request.target
+        for event in events
+        if event.target == target
         and event.kind is WaterBalanceLedgerEventKind.FORECAST_DEFERRAL
         and event.forecast_id not in reconciled
     ]
@@ -274,19 +394,16 @@ def _unresolved_deferral(
     )
 
 
-def _opening_carry_forward(
-    request: ProductionAreaWaterBalanceRequest,
-) -> WaterQuantity | None:
-    carried = [
-        event
-        for event in request.ledger_events
-        if event.target == request.target
-        and event.carry_forward_deficit_mm is not None
-    ]
-    if not carried:
-        return None
-    latest = max(carried, key=lambda item: (item.accounted_through, item.event_id))
-    return latest.carry_forward_deficit_mm
+def _trigger_state(
+    deficit: WaterQuantity | None, trigger: WaterQuantity | None
+) -> IrrigationTriggerState:
+    if deficit is None or trigger is None:
+        return IrrigationTriggerState.UNAVAILABLE
+    if _upper(deficit) + 1e-9 < _lower(trigger):
+        return IrrigationTriggerState.BELOW_TRIGGER
+    if _lower(deficit) + 1e-9 >= _upper(trigger):
+        return IrrigationTriggerState.AT_OR_ABOVE_TRIGGER
+    return IrrigationTriggerState.UNCERTAIN_RANGE
 
 
 def _reconciliation_state(
@@ -296,6 +413,8 @@ def _reconciliation_state(
 ) -> ForecastReconciliationState:
     if prior is None:
         return ForecastReconciliationState.NO_FORECAST_ADJUSTMENT
+    if prior.forecast_window_end is None or prior.deferred_deficit_mm is None:
+        return ForecastReconciliationState.RECONCILIATION_INCOMPLETE
     if request.calculated_at <= prior.forecast_window_end:
         return ForecastReconciliationState.FORECAST_PENDING
     if effective_observed is None:
@@ -324,9 +443,7 @@ def _forecast_qualifies(
         hours=policy.maximum_forecast_age_hours
     ):
         return False
-    if forecast.window_end - request.calculated_at > timedelta(
-        hours=policy.maximum_horizon_hours
-    ):
+    if forecast.window_end - request.calculated_at > timedelta(hours=policy.maximum_horizon_hours):
         return False
     if forecast.confidence < policy.minimum_source_confidence:
         return False
@@ -347,9 +464,20 @@ def _actual_deficit(
     return _subtract(_subtract(total, observed), irrigation)
 
 
-def _multiply(
-    water: WaterQuantity | None, ratio: RatioQuantity | None
-) -> WaterQuantity | None:
+def _saturation_proves_zero(
+    observed: WaterQuantity | None,
+    irrigation: WaterQuantity | None,
+    reservoir: WaterQuantity | None,
+    demand: WaterQuantity | None,
+) -> bool:
+    """Prove zero closing deficit from actual water under worst-case bounds."""
+
+    if observed is None or irrigation is None or reservoir is None or demand is None:
+        return False
+    return _lower(observed) + _lower(irrigation) + 1e-9 >= (_upper(reservoir) + _upper(demand))
+
+
+def _multiply(water: WaterQuantity | None, ratio: RatioQuantity | None) -> WaterQuantity | None:
     if water is None or ratio is None:
         return None
     w = _bounds(water)

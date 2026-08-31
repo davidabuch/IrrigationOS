@@ -11,8 +11,8 @@ from typing import Any
 
 from ..production_targets import ProductionTarget
 
-WATER_BALANCE_SCHEMA_VERSION = 1
-WATER_BALANCE_POLICY_VERSION = "1.0.0"
+WATER_BALANCE_SCHEMA_VERSION = 2
+WATER_BALANCE_POLICY_VERSION = "2.0.0"
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
 _CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 
@@ -54,6 +54,43 @@ class WaterBalanceEvidenceKind(StrEnum):
     FORECAST_PRECIPITATION = "forecast_precipitation"
     FORECAST_LEDGER = "forecast_ledger"
     EFFECTIVE_PRECIPITATION_POLICY = "effective_precipitation_policy"
+    ROOT_ZONE_POLICY = "root_zone_policy"
+
+
+class OpeningBalanceState(StrEnum):
+    """Truthful provenance of the opening deficit for one window."""
+
+    UNKNOWN = "unknown"
+    RECONSTRUCTED = "reconstructed"
+    DURABLE_CARRY_FORWARD = "durable_carry_forward"
+    INVALIDATED_BY_UNQUANTIFIED_IRRIGATION = "invalidated_by_unquantified_irrigation"
+
+
+class AccountingIntervalState(StrEnum):
+    """Whether an exact new scientific interval can be consumed."""
+
+    COMPLETE = "complete"
+    NO_NEW_EVIDENCE = "no_new_evidence"
+    GAP = "gap"
+    OVERLAP = "overlap"
+    REPLAY = "replay"
+
+
+class DemandFactorSource(StrEnum):
+    """Precedence-selected source of landscape demand evidence."""
+
+    UNRESOLVED = "unresolved"
+    CURATED_PLANT_KNOWLEDGE = "curated_plant_knowledge"
+    GENERIC_LANDSCAPE_CLASS = "generic_landscape_class"
+
+
+class IrrigationTriggerState(StrEnum):
+    """Relationship of current deficit to the allowable-depletion threshold."""
+
+    UNAVAILABLE = "unavailable"
+    BELOW_TRIGGER = "below_trigger"
+    AT_OR_ABOVE_TRIGGER = "at_or_above_trigger"
+    UNCERTAIN_RANGE = "uncertain_range"
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,9 +218,7 @@ class ForecastPrecipitationEvidence:
             _aware(name, value)
         if self.window_end <= self.window_start or self.issued_at > self.window_end:
             raise ValueError("forecast timestamps are inconsistent")
-        if self.probability_percent is not None and not _bounded(
-            self.probability_percent, 0, 100
-        ):
+        if self.probability_percent is not None and not _bounded(self.probability_percent, 0, 100):
             raise ValueError("forecast probability must be between zero and 100")
         _fraction("confidence", self.confidence)
         if not self.quality.strip() or not self.source.strip():
@@ -218,40 +253,48 @@ class WaterBalanceLedgerEvent:
     event_id: str
     kind: WaterBalanceLedgerEventKind
     target: ProductionTarget
-    forecast_id: str
     recorded_at: datetime
     accounted_through: datetime
-    forecast_window_start: datetime
-    forecast_window_end: datetime
-    deferred_deficit_mm: WaterQuantity
+    carry_forward_deficit_mm: WaterQuantity
+    window_start: datetime | None = None
+    forecast_id: str | None = None
+    forecast_window_start: datetime | None = None
+    forecast_window_end: datetime | None = None
+    deferred_deficit_mm: WaterQuantity | None = None
     realized_effective_precipitation_mm: WaterQuantity | None = None
-    carry_forward_deficit_mm: WaterQuantity | None = None
     schema_version: int = WATER_BALANCE_SCHEMA_VERSION
 
     def __post_init__(self) -> None:
         _identifier("event_id", self.event_id)
-        _identifier("forecast_id", self.forecast_id)
         if not isinstance(self.kind, WaterBalanceLedgerEventKind):
             raise ValueError("ledger event kind must be canonical")
         for name, value in (
             ("recorded_at", self.recorded_at),
             ("accounted_through", self.accounted_through),
-            ("forecast_window_start", self.forecast_window_start),
-            ("forecast_window_end", self.forecast_window_end),
         ):
             _aware(name, value)
-        if self.forecast_window_end <= self.forecast_window_start:
-            raise ValueError("ledger forecast window is invalid")
         if self.accounted_through > self.recorded_at:
             raise ValueError("accounted_through cannot follow recorded_at")
+        if self.window_start is not None:
+            _aware("window_start", self.window_start)
+            if self.accounted_through <= self.window_start:
+                raise ValueError("ledger accounting window must advance")
+        if self.forecast_id is None:
+            raise ValueError("forecast ledger events require forecast_id")
+        _identifier("forecast_id", self.forecast_id)
+        if self.forecast_window_start is None or self.forecast_window_end is None:
+            raise ValueError("forecast ledger events require a forecast window")
+        _aware("forecast_window_start", self.forecast_window_start)
+        _aware("forecast_window_end", self.forecast_window_end)
+        if self.forecast_window_end <= self.forecast_window_start:
+            raise ValueError("ledger forecast window is invalid")
+        if self.deferred_deficit_mm is None:
+            raise ValueError("forecast ledger events require deferred deficit")
         if self.kind is WaterBalanceLedgerEventKind.FORECAST_DEFERRAL:
             if self.realized_effective_precipitation_mm is not None:
                 raise ValueError("deferral events cannot contain realized precipitation")
-            if self.carry_forward_deficit_mm is None:
-                raise ValueError("deferral events require the full carried deficit")
-        elif (
+        elif self.kind is WaterBalanceLedgerEventKind.FORECAST_RECONCILIATION and (
             self.realized_effective_precipitation_mm is None
-            or self.carry_forward_deficit_mm is None
         ):
             raise ValueError("reconciliation requires realized and carry-forward water")
         if self.schema_version != WATER_BALANCE_SCHEMA_VERSION:
@@ -269,25 +312,102 @@ class WaterBalanceLedgerEvent:
         target = value.get("target")
         if not isinstance(target, dict):
             raise ValueError("ledger target must be a mapping")
+        source_schema = int(value.get("schema_version", 0))
+        if source_schema not in {1, WATER_BALANCE_SCHEMA_VERSION}:
+            raise ValueError("unsupported water-balance ledger schema")
         realized = value.get("realized_effective_precipitation_mm")
         carry_forward = value.get("carry_forward_deficit_mm")
+        if carry_forward is None:
+            raise ValueError("ledger event requires carry-forward deficit")
+        window_start = value.get("window_start")
+        forecast_start = value.get("forecast_window_start")
+        forecast_end = value.get("forecast_window_end")
         return cls(
             event_id=str(value.get("event_id", "")),
             kind=WaterBalanceLedgerEventKind(str(value.get("kind", ""))),
             target=ProductionTarget(int(target["controller_slot"]), int(target["area_slot"])),
-            forecast_id=str(value.get("forecast_id", "")),
             recorded_at=_parse_time(value.get("recorded_at")),
             accounted_through=_parse_time(value.get("accounted_through")),
-            forecast_window_start=_parse_time(value.get("forecast_window_start")),
-            forecast_window_end=_parse_time(value.get("forecast_window_end")),
-            deferred_deficit_mm=_water_quantity(value.get("deferred_deficit_mm")),
+            carry_forward_deficit_mm=_water_quantity(carry_forward),
+            window_start=None if window_start is None else _parse_time(window_start),
+            forecast_id=(
+                None if value.get("forecast_id") is None else str(value.get("forecast_id"))
+            ),
+            forecast_window_start=(None if forecast_start is None else _parse_time(forecast_start)),
+            forecast_window_end=(None if forecast_end is None else _parse_time(forecast_end)),
+            deferred_deficit_mm=(
+                None
+                if value.get("deferred_deficit_mm") is None
+                else _water_quantity(value.get("deferred_deficit_mm"))
+            ),
             realized_effective_precipitation_mm=(
                 None if realized is None else _water_quantity(realized)
             ),
-            carry_forward_deficit_mm=(
-                None if carry_forward is None else _water_quantity(carry_forward)
-            ),
-            schema_version=int(value.get("schema_version", 0)),
+            schema_version=WATER_BALANCE_SCHEMA_VERSION,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class WaterBalanceTargetState:
+    """Latest bounded scientific carry state for one production target."""
+
+    target: ProductionTarget
+    state: OpeningBalanceState
+    window_start: datetime
+    accounted_through: datetime
+    recorded_at: datetime
+    deficit_mm: WaterQuantity | None = None
+    invalidated_session_ids: tuple[str, ...] = ()
+    reason_code: str = "opening_balance_unknown"
+    schema_version: int = WATER_BALANCE_SCHEMA_VERSION
+    execution_authorized: bool = False
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("window_start", self.window_start),
+            ("accounted_through", self.accounted_through),
+            ("recorded_at", self.recorded_at),
+        ):
+            _aware(name, value)
+        if self.accounted_through <= self.window_start:
+            raise ValueError("target-state accounting window must advance")
+        if self.accounted_through > self.recorded_at:
+            raise ValueError("target-state boundary cannot follow recorded_at")
+        _sorted_ids("invalidated_session_ids", self.invalidated_session_ids)
+        _code("reason_code", self.reason_code)
+        numeric = self.state in {
+            OpeningBalanceState.RECONSTRUCTED,
+            OpeningBalanceState.DURABLE_CARRY_FORWARD,
+        }
+        if numeric != (self.deficit_mm is not None):
+            raise ValueError("only numeric target states may carry a deficit")
+        invalidated = self.state is OpeningBalanceState.INVALIDATED_BY_UNQUANTIFIED_IRRIGATION
+        if invalidated != bool(self.invalidated_session_ids):
+            raise ValueError("invalidation state requires exact session evidence")
+        if self.schema_version != WATER_BALANCE_SCHEMA_VERSION or self.execution_authorized:
+            raise ValueError("invalid water-balance target state")
+
+    def to_dict(self) -> dict[str, Any]:
+        return _serialize(self)
+
+    @classmethod
+    def from_dict(cls, value: object) -> WaterBalanceTargetState:
+        if not isinstance(value, dict) or not isinstance(value.get("target"), dict):
+            raise ValueError("target state must contain a target mapping")
+        target = value["target"]
+        invalidated = value.get("invalidated_session_ids", [])
+        if not isinstance(invalidated, list):
+            raise ValueError("invalidated session IDs must be a list")
+        deficit = value.get("deficit_mm")
+        return cls(
+            target=ProductionTarget(int(target["controller_slot"]), int(target["area_slot"])),
+            state=OpeningBalanceState(str(value.get("state", ""))),
+            window_start=_parse_time(value.get("window_start")),
+            accounted_through=_parse_time(value.get("accounted_through")),
+            recorded_at=_parse_time(value.get("recorded_at")),
+            deficit_mm=None if deficit is None else _water_quantity(deficit),
+            invalidated_session_ids=tuple(str(item) for item in invalidated),
+            reason_code=str(value.get("reason_code", "")),
         )
 
 
@@ -306,12 +426,19 @@ class ProductionAreaWaterBalanceRequest:
     unquantified_irrigation_session_ids: tuple[str, ...]
     effective_precipitation_policy: EffectivePrecipitationPolicy | None
     forecast: ForecastPrecipitationEvidence | None
+    accounting_interval_state: AccountingIntervalState = AccountingIntervalState.COMPLETE
+    opening_balance_state: OpeningBalanceState = OpeningBalanceState.UNKNOWN
+    opening_deficit_mm: WaterQuantity | None = None
+    demand_factor_source: DemandFactorSource = DemandFactorSource.UNRESOLVED
+    demand_factor_confidence: float | None = None
+    root_zone_available_water_mm: WaterQuantity | None = None
+    root_zone_confidence: float | None = None
+    allowable_depletion_fraction: RatioQuantity | None = None
+    ledger_healthy: bool = True
     forecast_window_observed_precipitation_mm: WaterQuantity | None = None
     ledger_events: tuple[WaterBalanceLedgerEvent, ...] = ()
     evidence: tuple[WaterBalanceEvidence, ...] = ()
-    forecast_policy: ForecastAdjustmentPolicy = field(
-        default_factory=ForecastAdjustmentPolicy
-    )
+    forecast_policy: ForecastAdjustmentPolicy = field(default_factory=ForecastAdjustmentPolicy)
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -320,8 +447,19 @@ class ProductionAreaWaterBalanceRequest:
             ("calculated_at", self.calculated_at),
         ):
             _aware(name, value)
-        if self.window_end <= self.window_start or self.calculated_at < self.window_end:
+        for name, confidence_value in (
+            ("demand_factor_confidence", self.demand_factor_confidence),
+            ("root_zone_confidence", self.root_zone_confidence),
+        ):
+            if confidence_value is not None:
+                _fraction(name, confidence_value)
+        if self.window_end < self.window_start or self.calculated_at < self.window_end:
             raise ValueError("water-balance evaluation timestamps are inconsistent")
+        if (
+            self.accounting_interval_state is AccountingIntervalState.COMPLETE
+            and self.window_end <= self.window_start
+        ):
+            raise ValueError("complete accounting intervals must advance")
         _sorted_ids("unquantified_irrigation_session_ids", self.unquantified_irrigation_session_ids)
         event_keys = tuple((event.recorded_at, event.event_id) for event in self.ledger_events)
         if event_keys != tuple(sorted(set(event_keys))):
@@ -329,16 +467,12 @@ class ProductionAreaWaterBalanceRequest:
         evidence_keys = tuple(item.evidence_id for item in self.evidence)
         if evidence_keys != tuple(sorted(set(evidence_keys))):
             raise ValueError("evidence must be unique and deterministic")
-        carried = _latest_carried_event(self.ledger_events, self.target)
-        if carried is not None and self.window_start != carried.accounted_through:
-            relationship = (
-                "overlaps"
-                if self.window_start < carried.accounted_through
-                else "leaves a gap after"
-            )
-            raise ValueError(
-                f"accounting window {relationship} prior accounted-through boundary"
-            )
+        numeric_opening = self.opening_balance_state in {
+            OpeningBalanceState.RECONSTRUCTED,
+            OpeningBalanceState.DURABLE_CARRY_FORWARD,
+        }
+        if numeric_opening != (self.opening_deficit_mm is not None):
+            raise ValueError("only reconstructed or durable openings may be numeric")
 
 
 @dataclass(frozen=True, slots=True)
@@ -369,6 +503,16 @@ class ProductionAreaWaterBalance:
     residual_uncovered_deficit_mm: WaterQuantity | None
     deferred_deficit_mm: WaterQuantity | None
     forecast_reconciliation_state: ForecastReconciliationState
+    accounting_interval_state: AccountingIntervalState
+    opening_balance_state: OpeningBalanceState
+    demand_factor_source: DemandFactorSource
+    root_zone_available_water_mm: WaterQuantity | None
+    allowable_depletion_fraction: RatioQuantity | None
+    irrigation_trigger_deficit_mm: WaterQuantity | None
+    trigger_state: IrrigationTriggerState
+    irrigation_indicated: bool | None
+    target_replenishment_depth_mm: WaterQuantity | None
+    baseline_water_budget_policy_version: str
     confidence: float
     completeness: float
     evidence: tuple[WaterBalanceEvidence, ...]

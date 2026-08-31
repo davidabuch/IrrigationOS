@@ -1,18 +1,23 @@
 """Canonical quantitative water-balance public API."""
 
-from .composition import build_water_balance_snapshot
+from .composition import build_water_balance_snapshot, target_state_for_balance
 from .engine import (
     calculate_production_area_water_balance,
     deferral_event_for_balance,
+    ledger_event_for_balance,
     reconciliation_event_for_balance,
 )
 from .models import (
     WATER_BALANCE_POLICY_VERSION,
     WATER_BALANCE_SCHEMA_VERSION,
+    AccountingIntervalState,
+    DemandFactorSource,
     EffectivePrecipitationPolicy,
     ForecastAdjustmentPolicy,
     ForecastPrecipitationEvidence,
     ForecastReconciliationState,
+    IrrigationTriggerState,
+    OpeningBalanceState,
     ProductionAreaWaterBalance,
     ProductionAreaWaterBalanceRequest,
     RatioQuantity,
@@ -22,18 +27,32 @@ from .models import (
     WaterBalanceLedgerEventKind,
     WaterBalanceSnapshot,
     WaterBalanceState,
+    WaterBalanceTargetState,
     WaterQuantity,
+)
+from .policy import (
+    BASELINE_WATER_BUDGET_POLICY_VERSION,
+    PRODUCTION_EFFECTIVE_PRECIPITATION_POLICY,
+    allowable_depletion_fraction,
+    generic_demand_factor,
+    root_zone_reservoir,
 )
 from .precipitation import apply_effective_precipitation_policy
 from .weather_evidence import canonical_weather_balance_evidence
 
 __all__ = [
+    "BASELINE_WATER_BUDGET_POLICY_VERSION",
+    "PRODUCTION_EFFECTIVE_PRECIPITATION_POLICY",
     "WATER_BALANCE_POLICY_VERSION",
     "WATER_BALANCE_SCHEMA_VERSION",
+    "AccountingIntervalState",
+    "DemandFactorSource",
     "EffectivePrecipitationPolicy",
     "ForecastAdjustmentPolicy",
     "ForecastPrecipitationEvidence",
     "ForecastReconciliationState",
+    "IrrigationTriggerState",
+    "OpeningBalanceState",
     "ProductionAreaWaterBalance",
     "ProductionAreaWaterBalanceRequest",
     "RatioQuantity",
@@ -43,11 +62,17 @@ __all__ = [
     "WaterBalanceLedgerEventKind",
     "WaterBalanceSnapshot",
     "WaterBalanceState",
+    "WaterBalanceTargetState",
     "WaterQuantity",
+    "allowable_depletion_fraction",
     "apply_effective_precipitation_policy",
     "build_water_balance_snapshot",
     "calculate_production_area_water_balance",
     "canonical_weather_balance_evidence",
     "deferral_event_for_balance",
+    "generic_demand_factor",
+    "ledger_event_for_balance",
     "reconciliation_event_for_balance",
+    "root_zone_reservoir",
+    "target_state_for_balance",
 ]

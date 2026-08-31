@@ -10,7 +10,9 @@ from ..pipeline import PipelineEvaluation
 from ..plant_water_requirement import PlantWaterRequirementStatus
 from ..production_targets import find_production_area, select_production_targets
 from ..quantitative_water_balance import (
+    DemandFactorSource,
     ForecastReconciliationState,
+    IrrigationTriggerState,
     WaterBalanceSnapshot,
     WaterBalanceState,
 )
@@ -22,6 +24,7 @@ from .models import (
     ProductionRecommendationSnapshot,
     ProductionRecommendationState,
     RecommendationEvidenceKind,
+    RecommendationQuantity,
     ScientificNeedState,
 )
 
@@ -90,7 +93,12 @@ def build_production_recommendations(
                 confidence=None if balance is None else balance.confidence,
             )
         )
-        if knowledge is None or knowledge.selected_profile_id is None:
+        if (
+            knowledge is None or knowledge.selected_profile_id is None
+        ) and (
+            balance is None
+            or balance.demand_factor_source is not DemandFactorSource.GENERIC_LANDSCAPE_CLASS
+        ):
             blockers.add("plant_profile_unresolved")
         evidence.append(
             ProductionRecommendationEvidence(
@@ -183,7 +191,11 @@ def build_production_recommendations(
         if balance is None or balance.state is not WaterBalanceState.AVAILABLE:
             blockers.add("quantitative_water_balance_unavailable")
         elif balance.actual_net_deficit_mm is not None:
-            if (
+            if balance.trigger_state is IrrigationTriggerState.BELOW_TRIGGER:
+                scientific_need = ScientificNeedState.NOT_INDICATED
+                recommendation_state = ProductionRecommendationState.NO_IRRIGATION_RECOMMENDED
+                reason_codes = ("deficit_below_allowable_depletion_trigger",)
+            elif balance.trigger_state is IrrigationTriggerState.AT_OR_ABOVE_TRIGGER and (
                 balance.forecast_reconciliation_state
                 is ForecastReconciliationState.DEFERRED_FOR_FORECAST
             ):
@@ -192,22 +204,26 @@ def build_production_recommendations(
                     ProductionRecommendationState.IRRIGATION_DEFERRED_FOR_FORECAST
                 )
                 reason_codes = ("scientific_need_deferred_for_forecast",)
-            elif _quantity_upper(balance.actual_net_deficit_mm) <= 0:
-                scientific_need = ScientificNeedState.NOT_INDICATED
-                recommendation_state = ProductionRecommendationState.NO_IRRIGATION_RECOMMENDED
-                reason_codes = ("no_current_water_deficit",)
-            else:
+            elif balance.trigger_state is IrrigationTriggerState.AT_OR_ABOVE_TRIGGER:
                 scientific_need = ScientificNeedState.INDICATED
                 recommendation_state = ProductionRecommendationState.IRRIGATION_RECOMMENDED
-                reason_codes = ("quantitative_water_deficit_present",)
+                reason_codes = ("allowable_depletion_trigger_reached",)
+            else:
+                blockers.add("irrigation_trigger_unavailable")
+        irrigation_depth = (
+            None
+            if balance is None or balance.target_replenishment_depth_mm is None
+            else _recommendation_quantity(balance.target_replenishment_depth_mm)
+        )
         blockers.update(
             {
                 "delivery_evidence_incomplete",
-                "target_irrigation_depth_unavailable",
                 "runtime_estimate_unavailable",
                 "scheduling_window_unavailable",
             }
         )
+        if irrigation_depth is None:
+            blockers.add("target_irrigation_depth_unavailable")
         if scientific_need is ScientificNeedState.UNAVAILABLE:
             blockers.add("scientific_need_unavailable")
 
@@ -221,7 +237,7 @@ def build_production_recommendations(
                 state=recommendation_state,
                 scientific_need=scientific_need,
                 delivery_readiness=DeliveryReadinessState.INCOMPLETE,
-                irrigation_depth=None,
+                irrigation_depth=irrigation_depth,
                 estimated_runtime_seconds=None,
                 scheduling_window=None,
                 evidence=tuple(sorted(evidence, key=lambda item: item.kind.value)),
@@ -273,5 +289,12 @@ def _by_area(values: tuple[Any, ...], area_id: str) -> Any | None:
     return next((item for item in values if getattr(item, "area_id", None) == area_id), None)
 
 
-def _quantity_upper(value: Any) -> float:
-    return value.scalar if value.scalar is not None else value.maximum
+def _recommendation_quantity(value: Any) -> RecommendationQuantity:
+    if value.scalar is not None:
+        return RecommendationQuantity(unit="millimeters", scalar=value.scalar)
+    return RecommendationQuantity(
+        unit="millimeters",
+        minimum=value.minimum,
+        typical=value.typical,
+        maximum=value.maximum,
+    )

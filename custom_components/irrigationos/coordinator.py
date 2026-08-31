@@ -85,6 +85,8 @@ from .production_targets import select_production_targets
 from .quantitative_water_balance import (
     WaterBalanceSnapshot,
     build_water_balance_snapshot,
+    ledger_event_for_balance,
+    target_state_for_balance,
 )
 from .quantitative_water_balance.manager import WaterBalanceLedgerManager
 from .replay_readiness.manager import ReplayReadinessManager
@@ -400,9 +402,48 @@ class IrrigationOSCoordinator(DataUpdateCoordinator[ControllerRegistrySnapshot])
             self.pipeline_evaluation,
             completed_sessions=self.observation_history.completed_sessions,
             ledger_events=self.water_balance_ledger.events,
+            target_states=self.water_balance_ledger.target_states,
             weather_observations=self.weather_evidence.observations,
             weather_forecast=self.weather_evidence.forecast,
+            ledger_healthy=self.water_balance_ledger.healthy,
         )
+        new_balance_events = []
+        new_target_states = []
+        for balance in self.water_balances.balances:
+            target_events = tuple(
+                item
+                for item in self.water_balance_ledger.events
+                if item.target == balance.target
+            )
+            previous_state = next(
+                (
+                    item
+                    for item in self.water_balance_ledger.target_states
+                    if item.target == balance.target
+                ),
+                None,
+            )
+            target_state = target_state_for_balance(balance, previous_state)
+            if target_state is not None:
+                new_target_states.append(target_state)
+            event = ledger_event_for_balance(balance, target_events)
+            if event is not None:
+                new_balance_events.append(event)
+        if (
+            new_balance_events or new_target_states
+        ) and not await self.water_balance_ledger.async_commit(
+            target_states=tuple(new_target_states),
+            forecast_events=tuple(new_balance_events),
+        ):
+            self.water_balances = build_water_balance_snapshot(
+                self.pipeline_evaluation,
+                completed_sessions=self.observation_history.completed_sessions,
+                ledger_events=self.water_balance_ledger.events,
+                target_states=self.water_balance_ledger.target_states,
+                weather_observations=self.weather_evidence.observations,
+                weather_forecast=self.weather_evidence.forecast,
+                ledger_healthy=False,
+            )
         self.production_recommendations = build_production_recommendations(
             self.pipeline_evaluation,
             water_balances=self.water_balances,

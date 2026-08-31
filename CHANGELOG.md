@@ -1,3 +1,24 @@
+## [1.0.65] - 2026-08-30
+
+### Added
+
+- Depletion-driven water-budget decisions using the existing ET, demand, rain, and balance domains.
+- Versioned generic demand, soil available-water, and allowable-depletion policy data.
+- Restart-safe ordinary balance checkpoints, explicit bootstrap state, root-zone reservoir,
+  depletion trigger, and replenishment depth.
+
+### Changed
+
+- Recommendations wait for the depletion trigger instead of treating every positive deficit as
+  an irrigation need, while continuing to withhold runtime.
+- The ledger payload advances additively to schema 2; schema-1 forecast evidence migrates without
+  fabricated ordinary checkpoints.
+
+### Safety
+
+- Scientific output remains shadow-only. No runtime, command, scheduler, retry, execution
+  authority, or runtime-derived irrigation credit was added.
+
 ## [1.0.64] - 2026-08-29
 
 ### Changed
