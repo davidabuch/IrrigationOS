@@ -4,7 +4,7 @@ IrrigationOS is an intelligent, explainable irrigation operating system for Home
 
 ## Current release
 
-**v1.0.66 — Compact Per-Zone Water-Balance Attributes**
+**v1.0.67 — Guided-Observation Confirmation Window**
 
 The current release:
 
@@ -35,6 +35,8 @@ The current release:
 - requires the requested target to remain present in the durable validated-target registry before operational dispatch is eligible;
 - requires a durable privacy-safe dispatch-intent audit record before any operational command is sent;
 - never retries a failed or ambiguous operational transport request automatically;
+- confirms guided start and stop outcomes through a bounded ten-second canonical re-observation
+  window without retrying either physical command;
 - observes each accepted supervised operation through canonical refreshes and records privacy-safe terminal audit and structured JSONL acceptance evidence;
 - confirms an accepted manual stop through a bounded ten-second re-observation window without retrying the physical stop command;
 - exposes the latest supervised operational `pass`, `fail`, or `indeterminate` acceptance as a persistent Home Assistant sensor;
@@ -138,7 +140,7 @@ python -m pytest -q --asyncio-mode=auto tests_ha
 
 ## Safety
 
-Observation remains the default commissioned operating mode in v1.0.66. Zone management, photo references, water balances, production recommendations, commissioning profiles, completeness assessments, baseline scaling, calibration evidence, and delivery advisories never authorize autonomous execution. Guided observation is a separate explicit operator action bounded to three minutes, with no retry or restart restoration. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
+Observation remains the default commissioned operating mode in v1.0.67. Zone management, photo references, water balances, production recommendations, commissioning profiles, completeness assessments, baseline scaling, calibration evidence, and delivery advisories never authorize autonomous execution. Guided observation is a separate explicit operator action bounded to three minutes, with one physical command per request, bounded observation-only confirmation, and no restart restoration. Supervised first-live, bounded manual `irrigationos.run_supervised_operation`, and the exact single-use canary boundary remain unchanged.
 
 Before dispatch, v1.0.41 retains the v1.0.40 requirement for aggregate health `HEALTHY`, a fresh confirmed canonical observation, current integrated supervised-safety prerequisites, commissioned controller ownership, acknowledged execution-boundary review, zero active watering, an online Rachio controller, an idle configured target, and durable privacy-safe audit intent. A second IrrigationOS-supervised operation cannot overlap an operation that is still awaiting terminal observation. Transport failures are never retried automatically. Accepted starts are observed asynchronously for `WATERING` then `IDLE`, written to separate supervised-operation audit and structured acceptance JSONL files, and exposed through restart-safe latest-result state.
 

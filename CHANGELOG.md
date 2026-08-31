@@ -1,3 +1,19 @@
+## [1.0.67] - 2026-08-30
+
+### Fixed
+
+- Re-observes guided start and stop outcomes within a bounded ten-second confirmation window so
+  normal controller-state propagation delay does not cause a false `start_not_observed` or
+  `stop_not_observed` result.
+- Requires fresh confirmed evidence for the exact requested controller and zone, including an
+  observation timestamp from the current operator request.
+
+### Safety
+
+- Each guided start or stop transport remains limited to exactly one attempt. Only canonical
+  observation is retried; timeout remains fail-closed and creates no autonomous or restored
+  authority.
+
 ## [1.0.66] - 2026-08-30
 
 ### Fixed

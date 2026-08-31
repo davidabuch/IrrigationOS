@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -12,6 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+import custom_components.irrigationos.guided_observation.operator as guided_operator
 from custom_components.irrigationos import config_flow as config_flow_module
 from custom_components.irrigationos.config_flow import (
     CONF_COMMISSIONING_BASELINE_ACTION,
@@ -78,6 +80,17 @@ from custom_components.irrigationos.config_flow import (
     _simple_commissioning_schema,
 )
 from custom_components.irrigationos.const import DOMAIN
+from custom_components.irrigationos.controllers import (
+    ControllerAvailability,
+    ControllerCapabilities,
+    ControllerRegistrySnapshot,
+    IrrigationArea,
+    IrrigationAreaState,
+    IrrigationController,
+    ObservationMetadata,
+    ObservationQuality,
+    VendorBinding,
+)
 from custom_components.irrigationos.guided_observation import (
     ZONE_IDENTIFICATION_DURATION_SECONDS,
     GuidedObservationManager,
@@ -85,6 +98,7 @@ from custom_components.irrigationos.guided_observation import (
     GuidedObservationState,
     GuidedObservationStatus,
 )
+from custom_components.irrigationos.health import IrrigationOSHealthState
 from custom_components.irrigationos.landscape_intelligence import (
     CanonicalZoneIdentity,
     Confidence,
@@ -825,6 +839,164 @@ async def test_manage_zone_identification_runs_30_seconds_stops_and_repeats(
     assert _manage_zone_actions(completed)["run"] == (
         "Identify Zone 1 — water for 30 seconds"
     )
+
+
+@pytest.mark.asyncio
+async def test_zone2_identification_accepts_delayed_start_and_stop_observations(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The Zone Home flow re-observes one dispatch without retrying transport."""
+
+    def _snapshot(zone2_state: IrrigationAreaState) -> ControllerRegistrySnapshot:
+        observed_at = datetime.now(UTC)
+        controller_id = "controller.1"
+        areas = (
+            IrrigationArea(
+                "area.1.1",
+                controller_id,
+                1,
+                "Zone 1",
+                True,
+                True,
+                IrrigationAreaState.IDLE,
+                VendorBinding("rachio", "private-zone-1"),
+            ),
+            IrrigationArea(
+                "area.1.2",
+                controller_id,
+                2,
+                "Zone 2",
+                True,
+                True,
+                zone2_state,
+                VendorBinding("rachio", "private-zone-2"),
+            ),
+        )
+        controller = IrrigationController(
+            controller_id,
+            VendorBinding("rachio", "private-controller"),
+            "Controller",
+            ControllerAvailability.ONLINE,
+            True,
+            None,
+            None,
+            None,
+            None,
+            None,
+            16,
+            ObservationQuality.CONFIRMED,
+            ControllerCapabilities(
+                supports_start_area=True,
+                supports_stop_all=True,
+            ),
+            areas,
+        )
+        return ControllerRegistrySnapshot(
+            "rachio",
+            "private-account",
+            None,
+            (controller,),
+            ObservationMetadata(
+                observed_at,
+                observed_at + timedelta(minutes=1),
+                "test",
+                ObservationQuality.CONFIRMED,
+            ),
+        )
+
+    class _Adapter:
+        provider = "rachio"
+
+        def __init__(self) -> None:
+            self.starts: list[tuple[str, int]] = []
+            self.stops: list[str] = []
+
+        async def async_start_guided_observation(
+            self, *, area_binding: VendorBinding, duration_seconds: int
+        ) -> None:
+            self.starts.append((area_binding.native_id, duration_seconds))
+
+        async def async_stop_guided_observation(
+            self, *, controller_binding: VendorBinding
+        ) -> None:
+            self.stops.append(controller_binding.native_id)
+
+    manager = LandscapeIntelligenceManager(hass, "zone2-delayed-identification")
+    manager._store = _Store(None)  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    adapter = _Adapter()
+    guided = GuidedObservationManager()
+    refresh_states = [
+        IrrigationAreaState.IDLE,
+        IrrigationAreaState.IDLE,
+        IrrigationAreaState.WATERING,
+        IrrigationAreaState.WATERING,
+        IrrigationAreaState.IDLE,
+    ]
+    runtime = SimpleNamespace(
+        landscape_intelligence=manager,
+        data=_snapshot(IrrigationAreaState.IDLE),
+        adapter=adapter,
+        health_assessment=SimpleNamespace(state=IrrigationOSHealthState.HEALTHY),
+        supervised_operation=SimpleNamespace(
+            dispatch_lock=asyncio.Lock(),
+            in_progress=False,
+        ),
+        unattended_canary=SimpleNamespace(in_progress=False),
+        guided_observation=guided,
+    )
+
+    async def _refresh() -> None:
+        state = refresh_states.pop(0)
+        runtime.data = _snapshot(state)
+        guided.reconcile(runtime.data)
+
+    runtime.async_request_refresh = _refresh
+    elapsed = 0.0
+
+    def _monotonic() -> float:
+        return elapsed
+
+    async def _sleep(seconds: float) -> None:
+        nonlocal elapsed
+        elapsed += seconds
+
+    monkeypatch.setattr(guided_operator, "monotonic", _monotonic)
+    monkeypatch.setattr(asyncio, "sleep", _sleep)
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = runtime
+    entry.add_to_hass(hass)
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+    flow._manage_controller_slot = 1
+    flow._manage_area_slot = 2
+    flow._commissioning_area_name = "Zone 2"
+
+    running = await flow.async_step_manage_zone({CONF_MANAGE_ZONE_ACTION: "run"})
+
+    assert running["step_id"] == "manage_zone"
+    assert running["errors"] == {}
+    assert "run" not in _manage_zone_actions(running)
+    assert _manage_zone_actions(running)["stop"] == "Stop watering Zone 2"
+    assert adapter.starts == [
+        ("private-zone-2", ZONE_IDENTIFICATION_DURATION_SECONDS)
+    ]
+    assert guided.snapshot.state is GuidedObservationState.RUNNING
+
+    completed = await flow.async_step_manage_zone(
+        {CONF_MANAGE_ZONE_ACTION: "stop"}
+    )
+
+    assert completed["step_id"] == "manage_zone"
+    assert completed["errors"] == {}
+    assert adapter.stops == ["private-controller"]
+    assert guided.snapshot.state is GuidedObservationState.COMPLETED
+    assert _manage_zone_actions(completed)["run"] == (
+        "Identify Zone 2 — water for 30 seconds"
+    )
+    assert refresh_states == []
 
 
 @pytest.mark.asyncio

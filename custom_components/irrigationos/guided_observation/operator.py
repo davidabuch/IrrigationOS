@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
+from time import monotonic
 from typing import Any
 
 from ..controllers import (
@@ -16,8 +18,12 @@ from ..health import IrrigationOSHealthState
 from .models import (
     GUIDED_OBSERVATION_DURATION_SECONDS,
     GuidedObservationResult,
+    GuidedObservationState,
     GuidedObservationStatus,
 )
+
+GUIDED_OBSERVATION_CONFIRMATION_TIMEOUT_SECONDS = 10
+GUIDED_OBSERVATION_CONFIRMATION_INTERVAL_SECONDS = 1
 
 
 async def async_start_guided_observation(
@@ -56,6 +62,8 @@ async def async_start_guided_observation(
         coordinator.guided_observation.mark_starting(
             controller_slot, area_slot, duration_seconds
         )
+        requested_at = coordinator.guided_observation.snapshot.requested_at
+        assert requested_at is not None
         try:
             await adapter.async_start_guided_observation(
                 area_binding=area.binding,
@@ -71,12 +79,13 @@ async def async_start_guided_observation(
                 area_slot,
                 ("start_transport_outcome_unknown_no_retry",),
             )
-        try:
-            await coordinator.async_request_refresh()
-        except Exception:
-            return _result(GuidedObservationStatus.UNCERTAIN, controller_slot, area_slot,
-                           ("post_start_observation_failed",))
-        if coordinator.guided_observation.snapshot.state.value != "running":
+        if not await _async_confirm_guided_observation(
+            coordinator,
+            controller_slot=controller_slot,
+            area_slot=area_slot,
+            expected_state=GuidedObservationState.RUNNING,
+            observation_not_before=requested_at,
+        ):
             coordinator.guided_observation.mark_uncertain("start_not_observed")
             return _result(
                 GuidedObservationStatus.UNCERTAIN,
@@ -108,6 +117,7 @@ async def async_stop_guided_observation(
         if not isinstance(adapter, GuidedObservationAdapter):
             return _result(GuidedObservationStatus.BLOCKED, controller_slot, area_slot,
                            ("guided_observation_not_supported",))
+        stop_requested_at = datetime.now(UTC)
         coordinator.guided_observation.mark_stopping()
         try:
             await adapter.async_stop_guided_observation(
@@ -123,12 +133,13 @@ async def async_stop_guided_observation(
                 area_slot,
                 ("stop_transport_outcome_unknown_no_retry",),
             )
-        try:
-            await coordinator.async_request_refresh()
-        except Exception:
-            return _result(GuidedObservationStatus.UNCERTAIN, controller_slot, area_slot,
-                           ("post_stop_observation_failed",))
-        if coordinator.guided_observation.snapshot.state.value != "completed":
+        if not await _async_confirm_guided_observation(
+            coordinator,
+            controller_slot=controller_slot,
+            area_slot=area_slot,
+            expected_state=GuidedObservationState.COMPLETED,
+            observation_not_before=stop_requested_at,
+        ):
             coordinator.guided_observation.mark_uncertain("stop_not_observed")
             return _result(
                 GuidedObservationStatus.UNCERTAIN,
@@ -137,6 +148,91 @@ async def async_stop_guided_observation(
                 ("stop_not_observed",),
             )
         return _result(GuidedObservationStatus.ACCEPTED, controller_slot, area_slot)
+
+
+async def _async_confirm_guided_observation(
+    coordinator: Any,
+    *,
+    controller_slot: int,
+    area_slot: int,
+    expected_state: GuidedObservationState,
+    observation_not_before: datetime,
+) -> bool:
+    """Boundedly re-observe one dispatched command without retrying transport."""
+
+    deadline = monotonic() + GUIDED_OBSERVATION_CONFIRMATION_TIMEOUT_SECONDS
+    while True:
+        if _guided_observation_confirmed(
+            coordinator,
+            controller_slot=controller_slot,
+            area_slot=area_slot,
+            expected_state=expected_state,
+            observation_not_before=observation_not_before,
+        ):
+            return True
+
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return False
+        try:
+            async with asyncio.timeout(remaining):
+                await coordinator.async_request_refresh()
+        except Exception:
+            pass
+
+        if _guided_observation_confirmed(
+            coordinator,
+            controller_slot=controller_slot,
+            area_slot=area_slot,
+            expected_state=expected_state,
+            observation_not_before=observation_not_before,
+        ):
+            return True
+
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            return False
+        await asyncio.sleep(
+            min(GUIDED_OBSERVATION_CONFIRMATION_INTERVAL_SECONDS, remaining)
+        )
+
+
+def _guided_observation_confirmed(
+    coordinator: Any,
+    *,
+    controller_slot: int,
+    area_slot: int,
+    expected_state: GuidedObservationState,
+    observation_not_before: datetime,
+) -> bool:
+    """Return whether fresh authoritative evidence proves the exact operation state."""
+
+    current = coordinator.guided_observation.snapshot
+    if (
+        current.state is not expected_state
+        or current.controller_slot != controller_slot
+        or current.area_slot != area_slot
+    ):
+        return False
+    registry = coordinator.data
+    if (
+        registry.observation.quality is not ObservationQuality.CONFIRMED
+        or not registry.observation.is_fresh(datetime.now(UTC))
+        or registry.observation.observed_at < observation_not_before
+    ):
+        return False
+    try:
+        controller, area = _target(coordinator, controller_slot, area_slot)
+    except (IndexError, StopIteration):
+        return False
+    if controller.watering_observation_quality is not ObservationQuality.CONFIRMED:
+        return False
+    if expected_state is GuidedObservationState.RUNNING:
+        return area.state is IrrigationAreaState.WATERING
+    return area.state not in {
+        IrrigationAreaState.WATERING,
+        IrrigationAreaState.UNKNOWN,
+    }
 
 
 def _start_blockers(coordinator: Any, controller_slot: int, area_slot: int) -> tuple[str, ...]:
