@@ -69,8 +69,10 @@ from custom_components.irrigationos.production_readiness import (
     ProductionTarget,
 )
 from custom_components.irrigationos.quantitative_water_balance import (
+    OpeningBalanceState,
     WaterBalanceLedgerEvent,
     WaterBalanceLedgerEventKind,
+    WaterBalanceTargetState,
     WaterQuantity,
 )
 from custom_components.irrigationos.quantitative_water_balance.manager import (
@@ -995,9 +997,11 @@ async def test_manual_duration_drives_valve_runtime_and_restores(
     assert restored is not None
     assert restored.state == "37.0"
 
+
 @pytest.mark.asyncio
 async def test_water_balance_ledger_persists_and_corruption_fails_closed(
     hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     entry_id = "water_balance_test"
     manager = WaterBalanceLedgerManager(hass, entry_id)
@@ -1022,6 +1026,68 @@ async def test_water_balance_ledger_persists_and_corruption_fails_closed(
     assert restored.events == (event,)
     assert restored.diagnostics()["execution_authorized"] is False
 
+    target_state = WaterBalanceTargetState(
+        target=ProductionTarget(1, 4),
+        recorded_at=now + timedelta(days=1),
+        window_start=now,
+        accounted_through=now + timedelta(days=1),
+        state=OpeningBalanceState.DURABLE_CARRY_FORWARD,
+        deficit_mm=WaterQuantity.millimeters(8),
+        reason_code="durable_water_balance_carry_forward",
+    )
+    assert await restored.async_commit(target_states=(target_state,))
+    round_trip = WaterBalanceLedgerManager(hass, entry_id)
+    await round_trip.async_initialize()
+    assert round_trip.events == (event,)
+    assert round_trip.target_states == (target_state,)
+
+    legacy_id = "water_balance_legacy_v1064"
+    legacy_store = Store[dict[str, Any]](
+        hass,
+        WATER_BALANCE_LEDGER_STORE_VERSION,
+        f"irrigationos.{legacy_id}.water_balance_ledger",
+    )
+    legacy_event = event.to_dict()
+    legacy_event["schema_version"] = 1
+    await legacy_store.async_save({"events": [legacy_event]})
+    migrated = WaterBalanceLedgerManager(hass, legacy_id)
+    await migrated.async_initialize()
+    assert migrated.healthy is True
+    assert migrated.events[0].event_id == event.event_id
+    assert migrated.events[0].carry_forward_deficit_mm == event.carry_forward_deficit_mm
+    assert migrated.events[0].schema_version == 2
+    assert migrated.target_states == ()
+    assert all(item.kind.value.startswith("forecast_") for item in migrated.events)
+
+    invalidated = WaterBalanceTargetState(
+        target=target_state.target,
+        state=OpeningBalanceState.INVALIDATED_BY_UNQUANTIFIED_IRRIGATION,
+        window_start=target_state.accounted_through,
+        accounted_through=target_state.accounted_through + timedelta(hours=1),
+        recorded_at=target_state.accounted_through + timedelta(hours=1),
+        invalidated_session_ids=("watering.session.native",),
+        reason_code="water_balance_invalidated_by_unquantified_irrigation",
+    )
+    assert await round_trip.async_commit(target_states=(invalidated,))
+    invalidated_restart = WaterBalanceLedgerManager(hass, entry_id)
+    await invalidated_restart.async_initialize()
+    assert invalidated_restart.target_states == (invalidated,)
+    assert invalidated_restart.target_states[0].deficit_mm is None
+    assert invalidated_restart.events == (event,)
+
+    failing = WaterBalanceLedgerManager(hass, "water_balance_save_failure")
+    await failing.async_initialize()
+
+    async def _fail_save(_: object) -> None:
+        raise OSError("simulated Store failure")
+
+    monkeypatch.setattr(failing._store, "async_save", _fail_save)
+    assert await failing.async_commit(target_states=(target_state,)) is False
+    assert failing.events == ()
+    assert failing.target_states == ()
+    assert failing.healthy is False
+    assert failing.last_error == "water_balance_ledger_save_failed"
+
     corrupt_id = "water_balance_corrupt"
     store = Store[dict[str, Any]](
         hass,
@@ -1034,6 +1100,106 @@ async def test_water_balance_ledger_persists_and_corruption_fails_closed(
     assert corrupted.healthy is False
     assert corrupted.events == ()
     assert corrupted.last_error == "water_balance_ledger_invalid"
+
+
+@pytest.mark.asyncio
+async def test_water_balance_current_state_is_bounded_atomic_and_refresh_idempotent(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = WaterBalanceLedgerManager(hass, "water_balance_bounded")
+    await manager.async_initialize()
+    now = datetime.now(UTC)
+    states = tuple(
+        WaterBalanceTargetState(
+            target=ProductionTarget(1, slot),
+            state=OpeningBalanceState.DURABLE_CARRY_FORWARD,
+            window_start=now,
+            accounted_through=now + timedelta(hours=1),
+            recorded_at=now + timedelta(hours=1),
+            deficit_mm=WaterQuantity.millimeters(float(slot)),
+            reason_code="durable_water_balance_carry_forward",
+        )
+        for slot in (1, 2, 4, 5)
+    )
+    writes = 0
+    original_save = manager._store.async_save
+
+    async def _counted_save(payload: dict[str, Any]) -> None:
+        nonlocal writes
+        writes += 1
+        await original_save(payload)
+
+    monkeypatch.setattr(manager._store, "async_save", _counted_save)
+    assert await manager.async_commit(target_states=states)
+    assert writes == 1
+    assert len(manager.target_states) == 4
+
+    for _ in range(365 * 24 * 12):
+        assert await manager.async_commit(target_states=states)
+
+    assert writes == 1
+    assert len(manager.target_states) == 4
+
+    advanced = tuple(
+        WaterBalanceTargetState(
+            target=state.target,
+            state=OpeningBalanceState.DURABLE_CARRY_FORWARD,
+            window_start=state.accounted_through,
+            accounted_through=state.accounted_through + timedelta(hours=1),
+            recorded_at=state.accounted_through + timedelta(hours=1),
+            deficit_mm=state.deficit_mm,
+            reason_code="durable_water_balance_carry_forward",
+        )
+        for state in states
+    )
+    assert await manager.async_commit(target_states=advanced)
+    assert writes == 2
+    assert await manager.async_commit(target_states=advanced)
+    assert writes == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("relationship", ["gap", "overlap", "replay"])
+async def test_water_balance_target_state_rejects_nonadjacent_boundaries(
+    hass: HomeAssistant,
+    relationship: str,
+) -> None:
+    manager = WaterBalanceLedgerManager(hass, f"water_balance_{relationship}")
+    await manager.async_initialize()
+    now = datetime.now(UTC)
+    initial = WaterBalanceTargetState(
+        target=ProductionTarget(1, 1),
+        state=OpeningBalanceState.DURABLE_CARRY_FORWARD,
+        window_start=now,
+        accounted_through=now + timedelta(hours=1),
+        recorded_at=now + timedelta(hours=1),
+        deficit_mm=WaterQuantity.millimeters(2),
+        reason_code="durable_water_balance_carry_forward",
+    )
+    assert await manager.async_commit(target_states=(initial,))
+    starts = {
+        "gap": now + timedelta(hours=2),
+        "overlap": now + timedelta(minutes=30),
+        "replay": now - timedelta(hours=1),
+    }
+    ends = {
+        "gap": now + timedelta(hours=3),
+        "overlap": now + timedelta(hours=2),
+        "replay": now + timedelta(minutes=30),
+    }
+    candidate = WaterBalanceTargetState(
+        target=initial.target,
+        state=OpeningBalanceState.DURABLE_CARRY_FORWARD,
+        window_start=starts[relationship],
+        accounted_through=ends[relationship],
+        recorded_at=now + timedelta(hours=3),
+        deficit_mm=WaterQuantity.millimeters(3),
+        reason_code="durable_water_balance_carry_forward",
+    )
+
+    assert await manager.async_commit(target_states=(candidate,)) is False
+    assert manager.target_states == (initial,)
 
 
 @pytest.mark.asyncio

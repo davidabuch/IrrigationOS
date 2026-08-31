@@ -1,5 +1,14 @@
 # IrrigationOS Roadmap
 
+## v1.0.65 — Baseline Water Budget & Cadence Foundation
+
+- Adds ordinary durable checkpoints and explicit unknown/reconstructed/carried opening states.
+- Uses curated plant factors first, then bounded lower-confidence generic class factors.
+- Resolves root-zone available water and establishment-aware allowable depletion from versioned
+  policy data.
+- Produces replenishment water depth only after trigger crossing; runtime and execution remain
+  withheld.
+
 ## v1.0.64 — Zone-Centric Navigation Cleanup
 
 - Makes **Manage zones** the primary homeowner-facing IrrigationOS workflow.
@@ -132,7 +141,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.64
+- **Installable Home Assistant release:** v1.0.65
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority

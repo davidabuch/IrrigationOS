@@ -140,6 +140,10 @@ def test_quantitative_deficit_changes_scientific_need_but_never_authority() -> N
                 rationale_code="measured_effective_precipitation",
             ),
             forecast=None,
+            opening_balance_state=water_balance.OpeningBalanceState.RECONSTRUCTED,
+            opening_deficit_mm=water_balance.WaterQuantity.millimeters(0),
+            root_zone_available_water_mm=water_balance.WaterQuantity.millimeters(10),
+            allowable_depletion_fraction=water_balance.RatioQuantity(scalar=0.4),
         )
     )
     balances = water_balance.WaterBalanceSnapshot(
@@ -155,8 +159,51 @@ def test_quantitative_deficit_changes_scientific_need_but_never_authority() -> N
     )
     recommendation = result.recommendations[0]
     assert recommendation.scientific_need.value == "indicated"
-    assert recommendation.irrigation_depth is None
-    assert "target_irrigation_depth_unavailable" in recommendation.blocker_codes
+    assert recommendation.irrigation_depth.scalar == 5
+    assert "target_irrigation_depth_unavailable" not in recommendation.blocker_codes
     assert recommendation.estimated_runtime_seconds is None
     assert recommendation.scheduling_window is None
+    assert recommendation.execution_authorized is False
+
+
+def test_positive_deficit_below_trigger_does_not_recommend_irrigation() -> None:
+    evaluation = _evaluation()
+    target = load_integration_module("production_targets").ProductionTarget(1, 1)
+    balance = water_balance.calculate_production_area_water_balance(
+        water_balance.ProductionAreaWaterBalanceRequest(
+            target=target,
+            window_start=evaluation.evaluated_at - timedelta(days=1),
+            window_end=evaluation.evaluated_at,
+            calculated_at=evaluation.evaluated_at,
+            reference_et_mm=water_balance.WaterQuantity.millimeters(3),
+            plant_factor=water_balance.RatioQuantity(scalar=1),
+            observed_precipitation_mm=water_balance.WaterQuantity.millimeters(0),
+            quantified_irrigation_credit_mm=water_balance.WaterQuantity.millimeters(0),
+            unquantified_irrigation_session_ids=(),
+            effective_precipitation_policy=None,
+            forecast=None,
+            opening_balance_state=water_balance.OpeningBalanceState.RECONSTRUCTED,
+            opening_deficit_mm=water_balance.WaterQuantity.millimeters(0),
+            root_zone_available_water_mm=water_balance.WaterQuantity.millimeters(20),
+            allowable_depletion_fraction=water_balance.RatioQuantity(scalar=0.4),
+        )
+    )
+    balances = water_balance.WaterBalanceSnapshot(
+        state=water_balance.WaterBalanceState.AVAILABLE,
+        calculated_at=evaluation.evaluated_at,
+        balances=(balance,),
+        reason_codes=("actual_water_balance_calculated",),
+        blocker_codes=(),
+    )
+
+    recommendation = production.build_production_recommendations(
+        evaluation, water_balances=balances
+    ).recommendations[0]
+
+    assert recommendation.state is (
+        production.ProductionRecommendationState.NO_IRRIGATION_RECOMMENDED
+    )
+    assert recommendation.scientific_need is production.ScientificNeedState.NOT_INDICATED
+    assert recommendation.irrigation_depth is None
+    assert recommendation.estimated_runtime_seconds is None
     assert recommendation.execution_authorized is False

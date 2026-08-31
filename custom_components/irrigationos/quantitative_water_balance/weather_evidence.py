@@ -40,8 +40,7 @@ def canonical_weather_balance_evidence(
             if (
                 et.is_known
                 and isinstance(et.value, int | float)
-                and et.quality.status
-                in {WeatherQualityStatus.GOOD, WeatherQualityStatus.ESTIMATED}
+                and et.quality.status in {WeatherQualityStatus.GOOD, WeatherQualityStatus.ESTIMATED}
             ):
                 et_values.append(float(et.value))
                 evidence.append(
@@ -125,9 +124,9 @@ def _forecast_evidence(
     if not values:
         return None
     probability_value = min(probabilities) if len(probabilities) == len(records) else None
-    digest = hashlib.sha256(
-        "|".join(item.forecast_id for item in records).encode()
-    ).hexdigest()[:24]
+    digest = hashlib.sha256("|".join(item.forecast_id for item in records).encode()).hexdigest()[
+        :24
+    ]
     return ForecastPrecipitationEvidence(
         forecast_id=f"forecast.window.{digest}",
         issued_at=window.generated_at,
