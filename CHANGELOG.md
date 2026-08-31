@@ -1,3 +1,18 @@
+## [1.0.66] - 2026-08-30
+
+### Fixed
+
+- Replaced oversized full evidence arrays on per-zone water-balance Home Assistant entities with
+  deterministic bounded evidence counts, timestamps, kinds, and source counts.
+- Preserved all operational water-balance attributes while enforcing substantial headroom below
+  Home Assistant Recorder's 16,384-byte state-attribute limit.
+
+### Safety
+
+- This is a Home Assistant presentation-only fix. Canonical scientific evidence, persistence,
+  water accounting, recommendations, scheduling, controller transport, and execution authority
+  remain unchanged.
+
 ## [1.0.65] - 2026-08-30
 
 ### Added

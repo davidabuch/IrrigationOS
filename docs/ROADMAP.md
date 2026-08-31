@@ -1,8 +1,19 @@
 # IrrigationOS Roadmap
 
+## v1.0.66 — Compact Per-Zone Water-Balance Attributes
+
+- Replaces full per-zone Home Assistant evidence arrays with deterministic bounded evidence
+  summaries while preserving operational balance fields.
+- Keeps complete evidence in canonical scientific, diagnostics, and audit representations while
+  leaving persistence representations unchanged.
+- Leaves water accounting, recommendations, scheduling, persistence, and control behavior
+  unchanged.
+
 ## v1.0.65 — Baseline Water Budget & Cadence Foundation
 
-- Adds ordinary durable checkpoints and explicit unknown/reconstructed/carried opening states.
+- Adds bounded latest scientific state per production target and explicit
+  unknown/reconstructed/carried opening states; forecast deferral/reconciliation remains a
+  separate bounded event stream.
 - Uses curated plant factors first, then bounded lower-confidence generic class factors.
 - Resolves root-zone available water and establishment-aware allowable depletion from versioned
   policy data.
@@ -141,7 +152,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.65
+- **Installable Home Assistant release:** v1.0.66
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority

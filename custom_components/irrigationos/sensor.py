@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
@@ -22,10 +23,120 @@ from .entity import (
 from .observation_history.models import safe_session_summary
 from .pipeline import PIPELINE_ALGORITHM_VERSION, PipelineStage
 from .production_targets import find_production_area, select_production_targets
+from .quantitative_water_balance import ProductionAreaWaterBalance
 from .reconciliation import EntityInventory, controller_first
 from .supervised_operation.acceptance import (
     SUPERVISED_OPERATION_ACCEPTANCE_RECORD_SCHEMA_VERSION,
 )
+
+_HA_MAX_WATER_BALANCE_CODES = 32
+_HA_MAX_WATER_BALANCE_SESSION_IDS = 16
+# The canonical enum currently has eight kinds. Keep this fixed so future kinds
+# require an explicit HA presentation-contract review instead of leaking through.
+_HA_MAX_WATER_BALANCE_EVIDENCE_KINDS = 8
+_HA_WATER_BALANCE_ATTRIBUTE_KEYS = (
+    "target",
+    "state",
+    "window_start",
+    "window_end",
+    "calculated_at",
+    "valid_until",
+    "reference_et_mm",
+    "plant_factor",
+    "gross_landscape_demand_mm",
+    "observed_precipitation_mm",
+    "effective_observed_precipitation_mm",
+    "quantified_irrigation_credit_mm",
+    "unquantified_irrigation_session_ids",
+    "actual_net_deficit_mm",
+    "forecast_precipitation_mm",
+    "effective_forecast_precipitation_mm",
+    "forecast_window_observed_precipitation_mm",
+    "effective_forecast_window_observed_precipitation_mm",
+    "forecast_window_start",
+    "forecast_window_end",
+    "forecast_covered_deficit_mm",
+    "residual_uncovered_deficit_mm",
+    "deferred_deficit_mm",
+    "forecast_reconciliation_state",
+    "accounting_interval_state",
+    "opening_balance_state",
+    "demand_factor_source",
+    "root_zone_available_water_mm",
+    "allowable_depletion_fraction",
+    "irrigation_trigger_deficit_mm",
+    "trigger_state",
+    "irrigation_indicated",
+    "target_replenishment_depth_mm",
+    "baseline_water_budget_policy_version",
+    "confidence",
+    "completeness",
+    "reason_codes",
+    "blocker_codes",
+    "schema_version",
+    "policy_version",
+    "execution_authorized",
+)
+_HA_WATER_BALANCE_BOUNDED_COLLECTIONS = (
+    (
+        "unquantified_irrigation_session_ids",
+        _HA_MAX_WATER_BALANCE_SESSION_IDS,
+        "unquantified_irrigation_session_count",
+        "unquantified_irrigation_session_truncated",
+    ),
+    (
+        "reason_codes",
+        _HA_MAX_WATER_BALANCE_CODES,
+        "reason_codes_count",
+        "reason_codes_truncated",
+    ),
+    (
+        "blocker_codes",
+        _HA_MAX_WATER_BALANCE_CODES,
+        "blocker_codes_count",
+        "blocker_codes_truncated",
+    ),
+)
+
+
+def compact_water_balance_entity_attributes(
+    balance: ProductionAreaWaterBalance,
+) -> dict[str, Any]:
+    """Return bounded HA attributes without truncating canonical evidence."""
+
+    serialized = replace(balance, evidence=()).to_dict()
+    attributes = {
+        field_name: serialized[field_name]
+        for field_name in _HA_WATER_BALANCE_ATTRIBUTE_KEYS
+    }
+    evidence_kinds = tuple(sorted({item.kind.value for item in balance.evidence}))
+    evidence_sources = {item.source for item in balance.evidence}
+    attributes.update(
+        {
+            "evidence_count": len(balance.evidence),
+            "latest_evidence_at": (
+                None
+                if not balance.evidence
+                else max(item.observed_at for item in balance.evidence).isoformat()
+            ),
+            "evidence_kind_count": len(evidence_kinds),
+            "evidence_kinds": list(
+                evidence_kinds[:_HA_MAX_WATER_BALANCE_EVIDENCE_KINDS]
+            ),
+            "evidence_kinds_truncated": (
+                len(evidence_kinds) > _HA_MAX_WATER_BALANCE_EVIDENCE_KINDS
+            ),
+            "evidence_source_count": len(evidence_sources),
+        }
+    )
+    for field_name, limit, count_name, truncated_name in (
+        _HA_WATER_BALANCE_BOUNDED_COLLECTIONS
+    ):
+        values = attributes[field_name]
+        attributes[field_name] = values[:limit]
+        attributes[count_name] = len(values)
+        attributes[truncated_name] = len(values) > limit
+    return attributes
 
 
 async def async_setup_entry(
@@ -1275,7 +1386,7 @@ class IrrigationOSAreaWaterBalanceSensor(IrrigationOSAreaEntity, SensorEntity):
                 "area_slot": self.area.slot_number,
                 "execution_authorized": False,
             }
-        return balance.to_dict()
+        return compact_water_balance_entity_attributes(balance)
 
 
 class IrrigationOSPipelineVersionSensor(IrrigationOSEntity, SensorEntity):
