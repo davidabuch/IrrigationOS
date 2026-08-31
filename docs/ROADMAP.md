@@ -1,5 +1,14 @@
 # IrrigationOS Roadmap
 
+## v1.0.67 — Guided-Observation Confirmation Window
+
+- Replaces the single immediate guided start/stop observation assumption with a bounded
+  ten-second canonical confirmation window.
+- Retries only observation and exact-target reconciliation; each physical start or stop command
+  remains limited to one attempt.
+- Leaves guided durations, manual watering, science, persistence, scheduling, and execution
+  authority unchanged.
+
 ## v1.0.66 — Compact Per-Zone Water-Balance Attributes
 
 - Replaces full per-zone Home Assistant evidence arrays with deterministic bounded evidence
@@ -152,7 +161,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.66
+- **Installable Home Assistant release:** v1.0.67
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
