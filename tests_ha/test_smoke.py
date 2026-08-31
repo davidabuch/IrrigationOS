@@ -70,8 +70,11 @@ from custom_components.irrigationos.production_readiness import (
 )
 from custom_components.irrigationos.quantitative_water_balance import (
     OpeningBalanceState,
+    WaterBalanceEvidence,
+    WaterBalanceEvidenceKind,
     WaterBalanceLedgerEvent,
     WaterBalanceLedgerEventKind,
+    WaterBalanceSnapshot,
     WaterBalanceTargetState,
     WaterQuantity,
 )
@@ -79,6 +82,7 @@ from custom_components.irrigationos.quantitative_water_balance.manager import (
     WATER_BALANCE_LEDGER_STORE_VERSION,
     WaterBalanceLedgerManager,
 )
+from custom_components.irrigationos.sensor import compact_water_balance_entity_attributes
 from custom_components.irrigationos.supervised_operation import (
     SupervisedOperationResult,
     SupervisedOperationStatus,
@@ -750,6 +754,286 @@ async def test_production_readiness_entities_use_only_configured_targets_and_res
     )
     assert hass.states.get("binary_sensor.irrigationos_production_ready").state == "off"
     assert entry.runtime_data.supervised_operation.in_progress is False
+
+
+@pytest.mark.asyncio
+async def test_per_zone_water_balance_attributes_compact_oversized_evidence(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = MutableAdapter(_production_snapshot())
+    monkeypatch.setattr(DEFAULT_PROVIDER_FACTORY, "create", lambda *args: adapter)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="IrrigationOS",
+        data=_entry_data(),
+        version=3,
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    coordinator = entry.runtime_data
+    original = coordinator.water_balances.balances[0]
+    original_state = original.state.value
+    observed_at = original.calculated_at - timedelta(hours=1)
+    evidence = tuple(
+        WaterBalanceEvidence(
+            evidence_id=f"oversized.evidence.{index:04d}." + "x" * 72,
+            kind=(
+                WaterBalanceEvidenceKind.REFERENCE_ET
+                if index % 2 == 0
+                else WaterBalanceEvidenceKind.OBSERVED_PRECIPITATION
+            ),
+            source=f"synthetic_privacy_safe_source_{index:04d}",
+            observed_at=observed_at + timedelta(seconds=index),
+            confidence=0.9,
+            quality="good",
+        )
+        for index in range(256)
+    )
+    oversized = replace(original, evidence=evidence)
+    full = oversized.to_dict()
+    full_payload_bytes = len(json.dumps(full, default=str).encode("utf-8"))
+    assert full_payload_bytes > 16_384
+    assert len(full["evidence"]) == len(evidence) == 256
+    compact = compact_water_balance_entity_attributes(oversized)
+    expected_attribute_keys = {
+        "target",
+        "state",
+        "window_start",
+        "window_end",
+        "calculated_at",
+        "valid_until",
+        "reference_et_mm",
+        "plant_factor",
+        "gross_landscape_demand_mm",
+        "observed_precipitation_mm",
+        "effective_observed_precipitation_mm",
+        "quantified_irrigation_credit_mm",
+        "unquantified_irrigation_session_ids",
+        "unquantified_irrigation_session_count",
+        "unquantified_irrigation_session_truncated",
+        "actual_net_deficit_mm",
+        "forecast_precipitation_mm",
+        "effective_forecast_precipitation_mm",
+        "forecast_window_observed_precipitation_mm",
+        "effective_forecast_window_observed_precipitation_mm",
+        "forecast_window_start",
+        "forecast_window_end",
+        "forecast_covered_deficit_mm",
+        "residual_uncovered_deficit_mm",
+        "deferred_deficit_mm",
+        "forecast_reconciliation_state",
+        "accounting_interval_state",
+        "opening_balance_state",
+        "demand_factor_source",
+        "root_zone_available_water_mm",
+        "allowable_depletion_fraction",
+        "irrigation_trigger_deficit_mm",
+        "trigger_state",
+        "irrigation_indicated",
+        "target_replenishment_depth_mm",
+        "baseline_water_budget_policy_version",
+        "confidence",
+        "completeness",
+        "reason_codes",
+        "reason_codes_count",
+        "reason_codes_truncated",
+        "blocker_codes",
+        "blocker_codes_count",
+        "blocker_codes_truncated",
+        "schema_version",
+        "policy_version",
+        "execution_authorized",
+        "evidence_count",
+        "latest_evidence_at",
+        "evidence_kind_count",
+        "evidence_kinds",
+        "evidence_kinds_truncated",
+        "evidence_source_count",
+    }
+    assert set(compact) == expected_attribute_keys
+    assert compact["evidence_kinds"] == [
+        "observed_precipitation",
+        "reference_et",
+    ]
+
+    assert len(WaterBalanceEvidenceKind) == 8
+    all_kind_evidence = tuple(
+        sorted(
+            (
+                WaterBalanceEvidence(
+                    evidence_id=f"kind.{kind.value}",
+                    kind=kind,
+                    source="all_kind_contract",
+                    observed_at=observed_at,
+                    confidence=0.9,
+                    quality="good",
+                )
+                for kind in WaterBalanceEvidenceKind
+            ),
+            key=lambda item: item.evidence_id,
+        )
+    )
+    all_kind_attributes = compact_water_balance_entity_attributes(
+        replace(original, evidence=all_kind_evidence)
+    )
+    assert all_kind_attributes["evidence_kinds"] == sorted(
+        kind.value for kind in WaterBalanceEvidenceKind
+    )
+    assert all_kind_attributes["evidence_kind_count"] == 8
+    assert all_kind_attributes["evidence_kinds_truncated"] is False
+
+    session_ids = tuple(f"watering.session.{index:03d}" for index in range(20))
+    reason_codes = tuple(f"reason_code_{index:03d}" for index in range(40))
+    blocker_codes = tuple(f"blocker_code_{index:03d}" for index in range(40))
+    oversized_collections = replace(
+        original,
+        unquantified_irrigation_session_ids=session_ids,
+        reason_codes=reason_codes,
+        blocker_codes=blocker_codes,
+    )
+    full_collections = oversized_collections.to_dict()
+    bounded_collections = compact_water_balance_entity_attributes(
+        oversized_collections
+    )
+    assert full_collections["unquantified_irrigation_session_ids"] == list(
+        session_ids
+    )
+    assert bounded_collections["unquantified_irrigation_session_ids"] == list(
+        session_ids[:16]
+    )
+    assert bounded_collections["unquantified_irrigation_session_count"] == 20
+    assert bounded_collections["unquantified_irrigation_session_truncated"] is True
+    assert full_collections["reason_codes"] == list(reason_codes)
+    assert bounded_collections["reason_codes"] == list(reason_codes[:32])
+    assert bounded_collections["reason_codes_count"] == 40
+    assert bounded_collections["reason_codes_truncated"] is True
+    assert full_collections["blocker_codes"] == list(blocker_codes)
+    assert bounded_collections["blocker_codes"] == list(blocker_codes[:32])
+    assert bounded_collections["blocker_codes_count"] == 40
+    assert bounded_collections["blocker_codes_truncated"] is True
+    assert set(bounded_collections) == expected_attribute_keys
+
+    entity_registry = er.async_get(hass)
+    entity_id = "sensor.zone_1_water_balance"
+    registry_entry = entity_registry.async_get(entity_id)
+    assert registry_entry is not None
+    unique_id = registry_entry.unique_id
+    coordinator.water_balances = replace(
+        coordinator.water_balances,
+        balances=(oversized, *coordinator.water_balances.balances[1:]),
+    )
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+
+    area_balance = hass.states.get(entity_id)
+    assert area_balance is not None
+    assert area_balance.state == original_state
+    attributes = dict(area_balance.attributes)
+    assert "evidence" not in attributes
+    assert "evidence_sources" not in attributes
+    assert attributes["evidence_count"] == 256
+    assert attributes["latest_evidence_at"] == evidence[-1].observed_at.isoformat()
+    assert attributes["evidence_kind_count"] == 2
+    assert attributes["evidence_kinds"] == [
+        "observed_precipitation",
+        "reference_et",
+    ]
+    assert attributes["evidence_kinds_truncated"] is False
+    assert len(attributes["evidence_kinds"]) <= 8
+    assert attributes["evidence_source_count"] == 256
+    for field_name in (
+        "target",
+        "state",
+        "window_start",
+        "window_end",
+        "calculated_at",
+        "valid_until",
+        "reference_et_mm",
+        "plant_factor",
+        "gross_landscape_demand_mm",
+        "observed_precipitation_mm",
+        "effective_observed_precipitation_mm",
+        "quantified_irrigation_credit_mm",
+        "unquantified_irrigation_session_ids",
+        "actual_net_deficit_mm",
+        "forecast_precipitation_mm",
+        "effective_forecast_precipitation_mm",
+        "forecast_window_observed_precipitation_mm",
+        "effective_forecast_window_observed_precipitation_mm",
+        "forecast_window_start",
+        "forecast_window_end",
+        "forecast_covered_deficit_mm",
+        "residual_uncovered_deficit_mm",
+        "deferred_deficit_mm",
+        "forecast_reconciliation_state",
+        "accounting_interval_state",
+        "opening_balance_state",
+        "demand_factor_source",
+        "root_zone_available_water_mm",
+        "allowable_depletion_fraction",
+        "irrigation_trigger_deficit_mm",
+        "trigger_state",
+        "irrigation_indicated",
+        "target_replenishment_depth_mm",
+        "baseline_water_budget_policy_version",
+        "confidence",
+        "completeness",
+        "reason_codes",
+        "blocker_codes",
+        "schema_version",
+        "policy_version",
+        "execution_authorized",
+    ):
+        assert attributes[field_name] == full[field_name]
+    assert attributes["execution_authorized"] is False
+    compact_payload_bytes = len(
+        json.dumps(dict(area_balance.attributes), default=str).encode("utf-8")
+    )
+    assert compact_payload_bytes < 12_000
+
+    all_balance_sizes = {}
+    all_recommendation_sizes = {}
+    for slot in (1, 2, 4, 5):
+        balance_state = hass.states.get(f"sensor.zone_{slot}_water_balance")
+        recommendation_state = hass.states.get(
+            f"sensor.zone_{slot}_production_recommendation"
+        )
+        assert balance_state is not None
+        assert recommendation_state is not None
+        all_balance_sizes[slot] = len(
+            json.dumps(dict(balance_state.attributes), default=str).encode("utf-8")
+        )
+        all_recommendation_sizes[slot] = len(
+            json.dumps(dict(recommendation_state.attributes), default=str).encode("utf-8")
+        )
+    assert max(all_balance_sizes.values()) < 12_000
+    assert max(all_recommendation_sizes.values()) < 12_000
+    aggregate = hass.states.get("sensor.irrigationos_quantitative_water_balances")
+    assert aggregate is not None
+    aggregate_payload_bytes = len(
+        json.dumps(dict(aggregate.attributes), default=str).encode("utf-8")
+    )
+    assert aggregate_payload_bytes < 8192
+
+    current_registry_entry = entity_registry.async_get(entity_id)
+    assert current_registry_entry is not None
+    assert current_registry_entry.unique_id == unique_id
+    coordinator.water_balances = WaterBalanceSnapshot.not_available()
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+    fallback = hass.states.get(entity_id)
+    assert fallback is not None
+    assert fallback.state == "not_available"
+    assert fallback.attributes["controller_slot"] == 1
+    assert fallback.attributes["area_slot"] == 1
+    assert fallback.attributes["execution_authorized"] is False
+    assert "evidence" not in fallback.attributes
+    fallback_registry_entry = entity_registry.async_get(entity_id)
+    assert fallback_registry_entry is not None
+    assert fallback_registry_entry.unique_id == unique_id
 
 
 @pytest.mark.asyncio
