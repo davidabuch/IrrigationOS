@@ -1,17 +1,17 @@
 {
   "domain": "irrigationos",
   "name": "IrrigationOS",
+  "after_dependencies": [
+    "cloud"
+  ],
   "codeowners": [
     "@davidabuch"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/davidabuch/IrrigationOS",
-  "after_dependencies": [
-    "cloud"
-  ],
   "dependencies": [
     "http"
   ],
+  "documentation": "https://github.com/davidabuch/IrrigationOS",
   "integration_type": "hub",
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/davidabuch/IrrigationOS/issues",
