@@ -411,7 +411,23 @@ async def test_runtime_inventory_and_diagnostics(
 
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
+    assert "deprecated `via_device`" not in caplog.text
     assert "non existing `via_device`" not in caplog.text
+
+    device_registry = dr.async_get(hass)
+    controller_device = device_registry.async_get_device_by_identifier(
+        (DOMAIN, "controller_test"),
+        entry.entry_id,
+    )
+    assert controller_device is not None
+
+    for slot in (1, 2):
+        area_device = device_registry.async_get_device_by_identifier(
+            (DOMAIN, f"controller_test:slot:{slot}"),
+            entry.entry_id,
+        )
+        assert area_device is not None
+        assert area_device.via_device_id == controller_device.id
 
     entity_registry = er.async_get(hass)
     entries = er.async_entries_for_config_entry(entity_registry, entry.entry_id)
@@ -1091,13 +1107,13 @@ async def test_manual_zone_platforms_use_non_contiguous_stable_targets(
     assert hass.states.get("number.zone_3_manual_watering_duration") is None
     assert hass.states.get("valve.zone_1_manual_watering").attributes[
         "friendly_name"
-    ] == "Zone 1 manual watering"
+    ] == "Zone 1 Manual watering"
     assert hass.states.get("valve.zone_2_manual_watering").attributes[
         "friendly_name"
-    ] == "Orchard manual watering"
+    ] == "Zone 2 Orchard manual watering"
     assert hass.states.get("valve.zone_4_manual_watering").attributes[
         "friendly_name"
-    ] == "Zone 4 manual watering"
+    ] == "Zone 4 Manual watering"
 
     current = adapter.snapshot.controllers[0]
     adapter.snapshot = replace(
@@ -1142,11 +1158,11 @@ async def test_manual_zone_platforms_use_non_contiguous_stable_targets(
     await hass.async_block_till_done()
     renamed = hass.states.get("valve.zone_1_manual_watering")
     assert renamed is not None
-    assert renamed.attributes["friendly_name"] == "Front Entry Planters manual watering"
+    assert renamed.attributes["friendly_name"] == "Zone 1 Front Entry Planters manual watering"
     renamed_duration = hass.states.get("number.zone_1_manual_watering_duration")
     assert renamed_duration is not None
     assert renamed_duration.attributes["friendly_name"] == (
-        "Front Entry Planters manual watering duration"
+        "Zone 1 Front Entry Planters manual watering duration"
     )
     assert entries["controller_test:slot:1_manual_watering_valve"].unique_id == original_unique_id
 

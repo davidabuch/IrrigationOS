@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
@@ -30,7 +30,7 @@ class IrrigationOSControllerEntity(IrrigationOSEntity):
         super().__init__(coordinator)
         self.controller_id = controller.controller_id
         self._last_controller = controller
-        self._attr_device_info = DeviceInfo(
+        self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, controller.controller_id)},
             manufacturer=controller.provider.title(),
             model=controller.model,
@@ -71,9 +71,14 @@ class IrrigationOSAreaEntity(IrrigationOSEntity):
         self.controller_id = area.controller_id
         self._last_area = area
         self._attr_entity_registry_enabled_default = area.configured
-        self._attr_device_info = DeviceInfo(
+        parent_device_id = dr.async_get_device_id_by_identifier(
+            coordinator.hass,
+            (DOMAIN, area.controller_id),
+            config_entry_id=coordinator.entry.entry_id,
+        )
+        self._attr_device_info = dr.DeviceInfo(
             identifiers={(DOMAIN, area.area_id)},
-            via_device=(DOMAIN, area.controller_id),
+            via_device_id=parent_device_id,
             manufacturer=self.coordinator.data.provider.title(),
             model="Irrigation slot",
             name=self._display_name(area),

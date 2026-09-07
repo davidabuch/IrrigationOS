@@ -1,6 +1,6 @@
-pytest==9.0.0
+pytest==9.0.3
 pytest-asyncio==1.4.0
 ruff>=0.9,<1
 mypy>=2.3.0,<3
 aiohttp>=3.11,<4
-voluptuous>=0.16.0,<1
+voluptuous==0.15.2

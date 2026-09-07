@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from homeassistant.components.valve import (
-    ValveDeviceClass,
-    ValveEntity,
-    ValveEntityFeature,
-)
+from homeassistant.components.valve.const import ValveDeviceClass, ValveEntityFeature
+from homeassistant.components.valve.entity import ValveEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
