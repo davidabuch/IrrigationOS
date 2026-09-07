@@ -566,6 +566,8 @@ Typical validation may include:
 - `python -m pytest -q --asyncio-mode=auto tests_ha`
 - `git diff --check`
 
+GitHub validation for Home Assistant distribution should additionally include Hassfest and HACS validation.
+
 If repository tooling changes, use the current authoritative tooling.
 
 A focused test is useful during development.
@@ -676,27 +678,36 @@ Do not use coding-agent complexity merely for trivial changes.
 
 # 31. Deployment Is Separate From Development
 
-Passing tests does not authorize deployment.
+Passing tests does not authorize release publication or deployment.
 
 Deployment requires a separate explicit decision.
 
-Do not patch individual production files casually when the intended deployment unit is the complete integration.
+For normal production distribution, deploy only from an explicitly approved immutable Git tag and matching GitHub Release that has passed repository CI, Home Assistant smoke tests, Hassfest, and HACS validation.
 
-Preferred deployment artifact is a complete ZIP built from the exact approved merged Git commit.
+HACS is the preferred production installation and update path once release publication is active.
+
+Do not patch individual production files casually when the intended deployment unit is the complete integration.
 
 ---
 
-# 32. ZIP Packaging Rules
+# 32. Release and Recovery Artifacts
 
-Build release/deployment ZIPs from the exact approved Git commit whenever practical.
+The normal installable artifact is the exact integration content associated with an approved Git tag and GitHub Release consumed through HACS.
 
-A preferred approach is based on `git archive` so untracked/local files cannot accidentally enter the artifact.
+A deterministic ZIP built from the exact approved Git commit remains appropriate for:
+
+- forensic comparison;
+- rollback preparation;
+- exceptional manual recovery;
+- environments where HACS is intentionally unavailable.
+
+When building a ZIP, prefer `git archive` so untracked/local files cannot accidentally enter the artifact.
 
 The archive should have the complete integration under:
 
 `custom_components/irrigationos/`
 
-Before deployment verify:
+Before using a ZIP verify:
 
 - expected integration root;
 - manifest exists;
@@ -709,7 +720,7 @@ Before deployment verify:
 - no unrelated files;
 - artifact SHA256.
 
-Never build a production ZIP from an unknown dirty working tree.
+Never build or deploy a production artifact from an unknown dirty working tree.
 
 ---
 
@@ -717,22 +728,24 @@ Never build a production ZIP from an unknown dirty working tree.
 
 Preferred production deployment sequence:
 
-1. merge approved PR;
-2. identify exact merged commit;
-3. build complete ZIP from that commit;
-4. inspect ZIP;
-5. record artifact SHA256;
-6. deploy complete `irrigationos` directory;
-7. verify directory structure;
-8. verify manifest/version;
-9. run `ha core check`;
-10. restart only after successful configuration validation;
-11. perform focused post-restart validation;
-12. inspect relevant logs/diagnostics.
+1. merge an approved green pull request;
+2. identify the exact merged `main` commit;
+3. verify synchronized release metadata;
+4. create the matching immutable Git tag and GitHub Release only after explicit release approval;
+5. install or update IrrigationOS through HACS from that release;
+6. verify the installed integration version and structure;
+7. run `ha core check`;
+8. restart only after successful configuration validation;
+9. perform focused post-restart validation;
+10. inspect relevant logs/diagnostics.
+
+A deterministic ZIP may substitute only for an explicitly chosen rollback or exceptional manual-recovery path and must still be tied to the exact approved commit.
 
 Do not restart Home Assistant merely because files changed.
 
 Configuration validation comes first.
+
+See `docs/HACS_RELEASE_WORKFLOW.md` for the complete public-release sequence.
 
 ---
 
@@ -942,8 +955,8 @@ For code development, "done" generally means:
 
 For deployment, "done" additionally means:
 
-- artifact tied to approved commit;
-- ZIP validated;
+- installable source tied to the exact approved immutable tag and GitHub Release, or an explicitly approved deterministic recovery artifact;
+- HACS/release validation completed for normal production distribution;
 - HA configuration check passed;
 - restart completed successfully;
 - integration loaded;

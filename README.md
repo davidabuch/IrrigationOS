@@ -90,12 +90,17 @@ Realtime delivery requires a public HTTPS Home Assistant URL that Rachio can rea
 
 In the Rachio mobile app, open **Profile**, select **API Key**, and tap **Copy**. Paste the token into the IrrigationOS Config Flow when adding the integration in Home Assistant.
 
-## Development installation
+## Installation and updates
 
-The repository is currently private, so HACS publication and validation are deferred. During initial commissioning, install from a reviewed ZIP or copy the integration directory manually after local validation. The HACS metadata and local brand asset remain in place for future public distribution.
+IrrigationOS is maintained in a public GitHub repository and is intended to be installed and updated through HACS from explicitly published GitHub Releases. The current Home Assistant compatibility floor is **2026.8.0**.
+
+Development branches and green pull requests are not installable releases by themselves. A production update should use an explicitly approved immutable tag and matching GitHub Release after CI, Hassfest, and HACS validation are green. See [`docs/HACS_RELEASE_WORKFLOW.md`](docs/HACS_RELEASE_WORKFLOW.md) for the release and deployment sequence.
+
+A deterministic ZIP built from an exact approved commit may still be used for forensic comparison, rollback, or exceptional manual recovery, but it is not the normal production update path once HACS release distribution is active.
 
 Key documents:
 
+- [`docs/HACS_RELEASE_WORKFLOW.md`](docs/HACS_RELEASE_WORKFLOW.md)
 - [`docs/V1_0_65_BASELINE_WATER_BUDGET_CADENCE.md`](docs/V1_0_65_BASELINE_WATER_BUDGET_CADENCE.md)
 - [`docs/V1_0_63_ZONE_RECOMMISSIONING.md`](docs/V1_0_63_ZONE_RECOMMISSIONING.md)
 - [`docs/V1_0_57_GUIDED_BASELINE_DELIVERY_CALIBRATION.md`](docs/V1_0_57_GUIDED_BASELINE_DELIVERY_CALIBRATION.md)

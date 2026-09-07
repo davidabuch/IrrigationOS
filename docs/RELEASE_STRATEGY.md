@@ -9,14 +9,18 @@ The v1.0 public compatibility contract was frozen at v1.0.13 and remains binding
 ## Release sequence
 
 1. Define scope and acceptance criteria.
-2. Implement and test.
-3. Update documentation, roadmap, changelog, and milestone notes.
-4. Validate locally.
-5. Commit and push.
-6. Confirm GitHub Actions.
-7. Merge only after CI is green.
-8. Create a tag/release only when the milestone or distribution plan calls for one.
-9. Verify HACS installation/update behavior when public distribution begins.
+2. Implement and test on a feature branch.
+3. Update documentation, roadmap, changelog, and milestone notes when applicable.
+4. Validate locally, including Home Assistant smoke tests for integration changes.
+5. Inspect the final diff, then commit and push.
+6. Open a pull request and confirm repository CI, Hassfest, and HACS validation.
+7. Merge only after all required checks are green and review is complete.
+8. Verify the exact merged `main` commit and synchronized release metadata.
+9. Create the matching immutable Git tag and GitHub Release only when explicitly approved for distribution.
+10. Install or update through HACS from the published release.
+11. Run Home Assistant configuration validation before restart, then perform focused post-restart checks.
+
+A passing pull request does not by itself authorize release publication or Home Assistant deployment.
 
 ## Repository source of truth
 
@@ -30,6 +34,20 @@ The v1.0 public compatibility contract was frozen at v1.0.13 and remains binding
 - Milestone work uses short-lived feature branches.
 - Release tags, when required, must point to green commits on `main`.
 
+## HACS distribution
+
+IrrigationOS is a public HACS custom integration. The repository must keep `hacs.json`, Hassfest,
+and HACS validation current before an installable release is published.
+
+The minimum supported Home Assistant Core version is declared in `hacs.json` and must reflect the
+oldest Core release that provides every Home Assistant API used by the integration. For the current
+HA 2026.8 compatibility line, that floor is `2026.8.0`.
+
+For installable releases, the version in `manifest.json`, `const.py`, and `pyproject.toml` must
+match the immutable Git tag and GitHub Release tag.
+
+See `docs/HACS_RELEASE_WORKFLOW.md` for the complete release and deployment sequence.
+
 ## Definition of Done
 
 A milestone is complete only when:
@@ -37,12 +55,12 @@ A milestone is complete only when:
 - acceptance criteria are satisfied;
 - standard tests, Ruff, MyPy, repository validation, and `git diff --check` pass;
 - Home Assistant runtime/migration/lifecycle smoke tests pass for integration milestones;
-- GitHub Actions is green;
-- changelog and milestone documentation are complete;
+- GitHub Actions, Hassfest, and HACS validation are green;
+- changelog and milestone documentation are complete when applicable;
 - architecture/governance records are updated when required;
 - secrets and generated cache files are absent;
 - installation or migration instructions are accurate;
-- the final delivered ZIP has been inspected after creation.
+- any release artifact is tied to the exact approved commit.
 
 ## Stable v1.0 line
 

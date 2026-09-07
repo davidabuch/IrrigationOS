@@ -12,7 +12,13 @@ python -m mypy custom_components tests
 git diff --check
 ```
 
-GitHub Actions must also be green before a milestone is complete.
+Home Assistant integration milestones must also pass:
+
+```bash
+python -m pytest -q --asyncio-mode=auto tests_ha
+```
+
+GitHub Actions, Hassfest, and HACS validation must be green before a release candidate is complete.
 
 ## Python standards
 
@@ -59,16 +65,23 @@ GitHub Actions must also be green before a milestone is complete.
 
 ## Delivery workflow
 
-1. Start from a clean tagged or committed baseline.
-2. Build one cohesive milestone.
-3. Perform technical review.
-4. Perform omission, safety, and maintainability review.
-5. Run all local quality gates.
-6. Inspect the final ZIP contents after packaging.
-7. User installs the complete package using Finder.
-8. User runs the exact validation block.
-9. Commit and push only after green local validation.
-10. Confirm GitHub Actions before tagging.
+1. Start from a clean committed `main` baseline.
+2. Create a short-lived feature branch.
+3. Build one cohesive milestone.
+4. Perform technical review.
+5. Perform omission, safety, and maintainability review.
+6. Run all local quality gates, including Home Assistant smoke tests when applicable.
+7. Inspect the final diff.
+8. Commit and push only after green local validation.
+9. Open a pull request and require CI, Hassfest, and HACS validation to pass.
+10. Merge only after the pull request is reviewed and green.
+11. For an approved installable release, verify synchronized version metadata, create the matching immutable tag, and publish the GitHub Release.
+12. Install or update through HACS, run `ha core check`, then restart only after configuration validation succeeds.
+13. Perform focused post-restart validation and inspect relevant logs.
+
+A deterministic ZIP built from an exact approved commit may be retained for forensic comparison,
+rollback, or exceptional manual recovery, but HACS is the normal production distribution path once
+release publication is active. See `docs/HACS_RELEASE_WORKFLOW.md`.
 
 ## Repository hygiene
 
