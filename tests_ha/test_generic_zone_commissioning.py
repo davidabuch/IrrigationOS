@@ -830,15 +830,122 @@ async def test_manage_zone_identification_runs_30_seconds_stops_and_repeats(
     )
     assert starts == [ZONE_IDENTIFICATION_DURATION_SECONDS]
     assert guided.snapshot.requested_duration_seconds == 30
-    assert _manage_zone_actions(active)["stop"] == "Stop watering Zone 1"
+    assert active["step_id"] == "manage_zone_identification_active"
+    assert active["menu_options"] == ["manage_zone_identification_stop"]
 
-    completed = await flow.async_step_manage_zone(
-        {CONF_MANAGE_ZONE_ACTION: "stop"}
-    )
+    completed = await flow.async_step_manage_zone_identification_stop()
     assert stops == [(1, 1)]
+    assert completed["step_id"] == "manage_zone"
     assert _manage_zone_actions(completed)["run"] == (
         "Identify Zone 1 — water for 30 seconds"
     )
+
+
+@pytest.mark.asyncio
+async def test_active_identification_stale_stop_does_not_redispatch(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A naturally completed run must not receive a stale second stop command."""
+    manager = LandscapeIntelligenceManager(hass, "identify-zone-stale-stop")
+    manager._store = _Store(None)  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    guided = GuidedObservationManager()
+    runtime = SimpleNamespace(
+        landscape_intelligence=manager,
+        guided_observation=guided,
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = runtime
+    entry.add_to_hass(hass)
+
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+    flow._manage_controller_slot = 1
+    flow._manage_area_slot = 1
+    flow._commissioning_area_name = "Zone 1"
+
+    stop_calls: list[tuple[int, int]] = []
+
+    async def unexpected_stop(
+        coordinator: Any, *, controller_slot: int, area_slot: int
+    ) -> GuidedObservationResult:
+        stop_calls.append((controller_slot, area_slot))
+        return GuidedObservationResult(
+            GuidedObservationStatus.ACCEPTED, controller_slot, area_slot
+        )
+
+    monkeypatch.setattr(
+        config_flow_module, "async_stop_guided_observation", unexpected_stop
+    )
+
+    guided.mark_starting(1, 1, ZONE_IDENTIFICATION_DURATION_SECONDS)
+    guided.snapshot = replace(
+        guided.snapshot,
+        state=GuidedObservationState.COMPLETED,
+    )
+
+    result = await flow.async_step_manage_zone_identification_stop()
+
+    assert stop_calls == []
+    assert result["step_id"] == "manage_zone"
+    assert _manage_zone_actions(result)["run"] == (
+        "Identify Zone 1 — water for 30 seconds"
+    )
+
+
+@pytest.mark.asyncio
+async def test_active_identification_stop_blocker_stays_focused(
+    hass: HomeAssistant,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unconfirmed stop remains on the focused stop screen."""
+    manager = LandscapeIntelligenceManager(hass, "identify-zone-stop-blocker")
+    manager._store = _Store(None)  # type: ignore[assignment]
+    await manager.async_initialize(initial_observed_at=NOW)
+    guided = GuidedObservationManager()
+    runtime = SimpleNamespace(
+        landscape_intelligence=manager,
+        guided_observation=guided,
+    )
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.runtime_data = runtime
+    entry.add_to_hass(hass)
+
+    flow = IrrigationOSOptionsFlow()
+    flow.hass = hass
+    flow.handler = entry.entry_id
+    flow._manage_controller_slot = 1
+    flow._manage_area_slot = 1
+    flow._commissioning_area_name = "Zone 1"
+
+    guided.mark_starting(1, 1, ZONE_IDENTIFICATION_DURATION_SECONDS)
+    guided.snapshot = replace(
+        guided.snapshot,
+        state=GuidedObservationState.RUNNING,
+    )
+
+    async def blocked_stop(
+        coordinator: Any, *, controller_slot: int, area_slot: int
+    ) -> GuidedObservationResult:
+        assert coordinator is runtime
+        return GuidedObservationResult(
+            GuidedObservationStatus.BLOCKED,
+            controller_slot,
+            area_slot,
+            blocker_codes=("stop_not_observed",),
+        )
+
+    monkeypatch.setattr(
+        config_flow_module, "async_stop_guided_observation", blocked_stop
+    )
+
+    result = await flow.async_step_manage_zone_identification_stop()
+
+    assert result["step_id"] == "manage_zone_identification_stop"
+    assert result["errors"] == {"base": "stop_not_observed"}
+    assert result["data_schema"].schema == {}
 
 
 @pytest.mark.asyncio
@@ -976,18 +1083,14 @@ async def test_zone2_identification_accepts_delayed_start_and_stop_observations(
 
     running = await flow.async_step_manage_zone({CONF_MANAGE_ZONE_ACTION: "run"})
 
-    assert running["step_id"] == "manage_zone"
-    assert running["errors"] == {}
-    assert "run" not in _manage_zone_actions(running)
-    assert _manage_zone_actions(running)["stop"] == "Stop watering Zone 2"
+    assert running["step_id"] == "manage_zone_identification_active"
+    assert running["menu_options"] == ["manage_zone_identification_stop"]
     assert adapter.starts == [
         ("private-zone-2", ZONE_IDENTIFICATION_DURATION_SECONDS)
     ]
     assert guided.snapshot.state is GuidedObservationState.RUNNING
 
-    completed = await flow.async_step_manage_zone(
-        {CONF_MANAGE_ZONE_ACTION: "stop"}
-    )
+    completed = await flow.async_step_manage_zone_identification_stop()
 
     assert completed["step_id"] == "manage_zone"
     assert completed["errors"] == {}

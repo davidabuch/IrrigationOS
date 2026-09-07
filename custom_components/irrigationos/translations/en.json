@@ -110,6 +110,17 @@
         "description": "Choose the name IrrigationOS will show for this physical zone. Its controller name remains {native_name} and will not be changed.",
         "data": {"commissioning_zone_name": "Zone name"}
       },
+      "manage_zone_identification_active": {
+        "title": "Identifying {zone_name}",
+        "description": "{zone_name} is watering for a temporary {duration_seconds}-second identification run. IrrigationOS has not enabled automatic watering. You can stop this run early as soon as you have identified the zone.",
+        "menu_options": {
+          "manage_zone_identification_stop": "Stop watering now"
+        }
+      },
+      "manage_zone_identification_stop": {
+        "title": "Stop watering {zone_name}",
+        "description": "IrrigationOS could not yet confirm that the temporary identification run stopped. Submit again to retry the explicit stop. Automatic watering remains disabled."
+      },
       "manage_zone_recommission": {
         "title": "Start over with {zone_name}",
         "description": "The physical irrigation zone and its Home Assistant identity will remain. Current plants, setup assumptions, and plant-to-irrigation links will be cleared from the active setup, while the prior setup and photos remain in history. You can set up this same zone again. No watering will be started by this action.",

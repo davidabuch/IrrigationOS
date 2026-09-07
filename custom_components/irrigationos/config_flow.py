@@ -488,6 +488,9 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
                 GuidedObservationState.UNCERTAIN,
             }
         )
+        if user_input is None and active_here:
+            return await self.async_step_manage_zone_identification_active()
+
         actions: dict[str, str] = (
             {"setup": "Name / Set up this zone"}
             if profile is None
@@ -564,6 +567,8 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
             if result.blocker_codes:
                 errors["base"] = result.blocker_codes[0]
             else:
+                if action == "run":
+                    return await self.async_step_manage_zone_identification_active()
                 return await self.async_step_manage_zone()
         return self.async_show_form(
             step_id="manage_zone",
@@ -574,6 +579,79 @@ class IrrigationOSOptionsFlow(config_entries.OptionsFlowWithReload):
             description_placeholders={
                 "zone_name": self._commissioning_area_name or "Zone",
                 "status": _plain_zone_status(profile),
+            },
+        )
+
+    async def async_step_manage_zone_identification_active(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Keep an active identification run focused on its stop action."""
+        if self._manage_controller_slot is None or self._manage_area_slot is None:
+            return await self.async_step_manage_zones()
+
+        run = self.config_entry.runtime_data.guided_observation.snapshot
+        active_here = (
+            run.controller_slot == self._manage_controller_slot
+            and run.area_slot == self._manage_area_slot
+            and run.state in {
+                GuidedObservationState.STARTING,
+                GuidedObservationState.RUNNING,
+                GuidedObservationState.STOPPING,
+                GuidedObservationState.UNCERTAIN,
+            }
+        )
+        if not active_here:
+            return await self.async_step_manage_zone()
+
+        return self.async_show_menu(
+            step_id="manage_zone_identification_active",
+            menu_options=["manage_zone_identification_stop"],
+            description_placeholders={
+                "zone_name": self._commissioning_area_name or "Zone",
+                "duration_seconds": str(
+                    run.requested_duration_seconds
+                    or ZONE_IDENTIFICATION_DURATION_SECONDS
+                ),
+            },
+        )
+
+    async def async_step_manage_zone_identification_stop(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Explicitly stop the active temporary identification run."""
+        if self._manage_controller_slot is None or self._manage_area_slot is None:
+            return await self.async_step_manage_zones()
+
+        coordinator = self.config_entry.runtime_data
+        run = coordinator.guided_observation.snapshot
+        active_here = (
+            run.controller_slot == self._manage_controller_slot
+            and run.area_slot == self._manage_area_slot
+            and run.state in {
+                GuidedObservationState.STARTING,
+                GuidedObservationState.RUNNING,
+                GuidedObservationState.STOPPING,
+                GuidedObservationState.UNCERTAIN,
+            }
+        )
+
+        if not active_here:
+            return await self.async_step_manage_zone()
+
+        result = await async_stop_guided_observation(
+            coordinator,
+            controller_slot=self._manage_controller_slot,
+            area_slot=self._manage_area_slot,
+        )
+        if not result.blocker_codes:
+            return await self.async_step_manage_zone()
+
+        return self.async_show_form(
+            step_id="manage_zone_identification_stop",
+            data_schema=vol.Schema({}),
+            errors={"base": result.blocker_codes[0]},
+            description_placeholders={
+                "zone_name": self._commissioning_area_name or "Zone"
             },
         )
 
