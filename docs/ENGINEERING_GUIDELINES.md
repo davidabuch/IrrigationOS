@@ -16,7 +16,7 @@ GitHub Actions must also be green before a milestone is complete.
 
 ## Python standards
 
-- Use Python 3.13-compatible typed code.
+- Use Python 3.14-compatible typed code.
 - Keep strict MyPy enabled for project-owned modules.
 - Prefer immutable dataclasses or frozen domain models.
 - Avoid untyped dictionaries beyond vendor/API parsing boundaries.
