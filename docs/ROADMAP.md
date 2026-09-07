@@ -1,5 +1,15 @@
 # IrrigationOS Roadmap
 
+## v1.0.68 — Guided-Observation Active Identification UX
+
+- Presents an active identification screen immediately after a homeowner explicitly starts the
+  temporary zone-identification run.
+- Keeps the active workflow focused on a single explicit **Stop watering now** action and returns
+  safely to Zone Home when the run is no longer active.
+- Preserves the existing bounded confirmation behavior, one physical command per request,
+  no-retry transport rule, and fail-closed stale/uncertain handling.
+- Adds no autonomous watering, scheduling authority, irrigation credit, or Live-mode authority.
+
 ## v1.0.67 — Guided-Observation Confirmation Window
 
 - Replaces the single immediate guided start/stop observation assumption with a bounded
@@ -161,7 +171,7 @@
 
 ## Current status
 
-- **Installable Home Assistant release:** v1.0.67
+- **Installable Home Assistant release:** v1.0.68
 - **Completed domain milestone:** v0.9.5 Runtime Monitoring
 - **Current operating boundary:** Observation remains the default commissioned mode; recommendations are advisory and cannot authorize watering; existing supervised and one-shot canary paths remain separately gated
 - **Current epic:** connect scientific evidence to canonical production targets without expanding authority
