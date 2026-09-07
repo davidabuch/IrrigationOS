@@ -40,3 +40,14 @@ def test_hassfest_and_hacs_validation_workflows_are_present() -> None:
     assert "github.event.repository.private == false" in hacs
     assert "pull_request:" in hacs
     assert "workflow_dispatch:" in hacs
+
+
+def test_public_distribution_documentation_matches_repository_state() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    release_workflow = (ROOT / "docs/HACS_RELEASE_WORKFLOW.md").read_text(encoding="utf-8")
+
+    assert "repository is currently private" not in readme
+    assert "installed and updated through HACS" in readme
+    assert "HACS is the preferred production installation and update path" in agents
+    assert "minimum supported Home Assistant Core version is **2026.8.0**" in release_workflow
