@@ -3,4 +3,4 @@ pytest-asyncio==1.4.0
 ruff>=0.9,<1
 mypy>=2.3.0,<3
 aiohttp>=3.11,<4
-voluptuous==0.15.2
+voluptuous==0.16.0
